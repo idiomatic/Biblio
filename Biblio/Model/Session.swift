@@ -88,6 +88,10 @@ final class WindowSession {
     var showInspector = false
     var searchText = ""
     var banner: Banner?
+    /// Shows the login picker, so a guest can sign in without leaving the window.
+    var showingSignIn = false
+    /// On iPhone the item sheet closes for the login picker; this reopens it afterwards.
+    var reopenInspector = false
 
     let searchList: ItemListModel
     let newTitlesList: ItemListModel
@@ -152,6 +156,27 @@ final class WindowSession {
         searchList.reload()
     }
 
+    /// Carries what a guest was looking at over to the session they signed in to.
+    func continueBrowsing(from guest: WindowSession) {
+        searchText = guest.searchText
+        searchList.source = guest.searchList.source
+        section = guest.section
+        selection = guest.selection
+        showInspector = guest.showInspector || guest.reopenInspector
+        locations = guest.locations
+    }
+
+    func requestSignIn() {
+        reopenInspector = showInspector
+        showingSignIn = true
+    }
+
+    /// After the login picker closes without signing in.
+    func signInDismissed() {
+        if reopenInspector { showInspector = true }
+        reopenInspector = false
+    }
+
     func select(_ bib: Bib) {
         selection = bib
         selectedEntries = []
@@ -160,7 +185,7 @@ final class WindowSession {
 
     func placeHold(_ bib: Bib, pickup: String? = nil) async {
         guard !isGuest else {
-            show("Sign in to place holds.", isError: true)
+            requestSignIn()
             return
         }
         do {
@@ -197,7 +222,7 @@ final class WindowSession {
 
     /// Places holds on several items, one at a time, and reports the outcome in one banner.
     func placeHolds(_ bibs: [Bib]) async {
-        guard !isGuest else { return show("Sign in to place holds.", isError: true) }
+        guard !isGuest else { requestSignIn(); return }
         var placed = 0
         var firstError: String?
         for bib in bibs {

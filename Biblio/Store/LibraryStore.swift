@@ -8,6 +8,8 @@ nonisolated struct LibraryInfo: Identifiable, Hashable, Codable, Sendable {
     var name: String
     var shortName: String?
     var primaryColor: String?
+    /// The library's own website, where its icon comes from.
+    var website: String?
     /// Selected localized strings (FORMAT.*, AUDIENCE.*, LANGUAGE.*, sort.*) keyed as on the site.
     var labels: [String: String]
     var languages: [String]
@@ -15,6 +17,9 @@ nonisolated struct LibraryInfo: Identifiable, Hashable, Codable, Sendable {
 
     var id: String { subdomain }
     var baseURL: URL { URL(string: "https://\(subdomain).bibliocommons.com")! }
+    var websiteURL: URL? { website.flatMap(URL.init(string:)) }
+    /// Icons are keyed by website host, so a directory suggestion and the added library share one.
+    var iconKey: String { websiteURL?.host()?.lowercased() ?? subdomain }
 
     func label(_ key: String) -> String? { labels[key] }
 
@@ -203,7 +208,7 @@ nonisolated struct BrandRGB: Sendable {
 
 extension Color {
     /// A color that resolves differently in light and dark appearance.
-    static func dynamic(light: BrandRGB, dark: BrandRGB) -> Color {
+    nonisolated static func dynamic(light: BrandRGB, dark: BrandRGB) -> Color {
         #if os(macOS)
         Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

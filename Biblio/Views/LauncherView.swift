@@ -8,6 +8,8 @@ struct LauncherView: View {
     @State private var store = LibraryStore.shared
     @State private var path: [String] = []
     @State private var addingLibrary = false
+    @State private var pool = ClientPool.shared
+    @State private var libraryToRemove: LibraryInfo?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -18,14 +20,16 @@ struct LauncherView: View {
                             LibraryRow(library: library)
                         }
                         .contextMenu {
-                            Button("Remove Library", systemImage: "trash", role: .destructive) {
-                                store.remove(library.subdomain)
+                            Button("Remove Library…", systemImage: "trash", role: .destructive) {
+                                libraryToRemove = library
                             }
+                            .disabled(isInUse(library))
                         }
                     }
                     .onDelete { offsets in
-                        for i in offsets { store.remove(store.libraries[i].subdomain) }
+                        if let i = offsets.first { libraryToRemove = store.libraries[i] }
                     }
+                    .deleteDisabled(store.libraries.contains(where: isInUse))
                 } header: {
                     Text("Libraries")
                 } footer: {
@@ -37,7 +41,8 @@ struct LauncherView: View {
             .navigationTitle("Choose a Library")
             .navigationDestination(for: String.self) { subdomain in
                 if let library = store.library(subdomain) {
-                    UserPickerView(library: library, open: open)
+                    UserPickerView(library: library, open: open,
+                                   canRemove: !isInUse(library)) { remove(library) }
                 }
             }
             .toolbar {
@@ -57,6 +62,7 @@ struct LauncherView: View {
                     }
                 }
             }
+            .confirmRemoving($libraryToRemove, perform: remove)
             .sheet(isPresented: $addingLibrary) {
                 AddLibraryView { info in
                     store.upsert(info)
@@ -73,6 +79,20 @@ struct LauncherView: View {
             }
         }
     }
+
+    /// A library can't be removed while one of its logins is open in a window.
+    private func isInUse(_ library: LibraryInfo) -> Bool {
+        library.users.contains { pool.isInUse(subdomain: library.subdomain, username: $0) }
+    }
+
+    private func remove(_ library: LibraryInfo) {
+        guard !isInUse(library) else { return }
+        path.removeAll { $0 == library.subdomain }
+        for user in library.users + [""] {
+            pool.discard(subdomain: library.subdomain, username: user)
+        }
+        store.remove(library.subdomain)
+    }
 }
 
 struct LibraryRow: View {
@@ -80,13 +100,8 @@ struct LibraryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(library.tint.gradient)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    Image(systemName: "building.columns.fill")
-                        .foregroundStyle(.white)
-                }
+            LibraryIconView(key: library.iconKey, website: library.websiteURL,
+                            subdomain: library.subdomain, tint: library.tint)
             VStack(alignment: .leading) {
                 Text(library.name)
                 Text("\(library.subdomain).bibliocommons.com")
@@ -101,10 +116,14 @@ struct LibraryRow: View {
 struct UserPickerView: View {
     var library: LibraryInfo
     var open: (LibraryInfo, String) -> Void
+    var canRemove: Bool
+    /// Removes the library; called once the user confirms.
+    var remove: () -> Void
 
     @State private var store = LibraryStore.shared
     @State private var pool = ClientPool.shared
     @State private var addingUser = false
+    @State private var libraryToRemove: LibraryInfo?
 
     private var users: [String] { store.library(library.subdomain)?.users ?? [] }
 
@@ -161,19 +180,91 @@ struct UserPickerView: View {
                     Label("Browse as Guest", systemImage: "person.crop.circle.dashed")
                 }
             } footer: {
-                Text("Guests can search and browse the catalog but can’t place holds or see an account.")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Guests can search and browse the catalog but can’t place holds or see an account.")
+                    if !canRemove { Text("Close windows signed in to this library to remove it.") }
+                }
             }
         }
         .navigationTitle(library.shortName ?? library.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Add User", systemImage: "person.badge.plus") { addingUser = true }
+                Button("Remove Library…", systemImage: "trash", role: .destructive) {
+                    libraryToRemove = store.library(library.subdomain) ?? library
+                }
+                .confirmRemoving($libraryToRemove) { _ in remove() }
+                .disabled(!canRemove)
+                .help(canRemove ? "Remove this library and its saved users"
+                                : "Close windows signed in to this library to remove it")
             }
         }
         .sheet(isPresented: $addingUser) {
             AddUserView(library: library) { user in
                 open(store.library(library.subdomain) ?? library, user)
             }
+        }
+    }
+}
+
+/// Sheet for signing a guest window in: the library's saved users, or a new one.
+struct LoginPicker: View {
+    var library: LibraryInfo
+    var signIn: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var store = LibraryStore.shared
+    @State private var pool = ClientPool.shared
+    @State private var addingUser = false
+
+    private var users: [String] { store.library(library.subdomain)?.users ?? [] }
+
+    var body: some View {
+        if users.isEmpty {
+            AddUserView(library: library, onAdd: signIn)
+        } else {
+            NavigationStack {
+                List {
+                    Section {
+                        ForEach(users, id: \.self) { user in
+                            let inUse = pool.isInUse(subdomain: library.subdomain, username: user)
+                            Button {
+                                dismiss()
+                                signIn(user)
+                            } label: {
+                                Label {
+                                    VStack(alignment: .leading) {
+                                        Text(user)
+                                        if inUse {
+                                            Text("Open in another window").font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                } icon: {
+                                    Image(systemName: inUse ? "person.crop.circle.badge.clock" : "person.crop.circle")
+                                }
+                            }
+                            .disabled(inUse)
+                        }
+                        Button {
+                            addingUser = true
+                        } label: {
+                            Label("Add User…", systemImage: "person.badge.plus")
+                        }
+                    } footer: {
+                        Text("Your search and selection stay as they are.")
+                    }
+                }
+                .navigationTitle("Sign In to \(library.shortName ?? library.name)")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                }
+                .sheet(isPresented: $addingUser) {
+                    AddUserView(library: library) { user in
+                        dismiss()
+                        signIn(user)
+                    }
+                }
+            }
+            .macMinFrame(width: 360, height: 300)
         }
     }
 }
@@ -209,12 +300,16 @@ struct AddLibraryView: View {
                             Button {
                                 Task { await add(entry) }
                             } label: {
-                                VStack(alignment: .leading) {
-                                    Text(entry.name)
-                                    if let host = entry.website?.host() {
-                                        Text(host).font(.caption).foregroundStyle(.secondary)
+                                HStack(spacing: 12) {
+                                    LibraryIconView(key: entry.iconKey, website: entry.website, logo: entry.logo)
+                                    VStack(alignment: .leading) {
+                                        Text(entry.name)
+                                        if let host = entry.website?.host() {
+                                            Text(host).font(.caption).foregroundStyle(.secondary)
+                                        }
                                     }
                                 }
+                                .contentShape(Rectangle())
                             }
                         }
                     }
@@ -343,6 +438,23 @@ struct AddUserView: View {
             else { Keychain.delete(subdomain: library.subdomain, username: user) }
             ClientPool.shared.discard(subdomain: library.subdomain, username: user)
             self.error = error.localizedDescription
+        }
+    }
+}
+
+extension View {
+    /// Asks before removing `library`, since removal also deletes its saved passwords.
+    /// Attached to each screen that offers removal, so the dialog appears over that screen.
+    func confirmRemoving(_ library: Binding<LibraryInfo?>, perform: @escaping (LibraryInfo) -> Void) -> some View {
+        confirmationDialog("Remove \(library.wrappedValue?.name ?? "Library")?",
+                           isPresented: Binding(get: { library.wrappedValue != nil },
+                                                set: { if !$0 { library.wrappedValue = nil } }),
+                           titleVisibility: .visible, presenting: library.wrappedValue) { info in
+            Button("Remove Library", role: .destructive) { perform(info) }
+        } message: { info in
+            Text(info.users.isEmpty
+                 ? "You can add it again later."
+                 : "Its saved users and passwords will also be removed from this device.")
         }
     }
 }

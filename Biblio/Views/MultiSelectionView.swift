@@ -61,9 +61,10 @@ struct MultiSelectionView: View {
                     }
                     if working { ProgressView().controlSize(.small) }
                     if session.isGuest {
-                        Label("Sign in to place holds.", systemImage: "person.crop.circle.badge.questionmark")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        Button("Sign In to Place Holds…", systemImage: "person.crop.circle.badge.plus") {
+                            session.requestSignIn()
+                        }
+                        .buttonStyle(.bordered)
                     } else if holdable.isEmpty && cancellable.isEmpty {
                         Text("No actions apply to these items.")
                             .font(.callout)

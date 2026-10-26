@@ -25,6 +25,8 @@ struct RefreshCommands: Commands {
 struct MainView: View {
     @Bindable var session: WindowSession
     var signOut: () -> Void
+    /// Switches this guest window to a signed-in user.
+    var signIn: (String) -> Void
 
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
     @State private var holdsDropTargeted = false
@@ -71,14 +73,9 @@ struct MainView: View {
                     .frame(width: 280)
             }
             #endif
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    session.showInspector.toggle()
-                } label: {
-                    Label("Item Details", systemImage: "sidebar.trailing")
-                }
-                .help("Show or hide item details")
-            }
+            #if os(iOS)
+            ToolbarItem(placement: .primaryAction) { InspectorToggle(session: session) }
+            #endif
         }
         .overlay(alignment: .bottom) { BannerView(session: session) }
         .navigationTitle(session.library.shortName ?? session.library.name)
@@ -86,6 +83,9 @@ struct MainView: View {
         .navigationSubtitle(session.displayName)
         #endif
         .task { await session.start() }
+        .sheet(isPresented: $session.showingSignIn, onDismiss: session.signInDismissed) {
+            LoginPicker(library: session.library, signIn: signIn)
+        }
         .alert("Couldn’t Sign In", isPresented: .constant(session.loginError != nil && session.patron == nil)) {
             Button("Try Again") { Task { await session.start() } }
             Button("Choose Another User", role: .cancel) { signOut() }
@@ -111,26 +111,45 @@ struct MainView: View {
                 sidebarRow(.history)
             }
             }
+            #if os(iOS)
             Section(session.displayName) {
-                #if os(iOS)
-                // On macOS, account settings live in the Settings window (⌘,).
-                if !session.isGuest { sidebarRow(.account) }
-                #endif
-                Button {
-                    signOut()
-                } label: {
-                    if session.isGuest {
-                        Label("Sign In", systemImage: "person.crop.circle.badge.plus")
-                    } else {
+                if session.isGuest {
+                    guestSignIn
+                } else {
+                    sidebarRow(.account)
+                    Button(action: signOut) {
                         Label("Switch User or Library", systemImage: "arrow.left.arrow.right")
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            #else
+            // Account settings live in the Settings window (⌘,), and File ▸ New Window opens
+            // another user or library, so only a guest window needs this section.
+            if session.isGuest {
+                Section(session.displayName) { guestSignIn }
+            }
+            #endif
         }
         .navigationTitle(session.library.shortName ?? "Library")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 190, ideal: 220)
+        #endif
+    }
+
+    /// On macOS, the sign-in sheet (File ▸ New Window opens another library); on iOS, back to
+    /// the library and user menu.
+    private var guestSignIn: some View {
+        #if os(macOS)
+        Button(action: session.requestSignIn) {
+            Label("Sign In", systemImage: "person.crop.circle.badge.plus")
+        }
+        .buttonStyle(.plain)
+        #else
+        Button(action: signOut) {
+            Label("Sign In or Change Library", systemImage: "person.crop.circle.badge.plus")
+        }
+        .buttonStyle(.plain)
         #endif
     }
 
@@ -159,6 +178,21 @@ struct MainView: View {
         case .history: BorrowingListView(session: session, section: .history)
         case .account: AccountView(session: session)
         }
+    }
+}
+
+/// Shows or hides the item details. On macOS each list adds it to its own toolbar, because
+/// SwiftUI orders a window's toolbar items outermost view first and this button belongs last.
+struct InspectorToggle: View {
+    @Bindable var session: WindowSession
+
+    var body: some View {
+        Button {
+            session.showInspector.toggle()
+        } label: {
+            Label("Item Details", systemImage: "sidebar.trailing")
+        }
+        .help("Show or hide item details")
     }
 }
 

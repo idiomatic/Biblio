@@ -69,13 +69,15 @@ struct AccountView: View {
                 }
 
                 Section {
-                    Picker("Pickup location", selection: $pickup) {
-                        if pickup == nil { Text("Not set").tag(String?.none) }
-                        ForEach(session.locations) { Text($0.name).tag(Optional($0.id)) }
-                    }
-                    saveButton("Save Pickup Location", key: "pickup", disabled: pickup == nil || pickup == patron.preferredPickup) {
-                        try await session.client.setDefaultPickupLocation(pickup!)
-                        return "Default pickup location saved."
+                    HStack {
+                        Picker("Pickup location", selection: savingOnChange($pickup, key: "pickup") { id in
+                            try await session.client.setDefaultPickupLocation(id)
+                            return "Default pickup location saved."
+                        }) {
+                            if pickup == nil { Text("Not set").tag(String?.none) }
+                            ForEach(session.locations) { Text($0.name).tag(Optional($0.id)) }
+                        }
+                        if working == "pickup" { ProgressView().controlSize(.small) }
                     }
                 } header: {
                     Text("Holds")
@@ -84,16 +86,18 @@ struct AccountView: View {
                 }
 
                 Section("Language") {
-                    Picker("Language", selection: $language) {
-                        ForEach(session.library.languages, id: \.self) { code in
-                            Text(languageName(code)).tag(Optional(code))
+                    HStack {
+                        Picker("Language", selection: savingOnChange($language, key: "language") { code in
+                            try await session.client.changeLanguage(code)
+                            session.searchList.reload()
+                            session.newTitlesList.reload()
+                            return "Language changed to \(languageName(code))."
+                        }) {
+                            ForEach(session.library.languages, id: \.self) { code in
+                                Text(languageName(code)).tag(Optional(code))
+                            }
                         }
-                    }
-                    saveButton("Save Language", key: "language", disabled: language == nil || language == patron.language) {
-                        try await session.client.changeLanguage(language!)
-                        session.searchList.reload()
-                        session.newTitlesList.reload()
-                        return "Language changed to \(languageName(language!))."
+                        if working == "language" { ProgressView().controlSize(.small) }
                     }
                 }
 
@@ -159,23 +163,44 @@ struct AccountView: View {
         }
     }
 
+    /// A menu selection that saves as soon as it changes, and goes back to the previous
+    /// value if saving fails.
+    private func savingOnChange(_ value: Binding<String?>, key: String,
+                                save: @escaping (String) async throws -> String) -> Binding<String?> {
+        Binding(get: { value.wrappedValue }, set: { new in
+            let old = value.wrappedValue
+            guard let new, new != old, working == nil else { return }
+            value.wrappedValue = new
+            run(key) {
+                do {
+                    return try await save(new)
+                } catch {
+                    value.wrappedValue = old
+                    throw error
+                }
+            }
+        })
+    }
+
+    private func run(_ key: String, action: @escaping () async throws -> String) {
+        working = key
+        Task {
+            do {
+                session.show(try await action())
+                await session.refreshPatron()
+            } catch {
+                session.show(error.localizedDescription, isError: true)
+            }
+            working = nil
+        }
+    }
+
     private func saveButton(_ title: String, key: String, disabled: Bool,
                             action: @escaping () async throws -> String) -> some View {
         HStack {
             Spacer()
             if working == key { ProgressView().controlSize(.small) }
-            Button(title) {
-                working = key
-                Task {
-                    do {
-                        session.show(try await action())
-                        await session.refreshPatron()
-                    } catch {
-                        session.show(error.localizedDescription, isError: true)
-                    }
-                    working = nil
-                }
-            }
+            Button(title) { run(key, action: action) }
             .disabled(disabled || working != nil)
         }
     }

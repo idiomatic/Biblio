@@ -61,6 +61,9 @@ struct ItemListView<Header: View>: View {
         .task { model.loadIfNeeded() }
         .toolbar {
             ListControls(model: model, library: session.library)
+            #if os(macOS)
+            ToolbarItem { InspectorToggle(session: session) }
+            #endif
             #if os(iOS)
             // Multiple selection on iOS/iPadOS happens in edit mode (or with a two-finger drag).
             ToolbarItem(placement: .topBarTrailing) {
@@ -106,13 +109,6 @@ struct ItemListView<Header: View>: View {
                 Spacer()
                 Button("Retry") { model.retry() }
             }
-        } else if !model.entries.isEmpty && !model.hasMore {
-            let count = model.shownCount
-            Text(count == 1 ? "1 item" : "\(count) items")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .listRowSeparator(.hidden)
         }
     }
 

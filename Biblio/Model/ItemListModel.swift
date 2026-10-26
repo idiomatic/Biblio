@@ -97,9 +97,6 @@ final class ItemListModel {
     }
 
     /// Whether a local (client-side) filter is narrowing an account list.
-    /// Items currently shown: the server's total, or the matching rows while a local filter narrows the list.
-    var shownCount: Int { hasLocalFilter ? rows.count : total }
-
     private var hasLocalFilter: Bool { !source.isSearch && (localFormat != nil || holdFilter != nil) }
 
     private func passesLocalFilters(_ e: ListEntry) -> Bool {
@@ -210,7 +207,7 @@ final class ItemListModel {
     /// Pull to refresh / View > Refresh. Account lists start a fresh session first: the gateway can
     /// keep serving one session a wrong list (checkouts reported empty), and a new session may not.
     func refresh() async {
-        if !source.isSearch { try? await client.login(force: true) }
+        if !source.isSearch { _ = try? await client.login(force: true) }
         reload()
         await firstPageTask?.value
     }

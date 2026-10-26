@@ -40,6 +40,10 @@ struct ItemDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        // The account may still be loading when the item opens, e.g. right after a guest signs in.
+        .onChange(of: session.patron?.preferredPickup, initial: true) { _, preferred in
+            if pickup == nil { pickup = preferred }
+        }
         .task(id: bib.id) {
             pickup = session.patron?.preferredPickup
             async let avail: Void = loadAvailability()
@@ -94,9 +98,10 @@ struct ItemDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 AvailabilityBadge(bib: bib)
                 if bib.holdable {
-                    Label("Sign in to place a hold.", systemImage: "person.crop.circle.badge.questionmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Button("Sign In to Place a Hold…", systemImage: "person.crop.circle.badge.plus") {
+                        session.requestSignIn()
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         } else if let hold = session.hold(for: bib.id) {

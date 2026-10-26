@@ -17,7 +17,6 @@
 * user can sort items by people waiting.
 * user can select multiple items in item lists and place or cancel holds on all of them.
 * user can refresh a list with a pull-down gesture (iOS/iPadOS) or a menu item (macOS); refreshing account lists starts a fresh session, as a workaround for an inconsistently empty checked out list.
-* the item count at the bottom of a list reflects the active filters.
 * list items show the item's availability status, including "on order" copies.
 * user can view details of any item in an inspector view pane.
 * item detail fetches "Availability by location" in background; you can omit (or hide into a tooltip) collection and call number columns.

@@ -53,6 +53,7 @@ nonisolated enum LibraryLookup {
             name: lib["fullName"].nonEmptyString ?? lib["longName"].nonEmptyString ?? subdomain.uppercased(),
             shortName: lib["shortName"].nonEmptyString,
             primaryColor: state["branding"]["primaryBrandColor"].string,
+            website: lib["homeLink"].nonEmptyString,
             labels: labels,
             languages: state["localization"]["availableLanguages"].strings,
             users: [])
@@ -79,7 +80,10 @@ final class LibraryDirectory {
         var name: String
         var website: URL?
         var region: String?
+        /// A wide (640×400) partner logo from the directory page.
+        var logo: URL?
         var id: String { name }
+        var iconKey: String { website?.host()?.lowercased() ?? name }
     }
 
     static let shared = LibraryDirectory()
@@ -134,13 +138,13 @@ final class LibraryDirectory {
     }
 
     private nonisolated static func parse(_ html: String) -> [Entry] {
-        let pattern = #"<a[^>]*href="([^"]*)"[^>]*class="library-link[^"]*"[^>]*>.*?<img[^>]*alt="([^"]*)".*?(?:fs-cmsfilter-field="Region"[^>]*>([^<]*)<)?"#
+        let pattern = #"<a[^>]*href="([^"]*)"[^>]*class="library-link[^"]*"[^>]*>.*?<img[^>]*alt="([^"]*)"[^>]*src="([^"]*)".*?(?:fs-cmsfilter-field="Region"[^>]*>([^<]*)<)?"#
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return [] }
         let ns = html as NSString
         return re.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap { m in
             func g(_ i: Int) -> String? { m.range(at: i).location == NSNotFound ? nil : ns.substring(with: m.range(at: i)) }
             guard let name = g(2).map(HTMLForm.decode), !name.isEmpty else { return nil }
-            return Entry(name: name, website: g(1).flatMap(URL.init(string:)), region: g(3))
+            return Entry(name: name, website: g(1).flatMap(URL.init(string:)), region: g(4), logo: g(3).flatMap(URL.init(string:)))
         }
     }
 
