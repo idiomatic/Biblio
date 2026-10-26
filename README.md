@@ -7,8 +7,7 @@ public library catalog hosted on [BiblioCommons](https://www.bibliocommons.com/l
 (`https://LIBRARY.bibliocommons.com/`).
 
 Search the catalog, place and cancel holds, and keep track of checkouts and borrowing
-history, all in a native interface that follows Apple's Human Interface Guidelines and
-picks up each library's brand colors.
+history, all in a native interface.
 
 > Biblio is an independent project and isn't affiliated with or endorsed by BiblioCommons
 > or any library.
@@ -25,8 +24,7 @@ picks up each library's brand colors.
 - An inspector with item details and copy availability by location, loaded in the background.
 
 **Your account**
-- Holds: place, cancel (where the library allows it) and filter by Ready, Not Ready and On Order,
-  with count badges.
+- Holds: place, cancel and filter by Ready, Not Ready and On Order, with count badges.
 - Checked out items and borrowing history, with counts in the sidebar.
 - Select several items in a list to place or cancel holds on all of them at once.
 - List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
@@ -39,10 +37,9 @@ picks up each library's brand colors.
 - Multiple windows, each with its own session: different libraries, different accounts, or
   different searches side by side.
 - Add a library by its subdomain (`wccls`) or URL, with autocomplete from the BiblioCommons
-  directory.
+  libraries directory.
 - Credentials are stored in the Keychain, and expired sessions are renewed without
-  interrupting you. The app avoids signing in to the same account in two windows at once,
-  because the library would end the first session.
+  interrupting you.
 - Guest browsing without an account.
 - Pull to refresh on iOS and iPadOS; View ▸ Refresh (⌘R) on macOS.
 - Drag an item's cover onto Holds to place a hold, or onto a search field to search for it.
@@ -79,8 +76,6 @@ throttled to be gentle on library servers.
 ## How it was made
 
 Biblio was written with [Claude Code](https://claude.com/claude-code).
-[PROMPT.md](PROMPT.md) is the original request, and [PROMPT_AFTER.md](PROMPT_AFTER.md)
-restates it with the changes made along the way.
 
 ## License
 
