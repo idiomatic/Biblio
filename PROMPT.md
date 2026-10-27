@@ -29,7 +29,7 @@
 * on macOS, a guest window's sidebar "Sign In" opens that sheet, and signed-in windows have no "Switch User or Library" (use File ▸ New Window); on iOS/iPadOS, the sidebar returns to the menus ("Sign In or Change Library" for guests, "Switch User or Library" otherwise).
 * add a library by subdomain (e.g., "wccls") or URL (e.g., "https://smpl.bibliocommons.com/"), with autocompletions fetched in the background from https://www.bibliocommons.com/libraries-we-work-with and its "Next" pages.
 * multiple libraries, each with multiple users.
-* remove a library after confirming its users and passwords go too: a toolbar button on its user menu (replacing a redundant "Add User" button) and swipe or context menu in the library menu; disabled, with the reason, while one of its logins is open.
+* remove a library, confirming first if its users and passwords go too: a toolbar button on its user menu (replacing a redundant "Add User" button) and swipe or context menu in the library menu; disabled, with the reason, while one of its logins is open.
 * libraries show square icons in the library menu and add-library suggestions: the website's large square icon, else the directory's partner logo trimmed of white margins, else a small favicon, else a brand-colored tile; cache icons on disk.
 * hide "CMS" navigation (e.g., "About LIBRARY_NAME", "Using the Library", "Events & Activities") and item detail "Opinion".
 ## exploration and testing

@@ -20,14 +20,15 @@ struct LauncherView: View {
                             LibraryRow(library: library)
                         }
                         .contextMenu {
-                            Button("Remove Library…", systemImage: "trash", role: .destructive) {
-                                libraryToRemove = library
+                            Button(library.users.isEmpty ? "Remove Library" : "Remove Library…",
+                                   systemImage: "trash", role: .destructive) {
+                                requestRemoval(library)
                             }
                             .disabled(isInUse(library))
                         }
                     }
                     .onDelete { offsets in
-                        if let i = offsets.first { libraryToRemove = store.libraries[i] }
+                        if let i = offsets.first { requestRemoval(store.libraries[i]) }
                     }
                     .deleteDisabled(store.libraries.contains(where: isInUse))
                 } header: {
@@ -83,6 +84,11 @@ struct LauncherView: View {
     /// A library can't be removed while one of its logins is open in a window.
     private func isInUse(_ library: LibraryInfo) -> Bool {
         library.users.contains { pool.isInUse(subdomain: library.subdomain, username: $0) }
+    }
+
+    /// Confirms first only when removal would also delete saved users and passwords.
+    private func requestRemoval(_ library: LibraryInfo) {
+        if library.users.isEmpty { remove(library) } else { libraryToRemove = library }
     }
 
     private func remove(_ library: LibraryInfo) {
@@ -189,8 +195,9 @@ struct UserPickerView: View {
         .navigationTitle(library.shortName ?? library.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Remove Library…", systemImage: "trash", role: .destructive) {
-                    libraryToRemove = store.library(library.subdomain) ?? library
+                Button(users.isEmpty ? "Remove Library" : "Remove Library…",
+                       systemImage: "trash", role: .destructive) {
+                    if users.isEmpty { remove() } else { libraryToRemove = store.library(library.subdomain) ?? library }
                 }
                 .confirmRemoving($libraryToRemove) { _ in remove() }
                 .disabled(!canRemove)
@@ -443,7 +450,7 @@ struct AddUserView: View {
 }
 
 extension View {
-    /// Asks before removing `library`, since removal also deletes its saved passwords.
+    /// Asks before removing `library` with saved users, since removal also deletes their passwords.
     /// Attached to each screen that offers removal, so the dialog appears over that screen.
     func confirmRemoving(_ library: Binding<LibraryInfo?>, perform: @escaping (LibraryInfo) -> Void) -> some View {
         confirmationDialog("Remove \(library.wrappedValue?.name ?? "Library")?",
@@ -452,9 +459,7 @@ extension View {
                            titleVisibility: .visible, presenting: library.wrappedValue) { info in
             Button("Remove Library", role: .destructive) { perform(info) }
         } message: { info in
-            Text(info.users.isEmpty
-                 ? "You can add it again later."
-                 : "Its saved users and passwords will also be removed from this device.")
+            Text("Its saved users and passwords will also be removed from this device.")
         }
     }
 }
