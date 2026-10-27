@@ -44,7 +44,7 @@
  *   changeEmail       {email}                     -> true
  *   changePassword    {current, new}              -> true (the app then saves the new password)
  *
- * The result shapes (Bib, ListEntry, ListPage, Hold, ...) are documented in docs/core.md.
+ * The result shapes (Bib, ListEntry, ListPage, Hold, ...) are in docs/core.md; builds and status in PLATFORMS.md.
  */
 #ifndef BIBLIO_H
 #define BIBLIO_H
