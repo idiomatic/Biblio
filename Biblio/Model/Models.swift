@@ -221,6 +221,8 @@ nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable {
     var collection: String?
     var callNumber: String?
     var dueDate: String?
+    /// Ordered but not yet received (worded "On-Order", "In-Process", "5 on order", …).
+    var isOnOrder = false
 }
 
 /// A labelled detail field from the full catalog record.

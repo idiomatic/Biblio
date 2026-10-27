@@ -189,9 +189,10 @@ struct ItemDetailView: View {
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
                         ForEach(shown) { copy in
                             GridRow {
-                                Image(systemName: copy.isAvailable ? "checkmark.circle.fill" : "circle.fill")
+                                Image(systemName: copy.kind.systemImage)
                                     .foregroundStyle(StatusColors.copy(copy))
-                                    .imageScale(copy.isAvailable ? .medium : .small)
+                                    .imageScale(copy.kind == .available ? .medium : .small)
+                                    .frame(minWidth: 18)
                                 Text(copy.branch)
                                     .lineLimit(2)
                                 HStack(spacing: 4) {

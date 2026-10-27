@@ -91,7 +91,9 @@ extension BiblioClient {
                 isAvailable: a["statusType"].string == "AVAILABLE" || a["group"].string == "AVAILABLE_ITEMS",
                 collection: i["collection"].nonEmptyString,
                 callNumber: i["callNumber"].nonEmptyString,
-                dueDate: i["dueDate"].nonEmptyString)
+                dueDate: i["dueDate"].nonEmptyString,
+                isOnOrder: a["status"].string == "ON_ORDER" || a["statusType"].string == "ON_ORDER"
+                    || (a["libraryStatus"].string ?? "").range(of: "on.order", options: [.regularExpression, .caseInsensitive]) != nil)
         }
         .sorted { ($0.isAvailable ? 0 : 1, $0.branch) < ($1.isAvailable ? 0 : 1, $1.branch) }
     }

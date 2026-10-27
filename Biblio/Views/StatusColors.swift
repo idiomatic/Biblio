@@ -13,15 +13,7 @@ enum StatusColors {
         }
     }
 
-    /// Copy-level status as the library words it ("In", "Out", "Held", "In-Process", "Missing", …).
-    static func copy(_ copy: CopyAvailability) -> Color {
-        if copy.isAvailable { return .green }
-        let s = copy.status.lowercased()
-        if ["missing", "lost", "damaged", "withdrawn", "claims"].contains(where: s.contains) { return .red }
-        if ["transit", "transfer", "process", "order", "repair", "cataloging"].contains(where: s.contains) { return .teal }
-        if s.contains("held") || s.contains("hold") { return .purple }
-        return .orange
-    }
+    static func copy(_ copy: CopyAvailability) -> Color { copy.kind.color }
 
     static func account(_ status: AccountStatus) -> Color {
         switch status {
@@ -29,6 +21,63 @@ enum StatusColors {
         case .onHold: .blue
         case .checkedOut(let due): due.map(DateText.isPast) == true ? .red : .purple
         }
+    }
+}
+
+/// A copy's status, grouped from the library's own wording ("In", "Out", "Held", "In-Process", …).
+enum CopyKind {
+    case available, onOrder, out, held, transit, repair, missing, withdrawn, claimsReturned, libraryUseOnly, other
+
+    var systemImage: String {
+        switch self {
+        case .available: "checkmark.circle.fill"
+        case .onOrder: "shippingbox"
+        case .out: "clock"
+        case .held: "bag"
+        case .transit: "arrow.left.arrow.right"
+        case .repair: "bandage"
+        case .missing: "questionmark.circle"
+        case .withdrawn: "xmark.circle"
+        case .claimsReturned: "exclamationmark.circle"
+        case .libraryUseOnly: "building.columns"
+        case .other: "circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .available: .green
+        case .onOrder: .teal
+        case .out: .orange
+        case .held: .purple
+        case .transit: .indigo
+        case .repair: .brown
+        case .missing: .red
+        case .withdrawn: .gray
+        case .claimsReturned: .pink
+        case .libraryUseOnly: .blue
+        case .other: .orange
+        }
+    }
+}
+
+extension CopyAvailability {
+    var kind: CopyKind {
+        if isAvailable { return .available }
+        if isOnOrder { return .onOrder }
+        let s = status.lowercased()
+        func has(_ words: String...) -> Bool { words.contains(where: s.contains) }
+        // Order matters: "Claims Returned" before "returned", "Lost" before "out".
+        if has("transit", "transfer") { return .transit }
+        if has("process", "cataloging", "order") { return .onOrder }
+        if has("repair", "damage", "mend", "bindery") { return .repair }
+        if has("claim") { return .claimsReturned }
+        if has("missing", "lost", "trace") { return .missing }
+        if has("withdrawn", "discard") { return .withdrawn }
+        if has("held", "hold") { return .held }
+        if has("library use", "in library", "reference", "non-circ", "noncirc", "not for loan") { return .libraryUseOnly }
+        if s == "out" || has("checked out", "due", "overdue") || dueDate != nil { return .out }
+        return .other
     }
 }
 
