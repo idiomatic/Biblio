@@ -13,6 +13,8 @@ const Failure = client_mod.Failure;
 const J = json.J;
 
 pub const html = @import("html.zig");
+/// Locks and the allocator the core uses, for hosts written in Zig.
+pub const sync = @import("sync.zig");
 
 test {
     _ = json;
@@ -26,7 +28,6 @@ test {
 
 // MARK: Process-wide state
 
-const sync = @import("sync.zig");
 const gpa = sync.allocator;
 
 /// Without `std.Io` (iOS), panics can't use the standard handler's stderr: log and abort.
