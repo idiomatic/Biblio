@@ -12,6 +12,86 @@ history, all in a native interface.
 > Biblio is an independent project and isn't affiliated with or endorsed by BiblioCommons
 > or any library.
 
+## Screenshots
+
+Copy status by location, color-coded: available, on order or in process, out, held, in transit.
+
+<table>
+<tr>
+<td width="55%"><img src="docs/screenshots/mac-hollow.png" alt="Search on macOS with The Hollow's copies by location in the inspector"></td>
+<td><img src="docs/screenshots/ipad-new-titles.png" alt="New Titles on iPad sorted by people waiting, with The Hollow's copies by location in the inspector"></td>
+</tr>
+<tr>
+<td align="center">macOS</td>
+<td align="center">iPadOS: New Titles sorted by people waiting</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="70%"><img src="docs/screenshots/mac-search.png" alt="Search on macOS filtered to books, with Dune in the inspector"></td>
+<td><img src="docs/screenshots/iphone-detail.png" alt="Dune's copies by location on iPhone"></td>
+</tr>
+<tr>
+<td align="center">Search with filters on macOS</td>
+<td align="center">The same item on iPhone</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td><img src="docs/screenshots/iphone-search.png" alt="Search results filtered to books"></td>
+<td><img src="docs/screenshots/iphone-facets.png" alt="Format filter with counts"></td>
+<td><img src="docs/screenshots/iphone-new-titles.png" alt="New titles with on-order copies"></td>
+<td><img src="docs/screenshots/iphone-add-library.png" alt="Adding a library with suggestions"></td>
+</tr>
+<tr>
+<td align="center">Search</td>
+<td align="center">Filters</td>
+<td align="center">New titles</td>
+<td align="center">Add a library</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="58%"><img src="docs/screenshots/ipad-holds.png" alt="Holds on iPad, filtered by Ready, Not Ready and On Order"></td>
+<td><img src="docs/screenshots/iphone-holds.png" alt="Holds on iPhone, tinted by status"></td>
+<td><img src="docs/screenshots/iphone-account.png" alt="Account with the library card barcode"></td>
+</tr>
+<tr>
+<td align="center">Holds with filters and badges</td>
+<td align="center">Ready for pickup</td>
+<td align="center">Library card</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="56%"><img src="docs/screenshots/mac-holds.png" alt="Holds on macOS with a hold in the inspector"></td>
+<td><img src="docs/screenshots/mac-settings.png" alt="Account settings on macOS with the library card"></td>
+<td><img src="docs/screenshots/mac-settings-more.png" alt="Pickup location, language and borrowing history settings on macOS"></td>
+</tr>
+<tr>
+<td align="center">Holds on macOS</td>
+<td align="center">Library card and email</td>
+<td align="center">Pickup, language, history</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/mac-windows.png" alt="Two windows signed in to different accounts"></td>
+<td><img src="docs/screenshots/mac-add-library.png" alt="Adding a library on macOS with suggestions"></td>
+</tr>
+<tr>
+<td align="center">One window per account</td>
+<td align="center">Add a library</td>
+</tr>
+</table>
+
+<sub>Hold titles and usernames are blurred; the card number and email are samples.</sub>
+
 ## Features
 
 **Catalog**

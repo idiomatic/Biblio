@@ -90,7 +90,7 @@ actor BiblioClient {
         let user = json["entities"]["users"][String(uid)]
         let accountId = user["accounts"][0].int ?? json["entities"]["accounts"].object.keys.compactMap(Int.init).first ?? 0
         let account = json["entities"]["accounts"][String(accountId)]
-        return Patron(
+        var result = Patron(
             userId: uid,
             accountId: accountId,
             name: user["name"].string ?? username,
@@ -100,6 +100,14 @@ actor BiblioClient {
             preferredPickup: account["preferredLocations"][0].string
                 ?? account["singleClickHoldsSettings"]["branchId"].string,
             borrowingHistoryEnabled: account["borrowingHistoryEnabled"].bool)
+        #if DEBUG
+        // For README screenshots: launch with `-SampleAccount YES` to hide the real card and email.
+        if UserDefaults.standard.bool(forKey: "SampleAccount") {
+            result.email = "reader@example.com"
+            result.barcode = "21168012345678"
+        }
+        #endif
+        return result
     }
 
     func setLanguage(_ code: String) { patron?.language = code }
