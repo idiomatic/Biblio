@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Biblio</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <!-- Unpackaged for now; MSIX packaging (Store, winget) needs icons and a signing certificate. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationTitle>Biblio</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.1</ApplicationDisplayVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250108002" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.1.240916" />
+  </ItemGroup>
+
+  <!-- libbiblio, the shared Zig core, built for this platform and copied next to the app. -->
+  <PropertyGroup>
+    <ZigTarget Condition="'$(Platform)' == 'ARM64'">aarch64-windows-gnu</ZigTarget>
+    <ZigTarget Condition="'$(ZigTarget)' == ''">x86_64-windows-gnu</ZigTarget>
+    <CoreOut>$(MSBuildProjectDirectory)\native\$(ZigTarget)</CoreOut>
+  </PropertyGroup>
+  <Target Name="BuildCore" BeforeTargets="BeforeBuild">
+    <Exec Command="zig build -Dtarget=$(ZigTarget) -Doptimize=safe --prefix &quot;$(CoreOut)&quot;" WorkingDirectory="$(MSBuildProjectDirectory)\..\..\core" />
+    <ItemGroup>
+      <Content Include="$(CoreOut)\bin\biblio.dll" Link="biblio.dll" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+</Project>
