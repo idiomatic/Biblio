@@ -10,6 +10,7 @@ struct ItemListView<Header: View>: View {
 
     @State private var selection = Set<ListEntry.ID>()
     @State private var confirmCancel: [Hold] = []
+    @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     /// Owned here (not by the system Edit button) so window updates can't reset it mid-selection.
     @State private var editMode: EditMode = .inactive
@@ -59,6 +60,10 @@ struct ItemListView<Header: View>: View {
             session.select(entries: entries(ids))
         }
         .task { model.loadIfNeeded() }
+        // A list left open while the app was in the background may have gone stale.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.loadIfNeeded() }
+        }
         .toolbar {
             ListControls(model: model, library: session.library)
             #if os(macOS)

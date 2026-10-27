@@ -47,6 +47,8 @@ final class ItemListModel {
     /// How long placeholders must stay visible before their page is fetched, so dragging
     /// the scroll bar across a long list doesn't request every page it passes.
     static let placeholderDwell: Duration = .milliseconds(300)
+    /// How long a fetched list is trusted; showing it again after that refetches it.
+    static let maxAge: Duration = .seconds(15 * 60)
 
     let client: BiblioClient
     var source: Source
@@ -65,6 +67,8 @@ final class ItemListModel {
     private(set) var facets: [Facet] = []
     private(set) var serverSorts: [String] = []
     private(set) var loaded = false
+    /// When the first page was fetched; the list's age.
+    private var loadedAt: ContinuousClock.Instant?
 
     /// Facet filters for catalog searches, keyed by facet id (e.g. "FORMAT" → "BLURAY").
     private(set) var facetFilters: [String: String] = [:]
@@ -179,8 +183,14 @@ final class ItemListModel {
 
     // MARK: Loading
 
+    /// Loads a list that hasn't been fetched yet, or refetches one older than `maxAge`.
     func loadIfNeeded() {
-        if !loaded && !isLoading { reload() }
+        guard !isLoading else { return }
+        if !loaded || isStale { reload() }
+    }
+
+    var isStale: Bool {
+        loadedAt.map { ContinuousClock.now - $0 > Self.maxAge } ?? false
     }
 
     func reload() {
@@ -197,6 +207,7 @@ final class ItemListModel {
         total = 0
         error = nil
         loaded = false
+        loadedAt = nil
         if case .search(let q) = source, q.isEmpty {
             facets = []
             return
@@ -266,7 +277,10 @@ final class ItemListModel {
     }
 
     private func apply(_ result: ListPage, page: Int) {
-        if page == 1 { pageSize = max(result.pageSize, 1) }
+        if page == 1 {
+            pageSize = max(result.pageSize, 1)
+            loadedAt = .now
+        }
         total = result.count
         // Size the list to the reported total (it may change between pages if the data does).
         let size = max(result.count, (page - 1) * pageSize + result.entries.count)
