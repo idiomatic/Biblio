@@ -27,6 +27,8 @@ nonisolated enum BiblioError: LocalizedError, Sendable {
 actor BiblioClient {
     nonisolated let subdomain: String
     nonisolated let username: String
+    /// The latest request, shown in the window's status bar.
+    nonisolated let status: FetchStatus
 
     private let session: URLSession
     private var sessionId: String?
@@ -40,10 +42,11 @@ actor BiblioClient {
     nonisolated var isGuest: Bool { username.isEmpty }
     nonisolated var webBase: URL { URL(string: "https://\(subdomain).bibliocommons.com")! }
 
-    init(subdomain: String, username: String,
+    init(subdomain: String, username: String, status: FetchStatus,
          password: (@Sendable () -> String?)? = nil) {
         self.subdomain = subdomain
         self.username = username
+        self.status = status
         self.password = password ?? { Keychain.password(subdomain: subdomain, username: username) }
         // Ephemeral: each client keeps its own cookie jar, isolated from other sessions.
         let config = URLSessionConfiguration.ephemeral
@@ -136,9 +139,7 @@ actor BiblioClient {
             req.setValue(sessionId, forHTTPHeaderField: "X-Session-Id")
             req.setValue(authToken, forHTTPHeaderField: "X-Access-Token")
         }
-        let session = self.session
-        let request = req
-        let (data, response) = try await Throttle.shared.run { try await session.data(for: request) }
+        let (data, response) = try await load(req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let json = (try? JSON.parse(data)) ?? .null
         return (json, status)
@@ -151,15 +152,13 @@ actor BiblioClient {
         if !query.isEmpty { url.append(queryItems: query) }
         var req = URLRequest(url: url)
         req.setValue("text/html", forHTTPHeaderField: "Accept")
-        let session = self.session
-        let request = req
-        let (data, response) = try await Throttle.shared.run { try await session.data(for: request) }
+        let (data, response) = try await load(req)
         let finalURL = response.url ?? url
         let html = String(decoding: data, as: UTF8.self)
         if finalURL.path.contains("/user/login") {
             // Web session expired independently of the gateway one: log in again and retry.
             try await login(force: true)
-            let (d2, r2) = try await Throttle.shared.run { try await session.data(for: request) }
+            let (d2, r2) = try await load(req)
             return (String(decoding: d2, as: UTF8.self), r2.url ?? url)
         }
         return (html, finalURL)
@@ -177,10 +176,24 @@ actor BiblioClient {
         req.httpBody = comps.percentEncodedQuery?
             .replacingOccurrences(of: "+", with: "%2B")
             .data(using: .utf8)
-        let session = self.session
-        let request = req
-        let (data, response) = try await Throttle.shared.run { try await session.data(for: request) }
+        let (data, response) = try await load(req)
         return (String(decoding: data, as: UTF8.self), (response as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
+    /// Every request goes through here: paced by `Throttle` and reported to `status`.
+    private func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let status = self.status
+        let session = self.session
+        await status.began()
+        do {
+            let (data, response) = try await Throttle.shared.run { try await session.data(for: request) }
+            let url = response.url ?? request.url ?? webBase
+            await status.finished(.init(title: FetchStatus.title(url: url, data: data), url: url, bytes: data.count))
+            return (data, response)
+        } catch {
+            await status.finished(nil)
+            throw error
+        }
     }
 
     private static func isAuthFailure(status: Int, json: JSON) -> Bool {

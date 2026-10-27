@@ -16,7 +16,7 @@ final class ClientPool {
     func client(subdomain: String, username: String) -> BiblioClient {
         let key = key(subdomain, username)
         if let c = clients[key] { return c }
-        let c = BiblioClient(subdomain: subdomain, username: username)
+        let c = BiblioClient(subdomain: subdomain, username: username, status: FetchStatus())
         clients[key] = c
         return c
     }

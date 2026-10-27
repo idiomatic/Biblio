@@ -78,6 +78,7 @@ struct MainView: View {
             #endif
         }
         .overlay(alignment: .bottom) { BannerView(session: session) }
+        .safeAreaInset(edge: .bottom, spacing: 0) { StatusBar(status: session.client.status) }
         .navigationTitle(session.library.shortName ?? session.library.name)
         #if os(macOS)
         .navigationSubtitle(session.displayName)
@@ -233,6 +234,47 @@ struct SearchField: View {
             session.runSearch(text)
             return true
         } isTargeted: { isTargeted = $0 }
+    }
+}
+
+/// The window's latest request to the library: `TITLE [SIZE]` (the URL on hover), with a spinner
+/// while fetching. It fades out after a quiet spell.
+struct StatusBar: View {
+    var status: FetchStatus
+    @State private var isShown = false
+    static let fadeDelay: Duration = .seconds(2)
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let fetch = status.last {
+                let kib = (Double(fetch.bytes) / 1024).formatted(.number.precision(.fractionLength(1)))
+                Text("\(fetch.title) [\(kib) KiB]")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(fetch.url.absoluteString)
+            }
+            Spacer(minLength: 0)
+            if status.active > 0 {
+                ProgressView().controlSize(.mini)
+            }
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+        .frame(minHeight: 16)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+        .opacity(isShown ? 1 : 0)
+        .task(id: status.activity) {
+            guard status.activity > 0 else { return }
+            withAnimation(.easeIn(duration: 0.15)) { isShown = true }
+            guard status.active == 0 else { return }
+            try? await Task.sleep(for: Self.fadeDelay)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.6)) { isShown = false }
+        }
     }
 }
 
