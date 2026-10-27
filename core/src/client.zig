@@ -7,7 +7,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Io = std.Io;
+const sync = @import("sync.zig");
 const http = @import("http.zig");
 const html = @import("html.zig");
 const json = @import("json.zig");
@@ -37,7 +37,6 @@ pub const PasswordFn = *const fn (ctx: ?*anyopaque, subdomain: []const u8, usern
 
 pub const Client = struct {
     gpa: Allocator,
-    io: Io,
     subdomain: []u8,
     /// Empty for a guest client, which can only make unauthenticated catalog requests.
     username: []u8,
@@ -49,28 +48,27 @@ pub const Client = struct {
     sample_account: bool = false,
 
     /// Guards the session fields below; held for a whole login so concurrent callers join it.
-    mutex: Io.Mutex = .init,
+    mutex: sync.Mutex = .{},
     session_id: ?[]u8 = null,
     auth_token: ?[]u8 = null,
     patron: ?models.Patron = null,
-    /// Language chosen in the app before the first login, or after `changeLanguage`.
+    /// The app's language, used until a login reports the account's.
     language: ?[]u8 = null,
     /// Bumped on every login, so a request that saw an expired session can tell whether
     /// another thread already logged in again.
     login_generation: u64 = 0,
 
     /// Status-bar reporting: the latest request's title, URL and size, and requests in flight.
-    status_mutex: Io.Mutex = .init,
+    status_mutex: sync.Mutex = .{},
     status_title: ?[]u8 = null,
     status_url: ?[]u8 = null,
     status_bytes: usize = 0,
     active: std.atomic.Value(u32) = .init(0),
 
-    pub fn create(gpa: Allocator, io: Io, transport: http.Transport, throttle: *http.Throttle, subdomain: []const u8, username: []const u8, password_fn: PasswordFn, password_ctx: ?*anyopaque) !*Client {
+    pub fn create(gpa: Allocator, transport: http.Transport, throttle: *http.Throttle, subdomain: []const u8, username: []const u8, password_fn: PasswordFn, password_ctx: ?*anyopaque) !*Client {
         const c = try gpa.create(Client);
         c.* = .{
             .gpa = gpa,
-            .io = io,
             .subdomain = try gpa.dupe(u8, subdomain),
             .username = try gpa.dupe(u8, username),
             .password_fn = password_fn,
@@ -106,16 +104,16 @@ pub const Client = struct {
     }
 
     pub fn locale(c: *Client, a: Allocator) []const u8 {
-        c.mutex.lockUncancelable(c.io);
-        defer c.mutex.unlock(c.io);
+        c.mutex.lock();
+        defer c.mutex.unlock();
         if (c.patron) |p| return a.dupe(u8, p.language) catch "en-US";
         if (c.language) |l| return a.dupe(u8, l) catch "en-US";
         return "en-US";
     }
 
     pub fn setLanguage(c: *Client, code: []const u8) void {
-        c.mutex.lockUncancelable(c.io);
-        defer c.mutex.unlock(c.io);
+        c.mutex.lock();
+        defer c.mutex.unlock();
         if (c.language) |l| c.gpa.free(l);
         c.language = c.gpa.dupe(u8, code) catch null;
         if (c.patron) |*p| {
@@ -135,7 +133,7 @@ pub const Client = struct {
     }
 
     fn fetcher(c: *Client) http.Fetcher {
-        return .{ .io = c.io, .transport = c.transport, .throttle = c.throttle, .jar = &c.jar, .observer = observe, .observer_ctx = c };
+        return .{ .transport = c.transport, .throttle = c.throttle, .jar = &c.jar, .observer = observe, .observer_ctx = c };
     }
 
     fn observe(ctx: ?*anyopaque, url: []const u8, body: []const u8) void {
@@ -143,8 +141,8 @@ pub const Client = struct {
         var arena = std.heap.ArenaAllocator.init(c.gpa);
         defer arena.deinit();
         const title = fetchTitle(arena.allocator(), url, body);
-        c.status_mutex.lockUncancelable(c.io);
-        defer c.status_mutex.unlock(c.io);
+        c.status_mutex.lock();
+        defer c.status_mutex.unlock();
         if (c.status_title) |s| c.gpa.free(s);
         if (c.status_url) |s| c.gpa.free(s);
         c.status_title = c.gpa.dupe(u8, title) catch null;
@@ -170,8 +168,8 @@ pub const Client = struct {
             return error.SignInRequired;
         }
         const seen = c.login_generation;
-        c.mutex.lockUncancelable(c.io);
-        defer c.mutex.unlock(c.io);
+        c.mutex.lock();
+        defer c.mutex.unlock();
         // Someone else logged in while we waited for the lock: use their session.
         if (c.patron != null and c.session_id != null and (!force or c.login_generation != seen)) {
             return c.patron.?.clone(a);
@@ -190,7 +188,7 @@ pub const Client = struct {
             return error.MissingCredentials;
         };
         c.clearSession();
-        c.jar.clear(c.io);
+        c.jar.clear();
         var body: std.Io.Writer.Allocating = .init(a);
         std.json.Stringify.value(.{ .username = c.username, .password = password }, .{}, &body.writer) catch return error.OutOfMemory;
         const res = try c.request(a, .{
@@ -222,7 +220,9 @@ pub const Client = struct {
             }
         }
         const account = j.path("entities.accounts").get(try std.fmt.allocPrint(a, "{d}", .{account_id orelse 0}));
-        const language = if (c.patron) |p| try a.dupe(u8, p.language) else if (c.language) |l| try a.dupe(u8, l) else user.path("preferences.language").str(a) orelse "en-US";
+        // The language chosen in this session wins; then the account's; then the app's default.
+        const language = if (c.patron) |p| try a.dupe(u8, p.language) else user.path("preferences.language").str(a) orelse
+            if (c.language) |l| try a.dupe(u8, l) else "en-US";
         var patron: models.Patron = .{
             .userId = uid.?,
             .accountId = account_id orelse 0,
@@ -243,14 +243,14 @@ pub const Client = struct {
 
     /// The patron from the last login, without contacting the library.
     pub fn currentPatron(c: *Client, a: Allocator) ?models.Patron {
-        c.mutex.lockUncancelable(c.io);
-        defer c.mutex.unlock(c.io);
+        c.mutex.lock();
+        defer c.mutex.unlock();
         return if (c.patron) |p| p.clone(a) catch null else null;
     }
 
     fn updatePatron(c: *Client, comptime field: []const u8, value: anytype) void {
-        c.mutex.lockUncancelable(c.io);
-        defer c.mutex.unlock(c.io);
+        c.mutex.lock();
+        defer c.mutex.unlock();
         if (c.patron) |*p| {
             const T = @TypeOf(@field(p.*, field));
             if (T == ?[]const u8) {
@@ -310,10 +310,10 @@ pub const Client = struct {
         try headers.append(a, .{ .name = "Accept", .value = "application/json" });
         if (body != null) try headers.append(a, .{ .name = "Content-Type", .value = "application/json" });
         if (authenticated) {
-            c.mutex.lockUncancelable(c.io);
+            c.mutex.lock();
             if (c.session_id) |s| headers.append(a, .{ .name = "X-Session-Id", .value = a.dupe(u8, s) catch "" }) catch {};
             if (c.auth_token) |t| headers.append(a, .{ .name = "X-Access-Token", .value = a.dupe(u8, t) catch "" }) catch {};
-            c.mutex.unlock(c.io);
+            c.mutex.unlock();
         }
         return c.request(a, .{ .method = method, .url = url, .headers = headers.items, .body = body }, failure);
     }

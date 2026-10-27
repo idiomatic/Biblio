@@ -15,297 +15,153 @@ nonisolated struct SearchQuery: Hashable, Sendable {
     }
 }
 
+/// The library operations the app uses, each one libbiblio request.
 extension BiblioClient {
     // MARK: Catalog
 
     func search(_ q: SearchQuery, page: Int, sort: String?, format: String?) async throws -> ListPage {
-        var body: [String: JSON] = [
-            "query": .string(q.query),
-            "searchType": .string(q.searchType),
-            "page": .number(Double(page)),
-            "locale": .string(locale),
-        ]
-        for (k, v) in q.filters { body[k] = .string(v) }
-        if let sort { body["sort"] = .string(sort) }
-        if let format { body["f_FORMAT"] = .string(format) }
-        // Signed in, the response also lists this account's holds and checkouts among the results.
-        let json = try await send("POST", "bibs/search", body: .object(body), authenticated: !isGuest)
-        let search = json["catalogSearch"]
-        let bibs = json["entities"]["bibs"]
-        let (statuses, holds) = Self.accountStatuses(json["entities"])
-        let entries = search["results"].array.enumerated().compactMap { i, r -> ListEntry? in
-            guard let id = r["representative"].string, let bib = Bib(json: bibs[id]) else { return nil }
-            // A title can group several editions; any of them held or checked out counts.
-            let ids = [id] + r["manifestations"].strings
-            return ListEntry(id: id, bib: bib, kind: .catalog, serverIndex: (page - 1) * 25 + i,
-                             catalogStatus: ids.lazy.compactMap { statuses[$0] }.first,
-                             catalogHold: ids.lazy.compactMap { holds[$0] }.first)
-        }
-        let facets = search["fields"].array.map { f in
-            Facet(id: f["id"].string ?? "",
-                  values: f["fieldFilters"].array.compactMap { v in
-                      v["value"].string.map { ($0, v["count"].int ?? 0) }
-                  })
-        }
-        let sorts = search["sortBys"].array.compactMap { $0["id"].string }
-        return ListPage(entries: entries,
-                        page: search[path: "pagination.page"].int ?? page,
-                        pages: search[path: "pagination.pages"].int ?? page,
-                        count: search[path: "pagination.count"].int ?? entries.count,
-                        pageSize: search[path: "pagination.limit"].int ?? 25,
-                        facets: facets,
-                        sortOptions: sorts,
-                        appliedSort: search["sortBys"].array.first { $0["applied"].bool == true }?["id"].string)
-    }
-
-    /// Account status by metadata id, from the `entities.holds` / `entities.checkouts` that
-    /// authenticated catalog responses include. Checkouts win over holds.
-    private static func accountStatuses(_ entities: JSON) -> (statuses: [String: AccountStatus], holds: [String: Hold]) {
-        var out: [String: AccountStatus] = [:]
-        var holds: [String: Hold] = [:]
-        for h in entities["holds"].object.values {
-            guard let hold = Hold(json: h) else { continue }
-            out[hold.metadataId] = .onHold(ready: hold.status == "READY_FOR_PICKUP", position: hold.position)
-            holds[hold.metadataId] = hold
-        }
-        for c in entities["checkouts"].object.values {
-            guard let checkout = Checkout(json: c) else { continue }
-            out[checkout.metadataId] = .checkedOut(due: checkout.dueDate)
-        }
-        return (out, holds)
+        var request: [String: Any] = ["op": "search", "query": q.query, "searchType": q.searchType,
+                                      "filters": q.filters, "page": page]
+        if let sort { request["sort"] = sort }
+        if let format { request["format"] = format }
+        return try await call(request, as: CoreListPage.self).listPage
     }
 
     func availability(_ metadataId: String) async throws -> [CopyAvailability] {
-        let json = try await send("GET", "bibs/\(metadataId)/availability", authenticated: false)
-        let items = json["entities"]["bibItems"]
-        let order = json[path: "availability.items"].strings
-        let ids = order.isEmpty ? items.object.keys.sorted() : order
-        return ids.compactMap { id in
-            let i = items[id]
-            guard !i.isNull else { return nil }
-            let a = i["availability"]
-            return CopyAvailability(
-                id: id,
-                branch: i["branchName"].nonEmptyString ?? i["branch"]["name"].nonEmptyString ?? "—",
-                status: a["libraryStatus"].nonEmptyString ?? a["status"].string?.prettified ?? "",
-                isAvailable: a["statusType"].string == "AVAILABLE" || a["group"].string == "AVAILABLE_ITEMS",
-                collection: i["collection"].nonEmptyString,
-                callNumber: i["callNumber"].nonEmptyString,
-                dueDate: i["dueDate"].nonEmptyString,
-                isOnOrder: a["status"].string == "ON_ORDER" || a["statusType"].string == "ON_ORDER"
-                    || (a["libraryStatus"].string ?? "").range(of: "on.order", options: [.regularExpression, .caseInsensitive]) != nil)
-        }
-        .sorted { ($0.isAvailable ? 0 : 1, $0.branch) < ($1.isAvailable ? 0 : 1, $1.branch) }
+        try await call(["op": "availability", "metadataId": metadataId])
     }
 
     /// Full record fields ("Details", "About", …). Opinion/UGC sections are never requested.
     func detailFields(_ metadataId: String) async throws -> [DetailField] {
-        let json = try await send("GET", "catalogbibs/\(metadataId)", authenticated: false)
-        let record = json["entities"]["catalogBibs"][metadataId]
-        // The summary is already shown from the brief record; the title is the header.
-        let hidden: Set<String> = ["TITLE", "SUMMARY"]
-        var seen = Set<String>()
-        return record["fields"].array.flatMap { category in
-            category["items"].array.compactMap { item -> DetailField? in
-                guard let name = item["fieldName"].string, !hidden.contains(name) else { return nil }
-                var values: [String] = []
-                for v in item["fieldValues"].array.flatMap({ $0["primary"]["values"].strings }) where !values.contains(v) {
-                    values.append(v)
-                }
-                let field = DetailField(label: name.prettified, values: values)
-                guard !values.isEmpty, seen.insert(field.id).inserted else { return nil }
-                return field
-            }
-        }
+        try await call(["op": "details", "metadataId": metadataId])
     }
 
     func locations() async throws -> [Location] {
-        let json = try await send("GET", "locations", query: ["limit": "200"], authenticated: false)
-        return json["entities"]["locations"].object.values.compactMap { l in
-            guard let id = l["id"].string, let name = l["name"].string, l["isHidden"].bool != true else { return nil }
-            return Location(id: id, name: name)
-        }
-        .sorted { $0.name < $1.name }
+        try await call(["op": "locations"])
     }
 
     // MARK: Borrowing
 
     func holds(page: Int, sort: String?) async throws -> ListPage {
-        let p = try await login()
-        var q = ["accountId": String(p.accountId), "page": String(page)]
-        if let sort { q["sort"] = sort }
-        let json = try await send("GET", "holds", query: q)
-        return borrowingPage(json, listKeys: ["holds"], entityKeys: ["holds"], page: page) { e, bib, idx in
-            guard let h = Hold(json: e) else { return nil }
-            return ListEntry(id: "hold-\(h.id)", bib: bib ?? Bib(placeholderID: h.metadataId, title: e["bibTitle"].string ?? "Untitled"),
-                             kind: .hold(h), serverIndex: idx)
-        }
+        try await borrowing("holds", page: page, sort: sort)
     }
 
     func checkouts(page: Int, sort: String?) async throws -> ListPage {
-        let p = try await login()
-        var q = ["accountId": String(p.accountId), "page": String(page)]
-        if let sort { q["sort"] = sort }
-        let json = try await send("GET", "checkouts", query: q)
-        return borrowingPage(json, listKeys: ["checkouts", "checkedout", "checkedOut"], entityKeys: ["checkouts"], page: page) { e, bib, idx in
-            guard let c = Checkout(json: e) else { return nil }
-            return ListEntry(id: "co-\(c.id)", bib: bib ?? Bib(placeholderID: c.metadataId, title: e["bibTitle"].string ?? "Untitled"),
-                             kind: .checkout(c), serverIndex: idx)
-        }
+        try await borrowing("checkouts", page: page, sort: sort)
     }
 
     func borrowingHistory(page: Int, sort: String?) async throws -> ListPage {
-        let p = try await login()
-        var q = ["accountId": String(p.accountId), "page": String(page)]
-        if let sort { q["sort"] = sort }
-        let json = try await send("GET", "borrowinghistory", query: q)
-        return borrowingPage(json, listKeys: ["borrowingHistory", "borrowinghistory"], entityKeys: ["borrowingHistory"], page: page) { e, bib, idx in
-            guard let h = HistoryEntry(json: e, fallbackID: "\(page)-\(idx)") else { return nil }
-            return ListEntry(id: "bh-\(h.id)", bib: bib ?? Bib(placeholderID: h.metadataId, title: e["bibTitle"].string ?? "Untitled"),
-                             kind: .history(h), serverIndex: idx)
-        }
+        try await borrowing("history", page: page, sort: sort)
     }
 
-    /// Shared parsing for the borrowing endpoints, which all return
-    /// `borrowing.<list>.{items, pagination, sortOptions}` plus `entities.<kind>` and `entities.bibs`.
-    private func borrowingPage(_ json: JSON, listKeys: [String], entityKeys: [String], page: Int,
-                               make: (JSON, Bib?, Int) -> ListEntry?) -> ListPage {
-        let borrowing = json["borrowing"]
-        let list = listKeys.lazy.map { borrowing[$0] }.first { !$0.isNull }
-            ?? borrowing.object.values.first { !$0["items"].isNull } ?? .null
-        let entities = entityKeys.lazy.map { json["entities"][$0] }.first { !$0.isNull } ?? .null
-        let bibs = json["entities"]["bibs"]
-        var ids = list["items"].strings
-        if ids.isEmpty { ids = list["results"].strings }
-        if ids.isEmpty { ids = list["results"].array.compactMap { $0["id"].string } }
-        if ids.isEmpty { ids = entities.object.keys.sorted() }
-        let entries = ids.enumerated().compactMap { i, id -> ListEntry? in
-            let e = entities[id]
-            guard !e.isNull else { return nil }
-            let bib = e["metadataId"].string.flatMap { Bib(json: bibs[$0]) }
-            return make(e, bib, (page - 1) * 25 + i)
-        }
-        let sorts = list["sortOptions"].array.compactMap { $0["id"].string ?? $0.string }
-        return ListPage(entries: entries,
-                        page: list[path: "pagination.page"].int ?? page,
-                        pages: list[path: "pagination.pages"].int ?? page,
-                        count: list[path: "pagination.count"].int ?? entries.count,
-                        pageSize: list[path: "pagination.limit"].int ?? 25,
-                        facets: [],
-                        sortOptions: sorts,
-                        appliedSort: list["sortOptions"].array.first { $0["applied"].bool == true }?["id"].string)
+    private func borrowing(_ op: String, page: Int, sort: String?) async throws -> ListPage {
+        var request: [String: Any] = ["op": op, "page": page]
+        if let sort { request["sort"] = sort }
+        return try await call(request, as: CoreListPage.self).listPage
     }
 
     // MARK: Holds
 
     func placeHold(_ bib: Bib, pickupBranch: String?) async throws {
-        let p = try await login()
-        var params: [String: JSON] = ["errorMessageLocale": .string(locale)]
-        if let branch = pickupBranch ?? p.preferredPickup { params["branchId"] = .string(branch) }
-        let body: JSON = [
-            "metadataId": .string(bib.id),
-            "materialType": .string(bib.materialType),
-            "accountId": .number(Double(p.accountId)),
-            "enableSingleClickHolds": false,
-            "materialParams": .object(params),
-        ]
-        let json = try await send("POST", "holds", body: body)
-        if let failure = json["failures"][0]["message"].nonEmptyString ?? json[path: "error.message"].nonEmptyString {
-            throw BiblioError.unexpected(failure)
-        }
+        var request: [String: Any] = ["op": "placeHold", "metadataId": bib.id, "materialType": bib.materialType]
+        if let pickupBranch { request["pickupBranch"] = pickupBranch }
+        _ = try await call(request, as: Bool.self)
     }
 
     /// Cancels holds and returns the ones the library refused, with its reason
     /// (some libraries don't allow cancelling holds that are ready for pickup).
     @discardableResult
     func cancelHolds(_ holds: [Hold]) async throws -> [(hold: Hold, reason: String)] {
-        let p = try await login()
-        let body: JSON = [
-            "accountId": .number(Double(p.accountId)),
-            "holdIds": .array(holds.map { .string($0.id) }),
-            "metadataIds": .array(holds.map { .string($0.metadataId) }),
-        ]
-        let json = try await send("DELETE", "holds", body: body)
-        let failures = json["failures"].array
-        guard !failures.isEmpty else { return [] }
-        var refused: [(Hold, String)] = []
-        for f in failures {
-            let reason = f["message"].nonEmptyString ?? "The library didn’t cancel this hold."
-            let id = f["id"].string ?? f["holdId"].string ?? f["holdsId"].string
-            if let id, let hold = holds.first(where: { $0.id == id }) {
-                refused.append((hold, reason))
-            } else if failures.count == 1, holds.count == 1 {
-                refused.append((holds[0], reason))
-            } else {
-                // Can't tell which hold failed: treat the whole request as refused.
-                return holds.map { ($0, reason) }
-            }
+        struct Result: Decodable, Sendable {
+            struct Refusal: Decodable, Sendable { var holdId: String; var reason: String }
+            var refused: [Refusal]
         }
-        return refused
+        let result = try await call(["op": "cancelHolds",
+                                     "holds": holds.map { ["id": $0.id, "metadataId": $0.metadataId] }],
+                                    as: Result.self)
+        return result.refused.compactMap { r in holds.first { $0.id == r.holdId }.map { ($0, r.reason) } }
     }
 
     // MARK: Settings
-    //
-    // Account settings have no gateway endpoints; they are the Rails forms under
-    // /account/* on the library's web host (same session cookies as the gateway login).
 
     /// Current values as shown on the account settings pages.
     func accountSettings() async throws -> (email: String?, pickup: String?, language: String?) {
-        let email = try await accountForm(page: "account/email", action: "/account/contact_information")
-        let pickup = try await accountForm(page: "account/pickup_location", action: "/account/preferred_branches")
-        let language = try await accountForm(page: "account/language", action: "/account/user_lang")
-        return (email.fields["user_email"], pickup.fields["first_preference"], language.fields["user_lang"])
+        struct Settings: Decodable, Sendable { var email: String?; var pickup: String?; var language: String? }
+        let s = try await call(["op": "accountSettings"], as: Settings.self)
+        return (s.email, s.pickup, s.language)
     }
 
     /// Sets the first preferred pickup location (used for new holds).
     func setDefaultPickupLocation(_ branchId: String) async throws {
-        let form = try await accountForm(page: "account/pickup_location", action: "/account/preferred_branches")
-        var values = ["first_preference": branchId]
-        // A branch can only appear once in the preference list.
-        for key in ["second_preference", "third_preference"] where form.fields[key] == branchId { values[key] = "" }
-        try await submitAccountForm(form, values: values)
-        patron?.preferredPickup = branchId
+        _ = try await call(["op": "setPickup", "branchId": branchId], as: Bool.self)
     }
 
     func changeLanguage(_ code: String) async throws {
-        let form = try await accountForm(page: "account/language", action: "/account/user_lang")
-        try await submitAccountForm(form, values: ["user_lang": code])
-        setLanguage(code)
+        _ = try await call(["op": "setLanguage", "code": code], as: Bool.self)
     }
 
-    /// Turns the library's record of this account's borrowing history on or off (a gateway
-    /// setting, unlike the Rails forms above).
+    /// Turns the library's record of this account's borrowing history on or off.
     func setBorrowingHistory(enabled: Bool) async throws {
-        let p = try await login()
-        _ = try await send("PUT", "accounts/\(p.accountId)/settings/borrowingHistorySetting",
-                           body: ["enabled": .bool(enabled)])
-        patron?.borrowingHistoryEnabled = enabled
+        _ = try await call(["op": "setBorrowingHistory", "enabled": enabled], as: Bool.self)
     }
 
     func changeEmail(_ email: String) async throws {
-        let form = try await accountForm(page: "account/email", action: "/account/contact_information")
-        try await submitAccountForm(form, values: ["user_email": email])
-        patron?.email = email
+        _ = try await call(["op": "changeEmail", "email": email], as: Bool.self)
     }
 
     /// Changes the PIN/password, then keeps the Keychain in step so automatic re-login still works.
     func changePassword(current: String, new: String) async throws {
-        let form = try await accountForm(page: "account/password", action: "/account/change_pin")
-        try await submitAccountForm(form, values: ["old_password": current, "new_password": new, "new_password_confirm": new])
+        _ = try await call(["op": "changePassword", "current": current, "new": new], as: Bool.self)
         Keychain.setPassword(new, subdomain: subdomain, username: username)
     }
+}
 
-    private func accountForm(page: String, action: String) async throws -> HTMLForm {
-        let (html, url) = try await webPage(page)
-        guard let form = HTMLForm.forms(in: html, base: url).first(where: { $0.action.path == action }) else {
-            throw BiblioError.unexpected("This library’s account settings page could not be read.")
-        }
-        return form
+/// A list page as the core returns it, before its rows become `ListEntry` values.
+nonisolated struct CoreListPage: Decodable, Sendable {
+    struct Entry: Decodable, Sendable {
+        struct Status: Decodable, Sendable { var kind: String; var ready: Bool?; var position: Int?; var due: String? }
+        var id: String
+        var bib: Bib
+        var kind: String
+        var serverIndex: Int
+        var hold: Hold?
+        var checkout: Checkout?
+        var history: HistoryEntry?
+        var accountStatus: Status?
     }
+    struct FacetValue: Decodable, Sendable { var value: String; var count: Int }
+    struct CoreFacet: Decodable, Sendable { var id: String; var values: [FacetValue] }
 
-    private func submitAccountForm(_ form: HTMLForm, values: [String: String]) async throws {
-        let (html, status) = try await submitForm(form, values: values)
-        guard (200..<400).contains(status) else { throw BiblioError.http(status, nil) }
-        if let error = HTMLForm.errorMessage(in: html) { throw BiblioError.unexpected(error) }
+    var entries: [Entry]
+    var page: Int
+    var pages: Int
+    var count: Int
+    var pageSize: Int
+    var facets: [CoreFacet]?
+    var sortOptions: [String]?
+    var appliedSort: String?
+
+    var listPage: ListPage {
+        ListPage(entries: entries.compactMap(\.listEntry), page: page, pages: pages, count: count, pageSize: pageSize,
+                 facets: (facets ?? []).map { Facet(id: $0.id, values: $0.values.map { ($0.value, $0.count) }) },
+                 sortOptions: sortOptions ?? [], appliedSort: appliedSort)
+    }
+}
+
+nonisolated private extension CoreListPage.Entry {
+    var listEntry: ListEntry? {
+        let kind: ListEntry.Kind
+        switch self.kind {
+        case "hold": guard let hold else { return nil }; kind = .hold(hold)
+        case "checkout": guard let checkout else { return nil }; kind = .checkout(checkout)
+        case "history": guard let history else { return nil }; kind = .history(history)
+        default: kind = .catalog
+        }
+        let status: AccountStatus? = accountStatus.map { s in
+            s.kind == "checkedOut" ? .checkedOut(due: s.due) : .onHold(ready: s.ready ?? false, position: s.position)
+        }
+        let isCatalog = kind == .catalog
+        return ListEntry(id: id, bib: bib, kind: kind, serverIndex: serverIndex,
+                         catalogStatus: isCatalog ? status : nil, catalogHold: isCatalog ? hold : nil)
     }
 }

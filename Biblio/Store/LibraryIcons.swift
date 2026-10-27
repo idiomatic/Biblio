@@ -99,7 +99,7 @@ final class LibraryIcons {
         for m in re.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
             let tag = ns.substring(with: m.range)
             guard let rel = attr(tag, "rel")?.lowercased(), let href = attr(tag, "href"),
-                  let url = URL(string: HTMLForm.decode(href), relativeTo: base)?.absoluteURL else { continue }
+                  let url = URL(string: htmlDecoded(href), relativeTo: base)?.absoluteURL else { continue }
             let size = attr(tag, "sizes").flatMap { Int($0.lowercased().split(separator: "x").first ?? "") } ?? 0
             if rel.contains("apple-touch-icon") {
                 found.append((max(size, 180), url))
@@ -109,6 +109,15 @@ final class LibraryIcons {
         }
         var seen = Set<URL>()
         return found.sorted { $0.rank > $1.rank }.map(\.url).filter { seen.insert($0).inserted }
+    }
+
+    /// Decodes the entities that appear in `href` attributes.
+    private nonisolated static func htmlDecoded(_ s: String) -> String {
+        var out = s
+        for (k, v) in ["&amp;": "&", "&quot;": "\"", "&#39;": "'", "&#x27;": "'", "&lt;": "<", "&gt;": ">", "&#x3D;": "="] {
+            out = out.replacingOccurrences(of: k, with: v)
+        }
+        return out
     }
 
     /// The pixel width of the largest square image in `data` (an .ico may hold several).

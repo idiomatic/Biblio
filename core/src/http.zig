@@ -9,6 +9,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const sync = @import("sync.zig");
 
 pub const user_agent = "Biblio/1.0 (libbiblio)";
 
@@ -52,29 +53,27 @@ pub const Throttle = struct {
     const max_concurrent = 3;
     const minimum_gap_ns: i96 = 250 * std.time.ns_per_ms;
 
-    mutex: Io.Mutex = .init,
-    cond: Io.Condition = .init,
+    mutex: sync.Mutex = .{},
+    cond: sync.Condition = .{},
     in_flight: u32 = 0,
     last_start_ns: i96 = 0,
 
-    pub fn acquire(t: *Throttle, io: Io) void {
-        t.mutex.lockUncancelable(io);
-        while (t.in_flight >= max_concurrent) t.cond.waitUncancelable(io, &t.mutex);
+    pub fn acquire(t: *Throttle) void {
+        t.mutex.lock();
+        while (t.in_flight >= max_concurrent) t.cond.wait(&t.mutex);
         t.in_flight += 1;
-        const now = Io.Clock.awake.now(io).nanoseconds;
+        const now = sync.now();
         const next = t.last_start_ns + minimum_gap_ns;
         t.last_start_ns = @max(now, next);
-        t.mutex.unlock(io);
-        if (next > now) {
-            io.sleep(.fromNanoseconds(@intCast(next - now)), .awake) catch {};
-        }
+        t.mutex.unlock();
+        if (next > now) sync.sleep(@intCast(next - now));
     }
 
-    pub fn release(t: *Throttle, io: Io) void {
-        t.mutex.lockUncancelable(io);
+    pub fn release(t: *Throttle) void {
+        t.mutex.lock();
         t.in_flight -= 1;
-        t.mutex.unlock(io);
-        t.cond.signal(io);
+        t.mutex.unlock();
+        t.cond.signal();
     }
 };
 
@@ -86,7 +85,7 @@ pub const CookieJar = struct {
     const Cookie = struct { domain: []u8, name: []u8, value: []u8, host_only: bool };
 
     gpa: Allocator,
-    mutex: Io.Mutex = .init,
+    mutex: sync.Mutex = .{},
     cookies: std.ArrayList(Cookie) = .empty,
 
     pub fn init(gpa: Allocator) CookieJar {
@@ -104,17 +103,17 @@ pub const CookieJar = struct {
         j.gpa.free(c.value);
     }
 
-    pub fn clear(j: *CookieJar, io: Io) void {
-        j.mutex.lockUncancelable(io);
-        defer j.mutex.unlock(io);
+    pub fn clear(j: *CookieJar) void {
+        j.mutex.lock();
+        defer j.mutex.unlock();
         for (j.cookies.items) |c| j.freeCookie(c);
         j.cookies.clearRetainingCapacity();
     }
 
     /// The `Cookie` header value for a request to `host`, or null if none apply.
-    pub fn header(j: *CookieJar, io: Io, arena: Allocator, host: []const u8) ?[]const u8 {
-        j.mutex.lockUncancelable(io);
-        defer j.mutex.unlock(io);
+    pub fn header(j: *CookieJar, arena: Allocator, host: []const u8) ?[]const u8 {
+        j.mutex.lock();
+        defer j.mutex.unlock();
         var out: std.ArrayList(u8) = .empty;
         for (j.cookies.items) |c| {
             if (!domainMatches(host, c.domain, c.host_only)) continue;
@@ -125,7 +124,7 @@ pub const CookieJar = struct {
     }
 
     /// Stores one `Set-Cookie` header value received from `host`.
-    pub fn store(j: *CookieJar, io: Io, host: []const u8, set_cookie: []const u8) void {
+    pub fn store(j: *CookieJar, host: []const u8, set_cookie: []const u8) void {
         var parts = std.mem.splitScalar(u8, set_cookie, ';');
         const pair = std.mem.trim(u8, parts.first(), " ");
         const eq = std.mem.findScalar(u8, pair, '=') orelse return;
@@ -155,8 +154,8 @@ pub const CookieJar = struct {
             }
         }
 
-        j.mutex.lockUncancelable(io);
-        defer j.mutex.unlock(io);
+        j.mutex.lock();
+        defer j.mutex.unlock();
         var i: usize = 0;
         while (i < j.cookies.items.len) {
             const c = j.cookies.items[i];
@@ -192,7 +191,6 @@ pub fn hostOf(url: []const u8) []const u8 {
 // MARK: Fetching with cookies, redirects and pacing
 
 pub const Fetcher = struct {
-    io: Io,
     transport: Transport,
     throttle: *Throttle,
     jar: ?*CookieJar,
@@ -209,19 +207,19 @@ pub const Fetcher = struct {
             try headers.appendSlice(arena, current.headers);
             try headers.append(arena, .{ .name = "User-Agent", .value = user_agent });
             if (f.jar) |jar| {
-                if (jar.header(f.io, arena, hostOf(current.url))) |c| try headers.append(arena, .{ .name = "Cookie", .value = c });
+                if (jar.header(arena, hostOf(current.url))) |c| try headers.append(arena, .{ .name = "Cookie", .value = c });
             }
             const send: Request = .{ .method = current.method, .url = current.url, .headers = headers.items, .body = current.body };
 
-            f.throttle.acquire(f.io);
+            f.throttle.acquire();
             const result = f.transport.send(arena, send);
-            f.throttle.release(f.io);
+            f.throttle.release();
             var res = try result;
             res.url = current.url;
 
             if (f.jar) |jar| {
                 for (res.headers) |h| {
-                    if (std.ascii.eqlIgnoreCase(h.name, "set-cookie")) jar.store(f.io, hostOf(current.url), h.value);
+                    if (std.ascii.eqlIgnoreCase(h.name, "set-cookie")) jar.store(hostOf(current.url), h.value);
                 }
             }
             const is_redirect = switch (res.status) {
@@ -261,23 +259,23 @@ fn withoutContentType(arena: Allocator, headers: []const Header) []const Header 
 
 // MARK: Built-in transport (std.http)
 
-pub const StdTransport = struct {
+pub const StdTransport = if (!sync.has_std_io) void else struct {
     client: std.http.Client,
 
-    pub fn init(gpa: Allocator, io: Io) StdTransport {
-        return .{ .client = .{ .allocator = gpa, .io = io } };
+    pub fn init(gpa: Allocator) @This() {
+        return .{ .client = .{ .allocator = gpa, .io = sync.io() } };
     }
 
-    pub fn deinit(t: *StdTransport) void {
+    pub fn deinit(t: *@This()) void {
         t.client.deinit();
     }
 
-    pub fn transport(t: *StdTransport) Transport {
+    pub fn transport(t: *@This()) Transport {
         return .{ .ctx = t, .sendFn = send };
     }
 
     fn send(ctx: ?*anyopaque, arena: Allocator, req: Request) anyerror!Response {
-        const t: *StdTransport = @ptrCast(@alignCast(ctx.?));
+        const t: *@This() = @ptrCast(@alignCast(ctx.?));
         const method = std.meta.stringToEnum(std.http.Method, req.method) orelse return error.UnsupportedMethod;
         const uri = try std.Uri.parse(req.url);
 
@@ -352,19 +350,17 @@ pub const StdTransport = struct {
 };
 
 test "cookie jar" {
-    var threaded: Io.Threaded = .init_single_threaded;
-    const io = threaded.io();
     var jar = CookieJar.init(std.testing.allocator);
     defer jar.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    jar.store(io, "wccls.bibliocommons.com", "session=abc; path=/; HttpOnly");
-    jar.store(io, "gateway.bibliocommons.com", "bc_access_token=t1; Domain=.bibliocommons.com; Secure");
-    jar.store(io, "evil.example.com", "x=1; Domain=bibliocommons.com");
-    try std.testing.expectEqualStrings("session=abc; bc_access_token=t1", jar.header(io, a, "wccls.bibliocommons.com").?);
-    try std.testing.expectEqualStrings("bc_access_token=t1", jar.header(io, a, "gateway.bibliocommons.com").?);
-    jar.store(io, "wccls.bibliocommons.com", "session=; expires=Thu, 01 Jan 1970 00:00:00 GMT");
-    try std.testing.expectEqualStrings("bc_access_token=t1", jar.header(io, a, "wccls.bibliocommons.com").?);
+    jar.store("wccls.bibliocommons.com", "session=abc; path=/; HttpOnly");
+    jar.store("gateway.bibliocommons.com", "bc_access_token=t1; Domain=.bibliocommons.com; Secure");
+    jar.store("evil.example.com", "x=1; Domain=bibliocommons.com");
+    try std.testing.expectEqualStrings("session=abc; bc_access_token=t1", jar.header(a, "wccls.bibliocommons.com").?);
+    try std.testing.expectEqualStrings("bc_access_token=t1", jar.header(a, "gateway.bibliocommons.com").?);
+    jar.store("wccls.bibliocommons.com", "session=; expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    try std.testing.expectEqualStrings("bc_access_token=t1", jar.header(a, "wccls.bibliocommons.com").?);
     try std.testing.expectEqualStrings("wccls.bibliocommons.com", hostOf("https://wccls.bibliocommons.com/v2/x"));
 }

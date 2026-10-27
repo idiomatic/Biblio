@@ -3,7 +3,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
-const Io = std.Io;
 const http = @import("http.zig");
 const json = @import("json.zig");
 const models = @import("models.zig");
@@ -27,32 +26,46 @@ test {
 
 // MARK: Process-wide state
 
-const gpa: Allocator = if (builtin.link_libc) std.heap.c_allocator else std.heap.smp_allocator;
+const sync = @import("sync.zig");
+const gpa = sync.allocator;
 
-var threaded: Io.Threaded = undefined;
+/// Without `std.Io` (iOS), panics can't use the standard handler's stderr: log and abort.
+pub const panic = if (sync.has_std_io) std.debug.FullPanic(std.debug.defaultPanic) else std.debug.FullPanic(abortPanic);
+
+fn abortPanic(message: []const u8, _: ?usize) noreturn {
+    _ = std.c.write(2, "libbiblio panic: ", 17);
+    _ = std.c.write(2, message.ptr, message.len);
+    _ = std.c.write(2, "\n", 1);
+    std.c.abort();
+}
+
 var throttle: http.Throttle = .{};
 var std_transport: http.StdTransport = undefined;
 var host_transport: ?HostTransport = null;
-/// 0: not set up, 1: being set up by another thread, 2: ready.
-var init_state: std.atomic.Value(u8) = .init(0);
+var std_transport_ready: std.atomic.Value(bool) = .init(false);
+var std_transport_mutex: sync.Mutex = .{};
 
-fn io() Io {
-    if (init_state.load(.acquire) != 2) {
-        if (init_state.cmpxchgStrong(0, 1, .acquire, .acquire) == null) {
-            threaded = .init(gpa, .{});
-            std_transport = .init(gpa, threaded.io());
-            init_state.store(2, .release);
-        } else {
-            while (init_state.load(.acquire) != 2) std.atomic.spinLoopHint();
+fn builtInTransport() ?http.Transport {
+    if (!sync.has_std_io) return null;
+    if (!std_transport_ready.load(.acquire)) {
+        std_transport_mutex.lock();
+        defer std_transport_mutex.unlock();
+        if (!std_transport_ready.load(.acquire)) {
+            std_transport = .init(gpa);
+            std_transport_ready.store(true, .release);
         }
     }
-    return threaded.io();
+    return std_transport.transport();
 }
 
+/// The host's transport if it set one, else the built-in one (none on iOS).
 fn transport() http.Transport {
-    _ = io();
     if (host_transport) |*t| return .{ .ctx = t, .sendFn = HostTransport.send };
-    return std_transport.transport();
+    return builtInTransport() orelse .{ .ctx = null, .sendFn = noTransport };
+}
+
+fn noTransport(_: ?*anyopaque, _: Allocator, _: http.Request) anyerror!http.Response {
+    return error.NoTransport;
 }
 
 // MARK: Host transport
@@ -154,7 +167,6 @@ export fn biblio_version() [*:0]const u8 {
 /// Routes every request through the host's HTTP stack. Pass null to go back to the built-in one.
 /// Call before creating clients.
 export fn biblio_set_transport(func: ?CTransportFn, ctx: ?*anyopaque) void {
-    _ = io();
     host_transport = if (func) |f| .{ .func = f, .ctx = ctx } else null;
 }
 
@@ -188,7 +200,7 @@ const Handle = struct {
 export fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, password: CPasswordFn, ctx: ?*anyopaque) ?*Handle {
     const h = gpa.create(Handle) catch return null;
     h.bridge = .{ .func = password, .ctx = ctx };
-    h.client = Client.create(gpa, io(), transport(), &throttle, std.mem.span(subdomain), std.mem.span(username), PasswordBridge.get, &h.bridge) catch {
+    h.client = Client.create(gpa, transport(), &throttle, std.mem.span(subdomain), std.mem.span(username), PasswordBridge.get, &h.bridge) catch {
         gpa.destroy(h);
         return null;
     };
@@ -289,7 +301,7 @@ fn requireClient(c: ?*Client, failure: *Failure) !*Client {
 }
 
 fn lookup() library.Lookup {
-    return .{ .fetcher = .{ .io = io(), .transport = transport(), .throttle = &throttle, .jar = null } };
+    return .{ .fetcher = .{ .transport = transport(), .throttle = &throttle, .jar = null } };
 }
 
 fn run(a: Allocator, c_opt: ?*Client, op: Op, req: J, w: *std.json.Stringify, failure: *Failure) !void {
@@ -334,8 +346,8 @@ fn runClient(a: Allocator, c: *Client, op: Op, req: J, w: *std.json.Stringify, f
             try ok(w, true);
         },
         .status => {
-            c.status_mutex.lockUncancelable(c.io);
-            defer c.status_mutex.unlock(c.io);
+            c.status_mutex.lock();
+            defer c.status_mutex.unlock();
             try ok(w, .{
                 .active = c.active.load(.monotonic),
                 .title = if (c.status_title) |s| a.dupe(u8, s) catch null else null,

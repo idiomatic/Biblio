@@ -62,8 +62,8 @@ pub fn build(b: *std.Build) void {
                 .root_source_file = b.path("src/root.zig"),
                 .target = b.resolveTargetQuery(t.query),
                 .optimize = if (optimize == .debug) .safe else optimize,
-                // Xcode links the Swift app with the system's libc; let the core use it too.
-                .link_libc = false,
+                // Apple platforms always have libSystem; on iOS the core's locks use its pthreads.
+                .link_libc = true,
             }),
         });
         lib.bundle_compiler_rt = true;

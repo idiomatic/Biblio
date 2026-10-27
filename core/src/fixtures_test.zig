@@ -4,7 +4,6 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
-const Io = std.Io;
 const http = @import("http.zig");
 const root = @import("root.zig");
 const Client = @import("client.zig").Client;
@@ -120,14 +119,13 @@ fn password(_: ?*anyopaque, _: []const u8, _: []const u8, _: Allocator) ?[]const
 }
 
 const Setup = struct {
-    threaded: Io.Threaded,
     throttle: http.Throttle = .{},
     fake: Fake,
     arena: std.heap.ArenaAllocator,
 };
 
 fn makeClient(s: *Setup, username: []const u8) !*Client {
-    return Client.create(testing.allocator, s.threaded.io(), s.fake.transport(), &s.throttle, "wccls", username, password, null);
+    return Client.create(testing.allocator, s.fake.transport(), &s.throttle, "wccls", username, password, null);
 }
 
 fn result(a: Allocator, c: *Client, request: []const u8) !json.J {
@@ -141,7 +139,7 @@ fn result(a: Allocator, c: *Client, request: []const u8) !json.J {
 }
 
 test "login, search and account status" {
-    var s: Setup = .{ .threaded = .init_single_threaded, .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
     defer s.fake.deinit();
     defer s.arena.deinit();
     const a = s.arena.allocator();
@@ -174,7 +172,7 @@ test "login, search and account status" {
 }
 
 test "guests can search but not see holds" {
-    var s: Setup = .{ .threaded = .init_single_threaded, .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
     defer s.fake.deinit();
     defer s.arena.deinit();
     const a = s.arena.allocator();
@@ -187,7 +185,7 @@ test "guests can search but not see holds" {
 }
 
 test "holds, expiry and re-login" {
-    var s: Setup = .{ .threaded = .init_single_threaded, .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
     defer s.fake.deinit();
     defer s.arena.deinit();
     const a = s.arena.allocator();
@@ -223,7 +221,7 @@ test "holds, expiry and re-login" {
 }
 
 test "availability sorts available copies first" {
-    var s: Setup = .{ .threaded = .init_single_threaded, .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
     defer s.fake.deinit();
     defer s.arena.deinit();
     const a = s.arena.allocator();
@@ -237,7 +235,7 @@ test "availability sorts available copies first" {
 }
 
 test "account form submission keeps cookies and clears duplicate preferences" {
-    var s: Setup = .{ .threaded = .init_single_threaded, .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
     defer s.fake.deinit();
     defer s.arena.deinit();
     const a = s.arena.allocator();

@@ -1,6 +1,7 @@
 import Foundation
 
 /// A catalog record ("bib") as it appears in search results, holds, checkouts and history.
+/// Parsed from the gateway by libbiblio (core/src/models.zig).
 nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
     var id: String
     var title: String
@@ -21,30 +22,34 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
     var totalCopies: Int
     var onOrderCopies: Int
 
-    /// Builds a bib from a gateway `entities.bibs[id]` value.
-    init?(json: JSON) {
-        let brief = json["briefInfo"]
-        guard let id = json["id"].string ?? brief["metadataId"].string else { return nil }
-        self.id = id
-        title = brief["title"].nonEmptyString ?? "Untitled"
-        subtitle = brief["subtitle"].nonEmptyString
-        authors = brief["authors"].strings
-        format = brief["format"].string ?? "UNKNOWN"
-        publicationDate = brief["publicationDate"].nonEmptyString
-        edition = brief["edition"].nonEmptyString
-        callNumber = brief["callNumber"].nonEmptyString
-        summary = brief["description"].nonEmptyString
-        jacketSmall = brief["jacket"]["medium"].string.flatMap(URL.init(string:))
-            ?? brief["jacket"]["small"].string.flatMap(URL.init(string:))
-        jacketLarge = brief["jacket"]["large"].string.flatMap(URL.init(string:)) ?? jacketSmall
-        materialType = json["policy"]["materialType"].string ?? json["availability"]["bibType"].string ?? "PHYSICAL"
-        holdable = json["policy"]["holdable"].bool ?? true
-        let a = json["availability"]
-        status = a["status"].string
-        heldCopies = a["heldCopies"].int ?? 0
-        availableCopies = a["availableCopies"].int ?? 0
-        totalCopies = a["totalCopies"].int ?? 0
-        onOrderCopies = a["onOrderCopies"].int ?? 0
+    private enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, authors, format, publicationDate, edition, callNumber, summary
+        case jacketSmall, jacketLarge, materialType, holdable, status
+        case heldCopies, availableCopies, totalCopies, onOrderCopies
+    }
+
+    /// Decodes a bib from libbiblio (or a drag-and-drop transfer). A malformed jacket URL
+    /// drops the jacket rather than the whole list.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        subtitle = try c.decodeIfPresent(String.self, forKey: .subtitle)
+        authors = try c.decodeIfPresent([String].self, forKey: .authors) ?? []
+        format = try c.decodeIfPresent(String.self, forKey: .format) ?? "UNKNOWN"
+        publicationDate = try c.decodeIfPresent(String.self, forKey: .publicationDate)
+        edition = try c.decodeIfPresent(String.self, forKey: .edition)
+        callNumber = try c.decodeIfPresent(String.self, forKey: .callNumber)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        jacketSmall = (try? c.decodeIfPresent(String.self, forKey: .jacketSmall)).flatMap { $0 }.flatMap(URL.init(string:))
+        jacketLarge = (try? c.decodeIfPresent(String.self, forKey: .jacketLarge)).flatMap { $0 }.flatMap(URL.init(string:))
+        materialType = try c.decodeIfPresent(String.self, forKey: .materialType) ?? "PHYSICAL"
+        holdable = try c.decodeIfPresent(Bool.self, forKey: .holdable) ?? false
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        heldCopies = try c.decodeIfPresent(Int.self, forKey: .heldCopies) ?? 0
+        availableCopies = try c.decodeIfPresent(Int.self, forKey: .availableCopies) ?? 0
+        totalCopies = try c.decodeIfPresent(Int.self, forKey: .totalCopies) ?? 0
+        onOrderCopies = try c.decodeIfPresent(Int.self, forKey: .onOrderCopies) ?? 0
     }
 
     /// Minimal bib for entries whose catalog record was not returned (e.g. old history rows).
@@ -124,7 +129,7 @@ nonisolated enum AccountStatus: Hashable, Sendable {
     case checkedOut(due: String?)
 }
 
-nonisolated struct Hold: Hashable, Sendable {
+nonisolated struct Hold: Hashable, Sendable, Decodable {
     var id: String
     var metadataId: String
     var status: String
@@ -135,23 +140,9 @@ nonisolated struct Hold: Hashable, Sendable {
     var suspendEndDate: String?
     var canCancel: Bool
 
-    init?(json: JSON) {
-        guard let id = json["holdsId"].string ?? json["id"].string,
-              let metadataId = json["metadataId"].string else { return nil }
-        self.id = id
-        self.metadataId = metadataId
-        status = json["status"].string ?? ""
-        let p = json["holdsPosition"].int
-        position = (p ?? -1) > 0 ? p : nil
-        pickupLocation = json["pickupLocation"]["name"].nonEmptyString
-        expiryDate = json["expiryDate"].nonEmptyString
-        pickupByDate = json["pickupByDate"].nonEmptyString
-        suspendEndDate = json["suspendEndDate"].nonEmptyString
-        canCancel = json["actions"].strings.contains("cancel")
-    }
 }
 
-nonisolated struct Checkout: Hashable, Sendable {
+nonisolated struct Checkout: Hashable, Sendable, Decodable {
     var id: String
     var metadataId: String
     var status: String?
@@ -159,32 +150,14 @@ nonisolated struct Checkout: Hashable, Sendable {
     var checkoutDate: String?
     var timesRenewed: Int?
 
-    init?(json: JSON) {
-        guard let id = json["checkoutId"].string ?? json["id"].string,
-              let metadataId = json["metadataId"].string else { return nil }
-        self.id = id
-        self.metadataId = metadataId
-        status = json["status"].nonEmptyString
-        dueDate = json["dueDate"].nonEmptyString
-        checkoutDate = json["checkoutDate"].nonEmptyString ?? json["checkedOutDate"].nonEmptyString
-        timesRenewed = json["timesRenewed"].int ?? json["renewals"].int
-    }
 }
 
-nonisolated struct HistoryEntry: Hashable, Sendable {
+nonisolated struct HistoryEntry: Hashable, Sendable, Decodable {
     var id: String
     var metadataId: String
     var checkoutDate: String?
     var returnedDate: String?
 
-    init?(json: JSON, fallbackID: String) {
-        guard let metadataId = json["metadataId"].string ?? json["bibId"].string else { return nil }
-        id = json["borrowingHistoryId"].string ?? json["id"].string ?? fallbackID
-        self.metadataId = metadataId
-        checkoutDate = json["checkedoutDate"].nonEmptyString ?? json["checkoutDate"].nonEmptyString
-            ?? json["checkedOutDate"].nonEmptyString
-        returnedDate = json["returnedDate"].nonEmptyString ?? json["dateReturned"].nonEmptyString
-    }
 }
 
 /// A search facet such as FORMAT, with its values and counts.
@@ -213,7 +186,7 @@ nonisolated struct ListPage: Sendable {
 }
 
 /// "Availability by location" row.
-nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable {
+nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable, Decodable {
     var id: String
     var branch: String
     var status: String
@@ -226,7 +199,7 @@ nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable {
 }
 
 /// A labelled detail field from the full catalog record.
-nonisolated struct DetailField: Identifiable, Hashable, Sendable {
+nonisolated struct DetailField: Identifiable, Hashable, Sendable, Decodable {
     var id: String { label + values.joined() }
     var label: String
     var values: [String]
@@ -238,7 +211,7 @@ nonisolated struct Location: Identifiable, Hashable, Sendable, Codable {
 }
 
 /// The signed-in patron.
-nonisolated struct Patron: Hashable, Sendable {
+nonisolated struct Patron: Hashable, Sendable, Decodable {
     var userId: Int
     var accountId: Int
     var name: String
