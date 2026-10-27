@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.rbrian.Biblio</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Biblio</name>
+  <summary>Search your library’s catalog and manage holds</summary>
+  <description>
+    <p>Biblio is an app for libraries that use BiblioCommons. Search the catalog, see which
+    branches have a copy, place and cancel holds, and check what you have out, for one or
+    several library cards.</p>
+  </description>
+  <launchable type="desktop-id">com.rbrian.Biblio.desktop</launchable>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+</component>

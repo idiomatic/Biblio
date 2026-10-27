@@ -22,6 +22,8 @@
  *   formatName        {code, labels?}            -> "Blu-ray Disc"
  *   sortName          {id, labels?}              -> "Newly acquired"
  *   readableTint      {hex, dark}                -> "#RRGGBB" | null (brand color at 4.5:1 contrast)
+ *   codabar           {value}                    -> [narrow-unit widths, bar first] | null
+ *   fetchImage        {url}                      -> base64 bytes (for apps without an image loader)
  *
  * Operations on a client:
  *   configure         {language?, sampleAccount?} -> true

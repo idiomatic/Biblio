@@ -190,7 +190,61 @@ pub const CopyAvailability = struct {
     dueDate: ?[]const u8 = null,
     /// Ordered but not yet received (worded "On-Order", "In-Process", "5 on order", …).
     isOnOrder: bool = false,
+    /// The status grouped from the library's own wording, for its symbol and color:
+    /// available, onOrder, out, held, transit, repair, missing, withdrawn, claimsReturned,
+    /// libraryUseOnly or other.
+    kind: []const u8 = "other",
 };
+
+pub fn copyKind(a: Allocator, c: CopyAvailability) []const u8 {
+    if (c.isAvailable) return "available";
+    if (c.isOnOrder) return "onOrder";
+    const s = std.ascii.allocLowerString(a, c.status) catch c.status;
+    const has = struct {
+        fn f(text: []const u8, words: []const []const u8) bool {
+            for (words) |w| if (std.mem.find(u8, text, w) != null) return true;
+            return false;
+        }
+    }.f;
+    // Order matters: "Claims Returned" before "returned", "Lost" before "out".
+    if (has(s, &.{ "transit", "transfer" })) return "transit";
+    if (has(s, &.{ "process", "cataloging", "order" })) return "onOrder";
+    if (has(s, &.{ "repair", "damage", "mend", "bindery" })) return "repair";
+    if (has(s, &.{"claim"})) return "claimsReturned";
+    if (has(s, &.{ "missing", "lost", "trace" })) return "missing";
+    if (has(s, &.{ "withdrawn", "discard" })) return "withdrawn";
+    if (has(s, &.{ "held", "hold" })) return "held";
+    if (has(s, &.{ "library use", "in library", "reference", "non-circ", "noncirc", "not for loan" })) return "libraryUseOnly";
+    if (std.mem.eql(u8, s, "out") or has(s, &.{ "checked out", "due", "overdue" }) or c.dueDate != null) return "out";
+    return "other";
+}
+
+/// Codabar, the symbology most North American library cards use: element widths in narrow
+/// units (bar, space, bar, …) for `value` wrapped in A…A guards unless it has its own, with a
+/// narrow gap between characters. Null if `value` has characters Codabar can't encode.
+pub fn codabar(a: Allocator, value: []const u8) ?[]const f64 {
+    const patterns = std.StaticStringMap([]const u8).initComptime(.{
+        .{ "0", "0000011" }, .{ "1", "0000110" }, .{ "2", "0001001" }, .{ "3", "1100000" }, .{ "4", "0010010" },
+        .{ "5", "1000010" }, .{ "6", "0100001" }, .{ "7", "0100100" }, .{ "8", "0110000" }, .{ "9", "1001000" },
+        .{ "-", "0001100" }, .{ "$", "0011000" }, .{ ":", "1000101" }, .{ "/", "1010001" }, .{ ".", "1010100" },
+        .{ "+", "0010101" }, .{ "A", "0011010" }, .{ "B", "0101001" }, .{ "C", "0001011" }, .{ "D", "0001110" },
+    });
+    const body = std.ascii.allocUpperString(a, value) catch return null;
+    const guard = struct {
+        fn f(ch: u8) bool {
+            return ch >= 'A' and ch <= 'D';
+        }
+    }.f;
+    const has_guards = body.len >= 2 and guard(body[0]) and guard(body[body.len - 1]);
+    const text = if (has_guards) body else std.fmt.allocPrint(a, "A{s}A", .{body}) catch return null;
+    var out: std.ArrayList(f64) = .empty;
+    for (text, 0..) |ch, i| {
+        const p = patterns.get(&.{ch}) orelse return null;
+        if (i > 0) out.append(a, 1) catch return null; // inter-character gap (a space)
+        for (p) |e| out.append(a, if (e == '1') 2.5 else 1) catch return null;
+    }
+    return out.items;
+}
 
 /// A labelled detail field from the full catalog record.
 pub const DetailField = struct { label: []const u8, values: []const []const u8 };
@@ -466,6 +520,7 @@ pub fn availability(a: Allocator, json: J) []const CopyAvailability {
                 mentionsOnOrder(library_status),
         }) catch {};
     }
+    for (out.items) |*c| c.kind = copyKind(a, c.*);
     std.mem.sort(CopyAvailability, out.items, {}, struct {
         fn less(_: void, x: CopyAvailability, y: CopyAvailability) bool {
             if (x.isAvailable != y.isAvailable) return x.isAvailable;
@@ -548,6 +603,23 @@ fn containsString(list: []const []const u8, s: []const u8) bool {
 
 pub fn lessString(_: void, x: []const u8, y: []const u8) bool {
     return std.mem.order(u8, x, y) == .lt;
+}
+
+test "copy kinds and codabar" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base: CopyAvailability = .{ .id = "1", .branch = "B", .status = "", .isAvailable = false };
+    var c = base;
+    c.status = "In Transit";
+    try std.testing.expectEqualStrings("transit", copyKind(a, c));
+    c.status = "Claims Returned";
+    try std.testing.expectEqualStrings("claimsReturned", copyKind(a, c));
+    c.status = "Checked out";
+    try std.testing.expectEqualStrings("out", copyKind(a, c));
+    const e = codabar(a, "12").?;
+    try std.testing.expectEqual(@as(usize, 4 * 7 + 3), e.len);
+    try std.testing.expect(codabar(a, "12#") == null);
 }
 
 test "on order wording" {

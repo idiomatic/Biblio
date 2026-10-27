@@ -138,13 +138,13 @@ const HostTransport = struct {
 /// host (results) carry their length in a header, so either side frees with `biblio_free`.
 const Prefix = extern struct { len: usize, _pad: usize = 0 };
 
-export fn biblio_alloc(len: usize) ?[*]u8 {
+pub export fn biblio_alloc(len: usize) ?[*]u8 {
     const mem = gpa.alignedAlloc(u8, .of(Prefix), len + @sizeOf(Prefix)) catch return null;
     @as(*Prefix, @ptrCast(mem.ptr)).* = .{ .len = len };
     return mem.ptr + @sizeOf(Prefix);
 }
 
-export fn biblio_free(ptr: ?*anyopaque) void {
+pub export fn biblio_free(ptr: ?*anyopaque) void {
     const p: [*]u8 = @ptrCast(ptr orelse return);
     const base: [*]align(@alignOf(Prefix)) u8 = @alignCast(p - @sizeOf(Prefix));
     const len = @as(*Prefix, @ptrCast(base)).len;
@@ -160,13 +160,13 @@ fn hostString(s: []const u8) ?[*:0]u8 {
 
 // MARK: Exports
 
-export fn biblio_version() [*:0]const u8 {
+pub export fn biblio_version() [*:0]const u8 {
     return "1.1.0";
 }
 
 /// Routes every request through the host's HTTP stack. Pass null to go back to the built-in one.
 /// Call before creating clients.
-export fn biblio_set_transport(func: ?CTransportFn, ctx: ?*anyopaque) void {
+pub export fn biblio_set_transport(func: ?CTransportFn, ctx: ?*anyopaque) void {
     host_transport = if (func) |f| .{ .func = f, .ctx = ctx } else null;
 }
 
@@ -189,7 +189,7 @@ const PasswordBridge = struct {
     }
 };
 
-const Handle = struct {
+pub const Handle = struct {
     client: *Client,
     bridge: PasswordBridge,
 };
@@ -197,7 +197,7 @@ const Handle = struct {
 /// Creates a client for one (library, username) pair. An empty username makes a guest client.
 /// `password` is called (from the calling thread) whenever the core needs to log in; it returns
 /// a string allocated with `biblio_alloc`, or null if no password is saved.
-export fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, password: CPasswordFn, ctx: ?*anyopaque) ?*Handle {
+pub export fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, password: CPasswordFn, ctx: ?*anyopaque) ?*Handle {
     const h = gpa.create(Handle) catch return null;
     h.bridge = .{ .func = password, .ctx = ctx };
     h.client = Client.create(gpa, transport(), &throttle, std.mem.span(subdomain), std.mem.span(username), PasswordBridge.get, &h.bridge) catch {
@@ -207,7 +207,7 @@ export fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, p
     return h;
 }
 
-export fn biblio_client_free(h: ?*Handle) void {
+pub export fn biblio_client_free(h: ?*Handle) void {
     const handle = h orelse return;
     handle.client.destroy();
     gpa.destroy(handle);
@@ -215,7 +215,7 @@ export fn biblio_client_free(h: ?*Handle) void {
 
 /// Runs one operation. `client` may be null for operations that need no account.
 /// Blocks until done; returns a JSON string the caller frees with `biblio_free`.
-export fn biblio_call(h: ?*Handle, request: [*:0]const u8) ?[*:0]u8 {
+pub export fn biblio_call(h: ?*Handle, request: [*:0]const u8) ?[*:0]u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
     const a = arena_state.allocator();
@@ -235,6 +235,8 @@ const Op = enum {
     formatName,
     sortName,
     readableTint,
+    codabar,
+    fetchImage,
     // Client operations.
     configure,
     status,
@@ -330,6 +332,22 @@ fn run(a: Allocator, c_opt: ?*Client, op: Op, req: J, w: *std.json.Stringify, fa
         .readableTint => {
             var buf: [7]u8 = undefined;
             try ok(w, library.readableTint(try requireString(a, req, "hex", failure), req.get("dark").boolean() orelse false, &buf));
+        },
+        .codabar => try ok(w, models.codabar(a, try requireString(a, req, "value", failure))),
+        .fetchImage => {
+            // For apps without an image loader of their own (GNOME): jacket art as base64.
+            const url = try requireString(a, req, "url", failure);
+            const res = lookup().fetcher.fetch(a, .{ .method = "GET", .url = url }) catch {
+                failure.* = .{ .kind = "network", .message = "The image could not be loaded." };
+                return error.Failed;
+            };
+            if (res.status != 200) {
+                failure.* = .{ .kind = "http", .status = res.status, .message = "The image could not be loaded." };
+                return error.Failed;
+            }
+            const encoder = std.base64.standard.Encoder;
+            const out = try a.alloc(u8, encoder.calcSize(res.body.len));
+            try ok(w, encoder.encode(out, res.body));
         },
         else => {
             const c = try requireClient(c_opt, failure);
