@@ -61,7 +61,7 @@ struct MultiSelectionView: View {
                     }
                     if working { ProgressView().controlSize(.small) }
                     if session.isGuest {
-                        Button("Sign In to Place Holds…", systemImage: "person.crop.circle.badge.plus") {
+                        Button("Sign In to Place Holds…", systemImage: "person.crop.circle") {
                             session.requestSignIn()
                         }
                         .buttonStyle(.bordered)

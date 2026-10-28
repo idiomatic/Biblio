@@ -17,32 +17,13 @@ struct ItemListView<Header: View>: View {
     #endif
 
     var body: some View {
-        List(selection: $selection) {
-            header()
-            ForEach(model.rows) { row in
-                switch row {
-                case .item(let entry):
-                    ItemRow(entry: entry, library: session.library)
-                        .tag(entry.id)
-                        // Tint by this account's status; selected rows keep the system highlight.
-                        .listRowBackground(selection.contains(entry.id) ? nil
-                                           : entry.accountStatus.map { StatusColors.account($0).opacity(0.08) })
-                        .onAppear { model.itemAppeared(entry) }
-                        #if os(iOS)
-                        .swipeActions {
-                            if case .hold(let h) = entry.kind, h.canCancel {
-                                Button("Cancel Hold", systemImage: "xmark", role: .destructive) { confirmCancel = [h] }
-                            }
-                        }
-                        #endif
-                case .placeholder(let position):
-                    PlaceholderRow()
-                        .selectionDisabled()
-                        .onAppear { model.placeholderAppeared(position) }
-                        .onDisappear { model.placeholderDisappeared(position) }
-                }
+        Group {
+            // Guests can't act on several items at once, so their lists select one at a time.
+            if session.isGuest {
+                List(selection: Binding(get: { selection.first }, set: { selection = Set([$0].compactMap { $0 }) })) { rows }
+            } else {
+                List(selection: $selection) { rows }
             }
-            footer
         }
         #if os(iOS)
         .listStyle(.plain)
@@ -67,15 +48,30 @@ struct ItemListView<Header: View>: View {
         .toolbar {
             ListControls(model: model, library: session.library)
             #if os(macOS)
+            if session.isGuest {
+                ToolbarItem {
+                    Button(action: session.requestSignIn) {
+                        Label("Sign In", systemImage: "person.crop.circle")
+                    }
+                    .help("Sign in to place holds and see your account")
+                }
+            }
             ToolbarItem { InspectorToggle(session: session) }
             #endif
             #if os(iOS)
             // Multiple selection on iOS/iPadOS happens in edit mode (or with a two-finger drag).
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(editMode.isEditing ? "Done" : "Select") {
-                    withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+            if !session.isGuest {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                    } label: {
+                        if editMode.isEditing {
+                            Text("Done").fontWeight(.semibold)
+                        } else {
+                            Label("Select", systemImage: "checkmark.circle.fill")
+                        }
+                    }
                 }
-                .fontWeight(editMode.isEditing ? .semibold : .regular)
             }
             #endif
         }
@@ -88,6 +84,35 @@ struct ItemListView<Header: View>: View {
             }
             Button(confirmCancel.count == 1 ? "Keep Hold" : "Keep Holds", role: .cancel) { confirmCancel = [] }
         }
+    }
+
+    @ViewBuilder
+    private var rows: some View {
+        header()
+        ForEach(model.rows) { row in
+            switch row {
+            case .item(let entry):
+                ItemRow(entry: entry, library: session.library)
+                    .tag(entry.id)
+                    // Tint by this account's status; selected rows keep the system highlight.
+                    .listRowBackground(selection.contains(entry.id) ? nil
+                                       : entry.accountStatus.map { StatusColors.account($0).opacity(0.08) })
+                    .onAppear { model.itemAppeared(entry) }
+                    #if os(iOS)
+                    .swipeActions {
+                        if case .hold(let h) = entry.kind, h.canCancel {
+                            Button("Cancel Hold", systemImage: "xmark", role: .destructive) { confirmCancel = [h] }
+                        }
+                    }
+                    #endif
+            case .placeholder(let position):
+                PlaceholderRow()
+                    .selectionDisabled()
+                    .onAppear { model.placeholderAppeared(position) }
+                    .onDisappear { model.placeholderDisappeared(position) }
+            }
+        }
+        footer
     }
 
     @ViewBuilder

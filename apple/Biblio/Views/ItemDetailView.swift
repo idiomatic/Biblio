@@ -98,7 +98,7 @@ struct ItemDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 AvailabilityBadge(bib: bib)
                 if bib.holdable {
-                    Button("Sign In to Place a Hold…", systemImage: "person.crop.circle.badge.plus") {
+                    Button("Sign In to Place a Hold…", systemImage: "person.crop.circle") {
                         session.requestSignIn()
                     }
                     .buttonStyle(.bordered)

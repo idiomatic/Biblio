@@ -102,21 +102,21 @@ struct MainView: View {
                 sidebarRow(.newTitles)
             }
             if !session.isGuest {
-            Section("My Library") {
-                sidebarRow(.holds)
-                    .onDrop(of: [.biblioItem], isTargeted: $holdsDropTargeted) { providers in
-                        BibTransfer.load(from: providers) { item in Task { await session.placeHold(item) } }
-                    }
-                    .listRowBackground(holdsDropTargeted ? Color.accentColor.opacity(0.25) : nil)
-                sidebarRow(.checkouts)
-                sidebarRow(.history)
+                Section("My Library") {
+                    sidebarRow(.holds)
+                        .onDrop(of: [.biblioItem], isTargeted: $holdsDropTargeted) { providers in
+                            BibTransfer.load(from: providers) { item in Task { await session.placeHold(item) } }
+                        }
+                        .listRowBackground(holdsDropTargeted ? Color.accentColor.opacity(0.25) : nil)
+                    sidebarRow(.checkouts)
+                    sidebarRow(.history)
+                }
             }
-            }
+            // Account settings live in the Settings window (⌘,) on macOS, and a guest signs in
+            // from the toolbar.
             #if os(iOS)
-            Section(session.displayName) {
-                if session.isGuest {
-                    guestSignIn
-                } else {
+            if !session.isGuest {
+                Section(session.displayName) {
                     sidebarRow(.account)
                     Button(action: signOut) {
                         Label("Switch User or Library", systemImage: "arrow.left.arrow.right")
@@ -124,33 +124,20 @@ struct MainView: View {
                     .buttonStyle(.plain)
                 }
             }
-            #else
-            // Account settings live in the Settings window (⌘,), and File ▸ New Window opens
-            // another user or library, so only a guest window needs this section.
-            if session.isGuest {
-                Section(session.displayName) { guestSignIn }
-            }
             #endif
         }
         .navigationTitle(session.library.shortName ?? "Library")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 190, ideal: 220)
-        #endif
-    }
-
-    /// On macOS, the sign-in sheet (File ▸ New Window opens another library); on iOS, back to
-    /// the library and user menu.
-    private var guestSignIn: some View {
-        #if os(macOS)
-        Button(action: session.requestSignIn) {
-            Label("Sign In", systemImage: "person.crop.circle.badge.plus")
-        }
-        .buttonStyle(.plain)
         #else
-        Button(action: signOut) {
-            Label("Sign In or Change Library", systemImage: "person.crop.circle.badge.plus")
+        .toolbar {
+            if session.isGuest {
+                // Back to the library and user menu, to pick a user or another library.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Sign In", systemImage: "person.crop.circle", action: signOut)
+                }
+            }
         }
-        .buttonStyle(.plain)
         #endif
     }
 
