@@ -2,6 +2,7 @@ const std = @import("std");
 
 /// Builds libbiblio_jni.so for each Android ABI into ../app/src/main/jniLibs, which Gradle
 /// packages. Gradle runs this before each build (see app/build.gradle.kts).
+/// `zig build test` tests the shim on this machine.
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .safe });
     const abis = [_]struct { abi: []const u8, query: std.Target.Query }{
@@ -17,4 +18,12 @@ pub fn build(b: *std.Build) void {
         const install = b.addInstallArtifact(lib, .{ .dest_dir = .{ .override = .{ .custom = b.fmt("../../app/src/main/jniLibs/{s}", .{t.abi}) } } });
         b.getInstallStep().dependOn(&install.step);
     }
+
+    // zig build test: the shim's conversions, on this machine against a stand-in JVM.
+    const host = b.graph.host;
+    const core = b.createModule(.{ .root_source_file = b.path("../../core/src/root.zig"), .target = host, .link_libc = true });
+    const mod = b.createModule(.{ .root_source_file = b.path("src/jni.zig"), .target = host, .link_libc = true });
+    mod.addImport("biblio", core);
+    const tests = b.addTest(.{ .root_module = mod });
+    b.step("test", "Test the JNI conversions").dependOn(&b.addRunArtifact(tests).step);
 }

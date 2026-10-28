@@ -12,6 +12,8 @@ namespace Biblio.Views;
 /// </summary>
 public sealed class ItemListView : Grid
 {
+    private static readonly Dictionary<string, string> NewTitleFilters = new() { ["f_on_order"] = "false" };
+
     private readonly AccountWindow _window;
     private readonly Section _section;
     private readonly ListView _list = new() { SelectionMode = ListViewSelectionMode.Single };
@@ -148,24 +150,16 @@ public sealed class ItemListView : Grid
         _progress.Visibility = Visibility.Visible;
         try
         {
-            object args = _section switch
+            var client = _window.Client;
+            var result = await (_section switch
             {
-                Section.Search => new { query = _query, page, sort = _sortId, format = _formatCode },
-                Section.NewTitles => new
-                {
-                    query = "nw:[0 TO 180]", searchType = "bl", filters = new { f_on_order = "false" },
-                    page, sort = _sortId ?? "newly_acquired", format = _formatCode,
-                },
-                _ => new { page, sort = _sortId },
-            };
-            var op = _section switch
-            {
-                Section.Search or Section.NewTitles => "search",
-                Section.Holds => "holds",
-                Section.Checkouts => "checkouts",
-                _ => "history",
-            };
-            var result = await _window.Client.CallAsync<Core.ListPage>(op, args);
+                Section.Search => client.SearchAsync(_query, page: page, sort: _sortId, format: _formatCode),
+                Section.NewTitles => client.SearchAsync("nw:[0 TO 180]", "bl", NewTitleFilters,
+                    page, _sortId ?? "newly_acquired", _formatCode),
+                Section.Holds => client.HoldsAsync(page, _sortId),
+                Section.Checkouts => client.CheckoutsAsync(page, _sortId),
+                _ => client.HistoryAsync(page, _sortId),
+            });
             if (generation != _generation) return;
             var first = _page is null;
             _page = result;

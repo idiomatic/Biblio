@@ -5,6 +5,7 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
 const core = @import("core.zig");
+const capi = core.capi;
 const store = @import("store.zig");
 const main = @import("main.zig");
 const ItemList = @import("list.zig").ItemList;
@@ -59,18 +60,20 @@ pub const Window = struct {
     subdomain: []u8,
     username: []u8,
     library: std.json.Value,
+    /// The library's labels, for format and sort names.
+    labels: []const capi.Pair = &.{},
     arena: std.heap.ArenaAllocator,
     lists: [5]?*ItemList = @splat(null),
     detail: *Detail = undefined,
     account: ?*Account = null,
-    patron: ?std.json.Value = null,
-    locations: []const std.json.Value = &.{},
+    patron: ?*capi.Patron = null,
+    locations: []const capi.Location = &.{},
     /// Calls in flight from this window and its parts; it is freed when it has closed and
     /// none remain, so callbacks never see a freed window.
     pending: u32 = 0,
     closed: bool = false,
-    /// Result memory still referenced (patron, locations, list pages).
-    kept: std.ArrayList(*std.heap.ArenaAllocator) = .empty,
+    /// Results still referenced (patrons and locations).
+    kept: std.ArrayList(*anyopaque) = .empty,
 
     pub fn isOpen(subdomain: []const u8, username: []const u8) bool {
         var buf: [512]u8 = undefined;
@@ -102,6 +105,7 @@ pub const Window = struct {
             .arena = .init(core.gpa),
         };
         if (username.len > 0) open_windows.put(core.gpa, key, w) catch {};
+        w.labels = store.labels(w.a(), w.library);
         w.build();
         c.gtk_window_present(@ptrCast(@alignCast(w.window)));
         w.start();
@@ -224,30 +228,31 @@ pub const Window = struct {
         }
     }
 
-    /// Runs a core call on behalf of this window or one of its parts (`ctx`). The callback
-    /// must start with `if (window.finishPending()) return;`.
-    pub fn call(w: *Window, request: anytype, callback: core.Callback, ctx: ?*anyopaque) void {
+    /// A core call on behalf of this window or one of its parts (`ctx`), to be started with
+    /// `Job.start`. The callback must start with `if (window.finishPending()) return;`.
+    pub fn job(w: *Window, callback: core.Callback, ctx: ?*anyopaque) ?*core.Job {
+        const j = core.Job.create(callback, ctx) orelse return null;
         w.pending += 1;
-        core.call(w.client, request, callback, ctx);
+        return j;
     }
 
-    /// Keeps a result's memory until the window is freed.
-    pub fn keep(w: *Window, r: *core.Result) void {
-        w.kept.append(core.gpa, r.keep()) catch {};
+    /// Keeps a result (from `Result.keep`) until the window is freed.
+    pub fn keep(w: *Window, value: ?*anyopaque) void {
+        if (value) |v| w.kept.append(core.gpa, v) catch core.release(v);
     }
 
     fn start(w: *Window) void {
-        w.call(.{ .op = "locations" }, &onLocations, w);
+        if (w.job(&onLocations, w)) |j| j.start(capi.biblio_locations, .{w.client});
         if (w.isGuest()) return;
-        w.call(.{ .op = "login" }, &onLogin, w);
+        if (w.job(&onLogin, w)) |j| j.start(capi.biblio_login, .{ w.client, false });
     }
 
     fn onLogin(data: ?*anyopaque, r: *core.Result) void {
         const w: *Window = @ptrCast(@alignCast(data.?));
         if (w.finishPending()) return;
         if (!r.ok) return w.toast(r.message);
-        w.patron = r.value;
-        w.keep(r);
+        w.patron = r.keep(capi.Patron);
+        w.keep(w.patron);
         // Fill the sidebar's hold and checkout counts without waiting for those lists to be opened.
         if (w.lists[@intFromEnum(Section.holds)]) |l| l.loadIfNeeded();
         if (w.lists[@intFromEnum(Section.checkouts)]) |l| l.loadIfNeeded();
@@ -258,8 +263,9 @@ pub const Window = struct {
         const w: *Window = @ptrCast(@alignCast(data.?));
         if (w.finishPending()) return;
         if (!r.ok) return;
-        w.locations = core.items(r.value);
-        w.keep(r);
+        const locations = r.keep(capi.LocationList) orelse return;
+        w.locations = core.items(capi.Location, locations.items, locations.items_count);
+        w.keep(locations);
     }
 
     /// Ends one outstanding call; true if the window has closed and was freed meanwhile.
@@ -277,7 +283,7 @@ pub const Window = struct {
     }
 
     /// Shows `entry`'s item in the details pane.
-    pub fn select(w: *Window, entry: std.json.Value) void {
+    pub fn select(w: *Window, entry: *const capi.ListEntry) void {
         w.detail.showEntry(entry);
         c.adw_overlay_split_view_set_show_sidebar(w.inspector, 1);
     }
@@ -296,10 +302,6 @@ pub const Window = struct {
         for ([_]Section{ .search, .new_titles }) |s| if (w.list(s)) |l| l.reloadIfLoaded();
     }
 
-    pub fn libraryLabels(w: *Window) ?std.json.Value {
-        return if (w.library == .object) w.library.object.get("labels") else null;
-    }
-
     fn onSwitch(_: *c.GtkButton, _: ?*anyopaque) callconv(.c) void {
         main.Launcher.open();
     }
@@ -315,7 +317,7 @@ pub const Window = struct {
         for (w.lists) |l| if (l) |item_list| item_list.free();
         w.detail.free();
         if (w.account) |acc| acc.free();
-        for (w.kept.items) |arena| core.release(arena);
+        for (w.kept.items) |v| core.release(v);
         w.kept.deinit(core.gpa);
         @import("biblio").biblio_client_free(w.client);
         core.gpa.free(w.key);

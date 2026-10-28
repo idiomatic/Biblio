@@ -76,7 +76,7 @@ public sealed class DetailPane : StackPanel
     {
         try
         {
-            var copies = await _window.Client.CallAsync<List<CopyAvailability>>("availability", new { metadataId = id });
+            var copies = await _window.Client.AvailabilityAsync(id);
             if (generation != _generation) return;
             panel.Children.Clear();
             if (copies.Count == 0) panel.Children.Add(new TextBlock { Text = "No copies listed." });
@@ -123,7 +123,7 @@ public sealed class DetailPane : StackPanel
     private async Task LoadDetails(string id, StackPanel panel, int generation)
     {
         List<DetailField> fields;
-        try { fields = await _window.Client.CallAsync<List<DetailField>>("details", new { metadataId = id }); }
+        try { fields = await _window.Client.DetailsAsync(id); }
         catch (CoreException) { return; }
         if (generation != _generation || fields.Count == 0) return;
         panel.Children.Add(new TextBlock { Text = "Details", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
@@ -158,8 +158,8 @@ public sealed class DetailPane : StackPanel
                 cancel.IsEnabled = false;
                 try
                 {
-                    var result = await _window.Client.CallAsync<CancelResult>("cancelHolds", new { holds = new[] { new { id = hold.Id, metadataId = hold.MetadataId } } });
-                    if (result.Refused is { Count: > 0 } refused) _window.ShowMessage(refused[0].Reason, error: true);
+                    var refused = await _window.Client.CancelHoldsAsync([hold]);
+                    if (refused.Count > 0) _window.ShowMessage(refused[0].Reason, error: true);
                     else
                     {
                         _window.ShowMessage("Hold cancelled.");
@@ -189,11 +189,7 @@ public sealed class DetailPane : StackPanel
             place.IsEnabled = false;
             try
             {
-                await _window.Client.CallAsync<bool>("placeHold", new
-                {
-                    metadataId = entry.Bib.Id, materialType = entry.Bib.MaterialType,
-                    pickupBranch = (pickup.SelectedItem as ComboBoxItem)?.Tag as string,
-                });
+                await _window.Client.PlaceHoldAsync(entry.Bib.Id, entry.Bib.MaterialType, (pickup.SelectedItem as ComboBoxItem)?.Tag as string);
                 _window.ShowMessage($"Hold placed on “{entry.Bib.Title}”.");
                 _window.HoldsChanged();
             }

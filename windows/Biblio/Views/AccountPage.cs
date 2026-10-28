@@ -40,7 +40,8 @@ public sealed class AccountPage : ScrollViewer
         update.Click += (_, _) =>
         {
             if (!email.Text.Contains('@')) { _window.ShowMessage("Enter a valid email address.", error: true); return; }
-            _ = Save("changeEmail", new { email = email.Text }, "Email address updated.");
+            var address = email.Text;
+            _ = Save(c => c.ChangeEmailAsync(address), "Email address updated.");
         };
         stack.Children.Add(new SettingsCard
         {
@@ -57,7 +58,8 @@ public sealed class AccountPage : ScrollViewer
             if (current.Password.Length == 0 || newPassword.Password.Length == 0) return;
             if (newPassword.Password != confirm.Password) { _window.ShowMessage("The new passwords don’t match.", error: true); return; }
             var pw = newPassword.Password;
-            if (await Save("changePassword", new { current = current.Password, @new = pw }, "Password changed."))
+            var old = current.Password;
+            if (await Save(c => c.ChangePasswordAsync(old, pw), "Password changed."))
             {
                 // Keep the Credential Locker in step so automatic sign-in still works.
                 LibraryStore.Shared.SetPassword(_window.Library.Subdomain, _window.Username, pw);
@@ -86,7 +88,7 @@ public sealed class AccountPage : ScrollViewer
         pickup.SelectionChanged += (_, _) =>
         {
             if (!_filling && (pickup.SelectedItem as ComboBoxItem)?.Tag is string id)
-                _ = Save("setPickup", new { branchId = id }, "Default pickup location saved.");
+                _ = Save(c => c.SetPickupAsync(id), "Default pickup location saved.");
         };
         stack.Children.Add(new SettingsCard
         {
@@ -105,7 +107,7 @@ public sealed class AccountPage : ScrollViewer
         language.SelectionChanged += async (_, _) =>
         {
             if (_filling || (language.SelectedItem as ComboBoxItem)?.Tag is not string code) return;
-            if (await Save("setLanguage", new { code }, "Language changed."))
+            if (await Save(c => c.SetLanguageAsync(code), "Language changed."))
                 foreach (var s in new[] { Section.Search, Section.NewTitles }) _window.ListFor(s).ReloadIfLoaded();
         };
         stack.Children.Add(new SettingsCard { Header = "Language", HeaderIcon = new SymbolIcon(Symbol.Globe), Content = language });
@@ -116,7 +118,7 @@ public sealed class AccountPage : ScrollViewer
             toggle.Toggled += async (_, _) =>
             {
                 if (_filling) return;
-                if (toggle.IsOn) { _ = Save("setBorrowingHistory", new { enabled = true }, "Borrowing history turned on."); return; }
+                if (toggle.IsOn) { _ = Save(c => c.SetBorrowingHistoryAsync(true), "Borrowing history turned on."); return; }
                 // Turning history off can delete it, so it asks first.
                 var dialog = new ContentDialog
                 {
@@ -125,7 +127,7 @@ public sealed class AccountPage : ScrollViewer
                     PrimaryButtonText = "Turn off", CloseButtonText = "Keep history", DefaultButton = ContentDialogButton.Close,
                 };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                    _ = Save("setBorrowingHistory", new { enabled = false }, "Borrowing history turned off.");
+                    _ = Save(c => c.SetBorrowingHistoryAsync(false), "Borrowing history turned off.");
                 else
                 {
                     _filling = true;
@@ -145,11 +147,11 @@ public sealed class AccountPage : ScrollViewer
     private static Microsoft.UI.Xaml.Input.InputScope Scope(Microsoft.UI.Xaml.Input.InputScopeNameValue value) =>
         new() { Names = { new Microsoft.UI.Xaml.Input.InputScopeName(value) } };
 
-    private async Task<bool> Save(string op, object args, string done)
+    private async Task<bool> Save(Func<CoreClient, Task> change, string done)
     {
         try
         {
-            await _window.Client.CallAsync<bool>(op, args);
+            await change(_window.Client);
             await _window.RefreshPatron();
             _window.ShowMessage(done);
             Refresh();
@@ -166,9 +168,7 @@ public sealed class AccountPage : ScrollViewer
     /// <summary>The library card as a scannable Codabar barcode, black on white in either theme.</summary>
     private static UIElement LibraryCard(string barcode)
     {
-        double[] elements;
-        try { elements = Core.Core.CallNow<double[]?>("codabar", new { value = barcode }) ?? []; }
-        catch (CoreException) { elements = []; }
+        var elements = Core.Core.Codabar(barcode);
         var canvas = new Canvas { Height = 64, Width = 360 };
         const double quiet = 10;
         var unit = canvas.Width / (elements.Sum() + 2 * quiet);

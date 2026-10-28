@@ -47,8 +47,6 @@ import coil3.compose.AsyncImage
 import com.rbrian.biblio.core.CopyAvailability
 import com.rbrian.biblio.core.DetailField
 import com.rbrian.biblio.core.ListEntry
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.JsonPrimitive
 
 /** Jacket, title, holds, availability by location (color-coded, always worded) and the full record. */
 @Composable
@@ -59,13 +57,11 @@ fun ItemDetail(session: Session, entry: ListEntry) {
     var copiesError by remember(bib.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(bib.id) {
         try {
-            copies = session.client.call(ListSerializer(CopyAvailability.serializer()), "availability") { put("metadataId", JsonPrimitive(bib.id)) }
+            copies = session.client.availability(bib.id)
         } catch (e: Exception) {
             copiesError = e.message
         }
-        fields = runCatching {
-            session.client.call(ListSerializer(DetailField.serializer()), "details") { put("metadataId", JsonPrimitive(bib.id)) }
-        }.getOrDefault(emptyList())
+        fields = runCatching { session.client.details(bib.id) }.getOrDefault(emptyList())
     }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

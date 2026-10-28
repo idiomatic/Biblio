@@ -4,10 +4,11 @@
 const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
+const capi = @import("biblio").capi;
 
 const gpa = std.heap.c_allocator;
 
-/// Libraries as the core describes them (`libraryInfo`), each with a `users` array.
+/// Libraries as the core describes them (`biblio_library_info`), each with a `users` array.
 /// Values live in `arena`, which only grows; the list is small and edited rarely.
 var arena_state = std.heap.ArenaAllocator.init(gpa);
 pub var libraries: std.ArrayList(std.json.Value) = .empty;
@@ -56,6 +57,28 @@ pub fn shortName(lib: std.json.Value) []const u8 {
     return if (lib.object.get("shortName")) |s| if (s == .string) s.string else name(lib) else name(lib);
 }
 
+/// One of the library's labels, such as "LANGUAGE_NAME.en-US".
+pub fn label(lib: std.json.Value, key: []const u8) ?[]const u8 {
+    const map = lib.object.get("labels") orelse return null;
+    if (map != .object) return null;
+    const v = map.object.get(key) orelse return null;
+    return if (v == .string) v.string else null;
+}
+
+/// The library's labels as pairs for the core's display helpers, allocated in `a`.
+pub fn labels(a: std.mem.Allocator, lib: std.json.Value) []const capi.Pair {
+    const map = lib.object.get("labels") orelse return &.{};
+    if (map != .object) return &.{};
+    var pairs: std.ArrayList(capi.Pair) = .empty;
+    var it = map.object.iterator();
+    while (it.next()) |e| if (e.value_ptr.* == .string) {
+        const key = a.dupeSentinel(u8, e.key_ptr.*, 0) catch continue;
+        const value = a.dupeSentinel(u8, e.value_ptr.string, 0) catch continue;
+        pairs.append(a, .{ .key = key.ptr, .value = value.ptr }) catch {};
+    };
+    return pairs.items;
+}
+
 pub fn users(lib: std.json.Value) []const std.json.Value {
     const u = lib.object.get("users") orelse return &.{};
     return if (u == .array) u.array.items else &.{};
@@ -66,9 +89,9 @@ pub fn find(sub: []const u8) ?usize {
     return null;
 }
 
-/// Adds a library from a `libraryInfo` result (deep-copied), or updates it, keeping its users.
-pub fn upsert(info: std.json.Value) void {
-    var copy = deepCopy(info) catch return;
+/// Adds a library from a `biblio_library_info` result, or updates it, keeping its users.
+pub fn upsert(info: *const capi.LibraryInfo) void {
+    var copy = fromInfo(info) catch return;
     if (find(subdomain(copy))) |i| {
         copy.object.put(arena(), "users", libraries.items[i].object.get("users") orelse .{ .array = .init(arena()) }) catch {};
         libraries.items[i] = copy;
@@ -108,10 +131,25 @@ pub fn removeUser(sub: []const u8, username: []const u8) void {
     save();
 }
 
-fn deepCopy(v: std.json.Value) !std.json.Value {
-    const text = try std.json.Stringify.valueAlloc(gpa, v, .{});
-    defer gpa.free(text);
-    return std.json.parseFromSliceLeaky(std.json.Value, arena(), try arena().dupe(u8, text), .{});
+/// The saved form of a library: the core's fields in camelCase, without users.
+fn fromInfo(info: *const capi.LibraryInfo) !std.json.Value {
+    const a = arena();
+    var o: std.json.ObjectMap = .empty;
+    const strings = .{
+        .{ "subdomain", @as(?[*:0]const u8, info.subdomain) }, .{ "name", @as(?[*:0]const u8, info.name) },
+        .{ "shortName", info.short_name },                     .{ "primaryColor", info.primary_color },
+        .{ "website", info.website },
+    };
+    inline for (strings) |f| if (f[1]) |v| try o.put(a, f[0], .{ .string = try a.dupe(u8, std.mem.span(v)) });
+    var label_map: std.json.ObjectMap = .empty;
+    for (info.labels[0..info.labels_count]) |p| {
+        try label_map.put(a, try a.dupe(u8, std.mem.span(p.key)), .{ .string = try a.dupe(u8, std.mem.span(p.value)) });
+    }
+    try o.put(a, "labels", .{ .object = label_map });
+    var languages = std.json.Array.init(a);
+    for (info.languages[0..info.languages_count]) |l| try languages.append(.{ .string = try a.dupe(u8, std.mem.span(l)) });
+    try o.put(a, "languages", .{ .array = languages });
+    return .{ .object = o };
 }
 
 // MARK: Secret Service
@@ -162,13 +200,13 @@ pub fn storePassword(sub: []const u8, username: []const u8, password: []const u8
     defer a.deinit();
     const s = a.allocator().dupeSentinel(u8, sub, 0) catch return false;
     const u = a.allocator().dupeSentinel(u8, username, 0) catch return false;
-    const label = std.fmt.allocPrintSentinel(a.allocator(), "Biblio – {s}.bibliocommons.com ({s})", .{ sub, username }, 0) catch return false;
+    const item_label = std.fmt.allocPrintSentinel(a.allocator(), "Biblio – {s}.bibliocommons.com ({s})", .{ sub, username }, 0) catch return false;
     const pw = a.allocator().dupeSentinel(u8, password, 0) catch return false;
     defer std.crypto.secureZero(u8, pw);
     const attrs = attributes(s, u);
     defer c.g_hash_table_unref(attrs);
     var err: ?*c.GError = null;
-    const ok = c.secret_password_storev_sync(secretSchema(), attrs, c.SECRET_COLLECTION_DEFAULT, label.ptr, pw.ptr, null, &err);
+    const ok = c.secret_password_storev_sync(secretSchema(), attrs, c.SECRET_COLLECTION_DEFAULT, item_label.ptr, pw.ptr, null, &err);
     if (err) |e| c.g_error_free(e);
     return ok != 0;
 }

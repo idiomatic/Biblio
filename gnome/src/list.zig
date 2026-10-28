@@ -5,6 +5,7 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
 const core = @import("core.zig");
+const capi = core.capi;
 const win = @import("window.zig");
 const Window = win.Window;
 const Section = win.Section;
@@ -22,9 +23,10 @@ pub const ItemList = struct {
     format_dropdown: *c.GtkDropDown,
     spinner: *c.GtkWidget,
     arena: std.heap.ArenaAllocator,
-    /// Each page's result memory, released on reload.
-    pages_memory: std.ArrayList(*std.heap.ArenaAllocator) = .empty,
-    entries: std.ArrayList(std.json.Value) = .empty,
+    /// Each page's result, released on reload.
+    results: std.ArrayList(*capi.ListPage) = .empty,
+    /// Rows across the pages; they point into `results`.
+    entries: std.ArrayList(capi.ListEntry) = .empty,
     query: []const u8 = "",
     sort: ?[]const u8 = null,
     format: ?[]const u8 = null,
@@ -106,8 +108,8 @@ pub const ItemList = struct {
     }
 
     pub fn free(l: *ItemList) void {
-        for (l.pages_memory.items) |arena| core.release(arena);
-        l.pages_memory.deinit(core.gpa);
+        for (l.results.items) |page| core.release(page);
+        l.results.deinit(core.gpa);
         l.entries.deinit(core.gpa);
         l.arena.deinit();
         core.gpa.destroy(l);
@@ -162,8 +164,8 @@ pub const ItemList = struct {
 
     pub fn reload(l: *ItemList) void {
         l.generation +%= 1;
-        for (l.pages_memory.items) |arena| core.release(arena);
-        l.pages_memory.clearRetainingCapacity();
+        for (l.results.items) |page| core.release(page);
+        l.results.clearRetainingCapacity();
         l.entries.clearRetainingCapacity();
         c.gtk_list_box_remove_all(l.list_box);
         l.page = 0;
@@ -181,27 +183,36 @@ pub const ItemList = struct {
 
     const Ticket = struct { list: *ItemList, generation: u32 };
 
+    const new_titles_filters = [_]capi.Pair{.{ .key = "f_on_order", .value = "false" }};
+
     fn loadPage(l: *ItemList, page: i64) void {
+        if (l.section == .account) return;
         l.loading = true;
         c.gtk_widget_set_visible(l.spinner, 1);
         const ticket = core.gpa.create(Ticket) catch return;
         ticket.* = .{ .list = l, .generation = l.generation };
         const w = l.window;
+        const j = w.job(&onPage, ticket) orelse return;
         switch (l.section) {
-            .search => w.call(.{ .op = "search", .query = l.query, .page = page, .sort = l.sort, .format = l.format }, &onPage, ticket),
-            .new_titles => w.call(.{
-                .op = "search",
-                .query = "nw:[0 TO 180]",
-                .searchType = "bl",
-                .filters = .{ .f_on_order = "false" },
+            .search => j.start(capi.biblio_search, .{ w.client, j.new(capi.SearchQuery{
+                .query = j.z(l.query),
                 .page = page,
-                .sort = l.sort orelse "newly_acquired",
-                .format = l.format,
-            }, &onPage, ticket),
-            .holds => w.call(.{ .op = "holds", .page = page, .sort = l.sort }, &onPage, ticket),
-            .checkouts => w.call(.{ .op = "checkouts", .page = page, .sort = l.sort }, &onPage, ticket),
-            .history => w.call(.{ .op = "history", .page = page, .sort = l.sort }, &onPage, ticket),
-            .account => {},
+                .sort = j.optZ(l.sort),
+                .format = j.optZ(l.format),
+            }) }),
+            .new_titles => j.start(capi.biblio_search, .{ w.client, j.new(capi.SearchQuery{
+                .query = "nw:[0 TO 180]",
+                .search_type = "bl",
+                .filters = &new_titles_filters,
+                .filter_count = new_titles_filters.len,
+                .page = page,
+                .sort = j.optZ(l.sort orelse "newly_acquired"),
+                .format = j.optZ(l.format),
+            }) }),
+            .holds => j.start(capi.biblio_holds, .{ w.client, page, j.optZ(l.sort) }),
+            .checkouts => j.start(capi.biblio_checkouts, .{ w.client, page, j.optZ(l.sort) }),
+            .history => j.start(capi.biblio_history, .{ w.client, page, j.optZ(l.sort) }),
+            .account => unreachable,
         }
     }
 
@@ -219,17 +230,21 @@ pub const ItemList = struct {
             if (!l.loaded) l.showEmpty();
             return;
         }
-        l.pages_memory.append(core.gpa, r.keep()) catch {};
+        const result = r.keep(capi.ListPage) orelse return;
+        l.results.append(core.gpa, result) catch {
+            core.release(result);
+            return;
+        };
         const first = !l.loaded;
         l.loaded = true;
-        l.page = core.int(r.value, "page") orelse l.page + 1;
-        l.pages = core.int(r.value, "pages") orelse l.page;
-        l.count = core.int(r.value, "count") orelse 0;
-        for (core.items(core.field(r.value, "entries"))) |entry| {
+        l.page = result.page;
+        l.pages = result.pages;
+        l.count = result.count;
+        for (core.items(capi.ListEntry, result.entries, result.entries_count)) |entry| {
             l.entries.append(core.gpa, entry) catch continue;
             l.addRow(entry, l.entries.items.len - 1);
         }
-        if (first) l.updateControls(r.value);
+        if (first) l.updateControls(result);
         l.updateTitle();
         if (l.entries.items.len == 0) l.showEmpty() else c.gtk_stack_set_visible_child_name(l.stack, "list");
         switch (l.section) {
@@ -245,20 +260,19 @@ pub const ItemList = struct {
 
     /// Fills the sort menu from the server's options and, for catalog lists, the format menu
     /// from the FORMAT facet.
-    fn updateControls(l: *ItemList, page: std.json.Value) void {
+    fn updateControls(l: *ItemList, page: *const capi.ListPage) void {
         l.updating = true;
         defer l.updating = false;
-        const labels = l.window.libraryLabels();
+        const labels = l.window.labels;
 
         var sort_ids: std.ArrayList([]const u8) = .empty;
         var sort_names: std.ArrayList(?[*:0]const u8) = .empty;
         var selected: c.guint = 0;
-        for (core.items(core.field(page, "sortOptions"))) |s| {
-            if (s != .string) continue;
-            const name = core.now(l.a(), .{ .op = "sortName", .id = s.string, .labels = labels });
-            const text = if (name) |n| if (n == .string) n.string else s.string else s.string;
-            if (std.mem.eql(u8, s.string, l.sort orelse core.str(page, "appliedSort") orelse "")) selected = @intCast(sort_ids.items.len);
-            sort_ids.append(l.a(), l.a().dupe(u8, s.string) catch continue) catch {};
+        for (core.items([*:0]const u8, page.sort_options, page.sort_options_count)) |option| {
+            const s = std.mem.span(option);
+            const text = core.sortName(l.a(), s, labels);
+            if (std.mem.eql(u8, s, l.sort orelse core.str(page.applied_sort) orelse "")) selected = @intCast(sort_ids.items.len);
+            sort_ids.append(l.a(), l.a().dupe(u8, s) catch continue) catch {};
             sort_names.append(l.a(), gtk.z(l.a(), text)) catch {};
         }
         sort_names.append(l.a(), null) catch {};
@@ -273,13 +287,12 @@ pub const ItemList = struct {
         format_ids.append(l.a(), "") catch {};
         format_names.append(l.a(), "All Formats") catch {};
         var format_selected: c.guint = 0;
-        for (core.items(core.field(page, "facets"))) |facet| {
-            if (!std.mem.eql(u8, core.str(facet, "id") orelse "", "FORMAT")) continue;
-            for (core.items(core.field(facet, "values"))) |v| {
-                const code = core.str(v, "value") orelse continue;
-                const name = core.now(l.a(), .{ .op = "formatName", .code = code, .labels = labels });
-                const text = if (name) |n| if (n == .string) n.string else code else code;
-                const label = std.fmt.allocPrint(l.a(), "{s} ({d})", .{ text, core.int(v, "count") orelse 0 }) catch text;
+        for (core.items(capi.Facet, page.facets, page.facets_count)) |facet| {
+            if (!std.mem.eql(u8, std.mem.span(facet.id), "FORMAT")) continue;
+            for (core.items(capi.FacetValue, facet.values, facet.values_count)) |v| {
+                const code = std.mem.span(v.value);
+                const text = core.formatName(l.a(), code, labels);
+                const label = std.fmt.allocPrint(l.a(), "{s} ({d})", .{ text, v.count }) catch text;
                 if (l.format) |f| if (std.mem.eql(u8, f, code)) {
                     format_selected = @intCast(format_ids.items.len);
                 };
@@ -296,8 +309,8 @@ pub const ItemList = struct {
 
     // MARK: Rows
 
-    fn addRow(l: *ItemList, entry: std.json.Value, index: usize) void {
-        const bib = core.field(entry, "bib");
+    fn addRow(l: *ItemList, entry: capi.ListEntry, index: usize) void {
+        const bib = entry.bib;
         const row = gtk.box(false, 12);
         gtk.margins(row, 10);
 
@@ -307,14 +320,14 @@ pub const ItemList = struct {
         c.gtk_widget_set_valign(gtk.widget(jacket), c.GTK_ALIGN_START);
         c.gtk_widget_add_css_class(gtk.widget(jacket), "jacket");
         gtk.append(row, gtk.widget(jacket));
-        if (core.str(bib, "jacketSmall")) |url| loadJacket(l.window, jacket, url);
+        if (core.str(bib.jacket_small)) |url| loadJacket(l.window, jacket, url);
 
         const text = gtk.box(true, 2);
         c.gtk_widget_set_hexpand(text, 1);
-        gtk.append(text, gtk.label(core.str(bib, "title") orelse "Untitled", l.a(), &.{"heading"}));
-        if (core.str(bib, "subtitle")) |s| gtk.append(text, gtk.label(s, l.a(), &.{"dim-label"}));
-        const authors = core.items(core.field(bib, "authors"));
-        if (authors.len > 0 and authors[0] == .string) gtk.append(text, gtk.label(authors[0].string, l.a(), &.{}));
+        gtk.append(text, gtk.label(bibTitle(bib), l.a(), &.{"heading"}));
+        if (core.str(bib.subtitle)) |s| gtk.append(text, gtk.label(s, l.a(), &.{"dim-label"}));
+        const authors = core.items([*:0]const u8, bib.authors, bib.authors_count);
+        if (authors.len > 0) gtk.append(text, gtk.label(std.mem.span(authors[0]), l.a(), &.{}));
         gtk.append(text, gtk.label(l.formatLine(bib), l.a(), &.{ "dim-label", "caption" }));
         const status = l.statusLine(entry);
         gtk.append(text, gtk.label(status.text, l.a(), &.{ "caption", status.class }));
@@ -327,42 +340,39 @@ pub const ItemList = struct {
     }
 
     /// "Blu-ray Disc · 2026"
-    fn formatLine(l: *ItemList, bib: ?std.json.Value) []const u8 {
-        const code = core.str(bib, "format") orelse "UNKNOWN";
-        const name = core.now(l.a(), .{ .op = "formatName", .code = code, .labels = l.window.libraryLabels() });
-        const format = if (name) |n| if (n == .string) n.string else code else code;
-        const date = core.str(bib, "publicationDate") orelse return format;
+    fn formatLine(l: *ItemList, bib: capi.Bib) []const u8 {
+        const format = core.formatName(l.a(), std.mem.span(bib.format), l.window.labels);
+        const date = core.str(bib.publication_date) orelse return format;
         return std.fmt.allocPrint(l.a(), "{s} · {s}", .{ format, year(date) }) catch format;
     }
 
     const Status = struct { text: []const u8, class: [*:0]const u8 };
 
     /// The account's relationship to the item if any, else the title's availability.
-    fn statusLine(l: *ItemList, entry: std.json.Value) Status {
+    fn statusLine(l: *ItemList, entry: capi.ListEntry) Status {
         const a_ = l.a();
-        if (core.field(entry, "accountStatus")) |s| {
-            if (std.mem.eql(u8, core.str(s, "kind") orelse "", "checkedOut")) {
-                const due = core.str(s, "due") orelse return .{ .text = "Checked out", .class = "copy-held" };
+        if (entry.account_status) |s| {
+            if (std.mem.eql(u8, std.mem.span(s.kind), "checkedOut")) {
+                const due = core.str(s.due) orelse return .{ .text = "Checked out", .class = "copy-held" };
                 return .{ .text = std.fmt.allocPrint(a_, "Checked out · due {s}", .{due}) catch "Checked out", .class = "copy-held" };
             }
-            if (core.boolean(s, "ready") == true) {
-                const hold = core.field(entry, "hold");
-                const by = core.str(hold, "pickupByDate");
-                const where = core.str(hold, "pickupLocation");
+            if (s.ready) {
+                const by = if (entry.hold) |h| core.str(h.pickup_by_date) else null;
+                const where = if (entry.hold) |h| core.str(h.pickup_location) else null;
                 const text = if (by) |d| std.fmt.allocPrint(a_, "Ready for pickup{s}{s} · by {s}", .{ if (where != null) " at " else "", where orelse "", d }) catch "Ready for pickup" else "Ready for pickup";
                 return .{ .text = text, .class = "copy-available" };
             }
-            if (core.int(s, "position")) |p| return .{ .text = std.fmt.allocPrint(a_, "On hold · #{d}", .{p}) catch "On hold", .class = "copy-transit" };
+            if (s.has_position) return .{ .text = std.fmt.allocPrint(a_, "On hold · #{d}", .{s.position}) catch "On hold", .class = "copy-transit" };
             return .{ .text = "On hold", .class = "copy-transit" };
         }
-        if (core.field(entry, "history")) |h| {
-            if (core.str(h, "returnedDate")) |d| return .{ .text = std.fmt.allocPrint(a_, "Returned {s}", .{d}) catch "", .class = "dim-label" };
+        if (entry.history) |h| {
+            if (core.str(h.returned_date)) |d| return .{ .text = std.fmt.allocPrint(a_, "Returned {s}", .{d}) catch "", .class = "dim-label" };
             return .{ .text = "", .class = "dim-label" };
         }
-        const bib = core.field(entry, "bib");
-        const held = core.int(bib, "heldCopies") orelse 0;
-        const total = core.int(bib, "totalCopies") orelse 0;
-        const status = core.str(bib, "status") orelse "";
+        const bib = entry.bib;
+        const held = bib.held_copies;
+        const total = bib.total_copies;
+        const status = core.str(bib.status) orelse "";
         const label: Status = if (std.mem.eql(u8, status, "AVAILABLE"))
             .{ .text = "Available", .class = "copy-available" }
         else if (std.mem.eql(u8, status, "ON_ORDER"))
@@ -382,7 +392,7 @@ pub const ItemList = struct {
         const l: *ItemList = @ptrCast(@alignCast(data.?));
         const i = @intFromPtr(c.g_object_get_data(@ptrCast(@alignCast(row)), "index"));
         if (i == 0 or i > l.entries.items.len) return;
-        l.window.select(l.entries.items[i - 1]);
+        l.window.select(&l.entries.items[i - 1]);
     }
 
     fn onEdge(_: *c.GtkScrolledWindow, pos: c.GtkPositionType, data: ?*anyopaque) callconv(.c) void {
@@ -424,6 +434,12 @@ pub const ItemList = struct {
     }
 };
 
+/// The bib's title, or "Untitled" if it has none.
+pub fn bibTitle(bib: capi.Bib) []const u8 {
+    const t = std.mem.span(bib.title);
+    return if (t.len > 0) t else "Untitled";
+}
+
 /// A year from "2026", "20261006" or "03/23/2027"; otherwise the date as given.
 pub fn year(date: []const u8) []const u8 {
     if (date.len == 4) return date;
@@ -445,7 +461,8 @@ pub fn loadJacket(w: *Window, picture: *c.GtkPicture, url: []const u8) void {
     const job = core.gpa.create(JacketJob) catch return;
     job.* = .{ .window = w, .picture = picture };
     _ = c.g_object_ref(picture);
-    w.call(.{ .op = "fetchImage", .url = url }, &onJacket, job);
+    const j = w.job(&onJacket, job) orelse return;
+    j.fetchImage(url);
 }
 
 fn onJacket(data: ?*anyopaque, r: *core.Result) void {
@@ -455,12 +472,8 @@ fn onJacket(data: ?*anyopaque, r: *core.Result) void {
     core.gpa.destroy(job);
     defer c.g_object_unref(picture);
     if (w.finishPending()) return;
-    if (!r.ok or r.value != .string) return;
-    const decoder = std.base64.standard.Decoder;
-    const size = decoder.calcSizeForSlice(r.value.string) catch return;
-    const bytes = r.arena.allocator().alloc(u8, size) catch return;
-    decoder.decode(bytes, r.value.string) catch return;
-    const texture = gtk.texture(bytes) orelse return;
+    if (!r.ok) return;
+    const texture = gtk.texture(r.bytes) orelse return;
     defer c.g_object_unref(texture);
     c.gtk_picture_set_paintable(picture, @ptrCast(@alignCast(texture)));
 }

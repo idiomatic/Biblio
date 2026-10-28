@@ -1,14 +1,13 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Biblio.Core;
 
 /// <summary>
 /// The bridge to libbiblio (biblio.dll), the Zig core shared with the Apple, Android and GNOME apps.
-/// Every operation is a JSON request answered with {"ok": true, "result": …} or {"ok": false,
-/// "error": {…}} (see core/include/biblio.h). Calls block, so they run on the thread pool.
+/// Each operation is a typed C function (see core/include/biblio.h and Interop.cs) returning the
+/// app's records or throwing <see cref="CoreException"/>. Calls block, so they run on the thread pool.
 /// </summary>
 public static partial class Native
 {
@@ -27,9 +26,6 @@ public static partial class Native
     [DllImport("biblio.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern void biblio_client_free(IntPtr client);
 
-    [DllImport("biblio.dll", CallingConvention = CallingConvention.Cdecl)]
-    public static extern IntPtr biblio_call(IntPtr client, byte[] request);
-
     /// <summary>NUL-terminated UTF-8.</summary>
     public static byte[] Utf8(string s) => Encoding.UTF8.GetBytes(s + "\0");
 }
@@ -40,6 +36,7 @@ public sealed class CoreException(string kind, string message, int? status = nul
     public int? Status { get; } = status;
 }
 
+/// <summary>For saving <see cref="LibraryInfo"/> (see LibraryStore).</summary>
 public static class CoreJson
 {
     public static readonly JsonSerializerOptions Options = new()
@@ -81,16 +78,57 @@ public sealed class CoreClient : IDisposable
     private bool _disposed;
     private readonly object _lock = new();
 
-    public async Task<T> CallAsync<T>(string op, object? args = null)
+    /// <summary>Runs a blocking core call on the thread pool.</summary>
+    private async Task<T> Run<T>(Func<IntPtr, T> call)
     {
+        IntPtr handle;
         lock (_lock)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(CoreClient));
             _inFlight++;
+            handle = _handle;
         }
-        try { return await Core.CallAsync<T>(_handle, op, args); }
+        try { return await Task.Run(() => call(handle)); }
         finally { lock (_lock) { if (--_inFlight == 0 && _disposed) Free(); } }
     }
+
+    private Task Run(Action<IntPtr> call) => Run(h => { call(h); return true; });
+
+    /// <summary>Signs in if needed (always, with <paramref name="force"/>) and returns the patron.</summary>
+    public Task<Patron> LoginAsync(bool force = false) => Run(h => Interop.Login(h, force));
+
+    /// <summary>The patron from the last sign-in (no network request).</summary>
+    public Task<Patron?> PatronAsync() => Run(Interop.GetPatron);
+
+    public Task<ListPage> SearchAsync(string query, string? searchType = null, IReadOnlyDictionary<string, string>? filters = null,
+        int page = 1, string? sort = null, string? format = null) =>
+        Run(h => Interop.Search(h, query, searchType, filters, page, sort, format));
+
+    public Task<ListPage> HoldsAsync(int page, string? sort) => Run(h => Interop.BorrowingList(h, Interop.Borrowing.Holds, page, sort));
+    public Task<ListPage> CheckoutsAsync(int page, string? sort) => Run(h => Interop.BorrowingList(h, Interop.Borrowing.Checkouts, page, sort));
+    public Task<ListPage> HistoryAsync(int page, string? sort) => Run(h => Interop.BorrowingList(h, Interop.Borrowing.History, page, sort));
+
+    public Task<List<CopyAvailability>> AvailabilityAsync(string metadataId) => Run(h => Interop.Availability(h, metadataId));
+
+    /// <summary>Full record fields ("Details", "About", …).</summary>
+    public Task<List<DetailField>> DetailsAsync(string metadataId) => Run(h => Interop.Details(h, metadataId));
+
+    public Task<List<Location>> LocationsAsync() => Run(Interop.Locations);
+
+    /// <summary>A null <paramref name="pickupBranch"/> uses the account's preferred branch.</summary>
+    public Task PlaceHoldAsync(string metadataId, string? materialType, string? pickupBranch) =>
+        Run(h => Interop.PlaceHold(h, metadataId, materialType, pickupBranch));
+
+    /// <summary>Returns the holds the library declined to cancel, with its reasons (often none).</summary>
+    public Task<List<Refusal>> CancelHoldsAsync(IEnumerable<Hold> holds) => Run(h => Interop.CancelHolds(h, holds));
+
+    public Task SetPickupAsync(string branchId) => Run(h => Interop.SetPickup(h, branchId));
+    public Task SetLanguageAsync(string code) => Run(h => Interop.SetLanguage(h, code));
+    public Task SetBorrowingHistoryAsync(bool enabled) => Run(h => Interop.SetBorrowingHistory(h, enabled));
+    public Task ChangeEmailAsync(string email) => Run(h => Interop.ChangeEmail(h, email));
+
+    /// <summary>The app must then save the new password.</summary>
+    public Task ChangePasswordAsync(string current, string @new) => Run(h => Interop.ChangePassword(h, current, @new));
 
     /// <summary>Frees the native client once calls still running on the thread pool finish.</summary>
     public void Dispose()
@@ -109,44 +147,26 @@ public sealed class CoreClient : IDisposable
     }
 }
 
+/// <summary>Operations that need no account.</summary>
 public static class Core
 {
-    /// <summary>Runs an operation that needs no account (library lookup, display helpers).</summary>
-    public static Task<T> CallAsync<T>(string op, object? args = null) => CallAsync<T>(IntPtr.Zero, op, args);
+    /// <summary>Name, brand color, languages and catalog labels from the library's public search page.</summary>
+    public static Task<LibraryInfo> LibraryInfoAsync(string subdomain) => Task.Run(() => Interop.GetLibraryInfo(subdomain));
 
-    /// <summary>Runs an operation that never touches the network (formatName, codabar) right away.</summary>
-    public static T CallNow<T>(string op, object? args = null) => Decode<T>(Invoke(IntPtr.Zero, Request(op, args)));
+    /// <summary>A page of BiblioCommons' partner directory: null for the first, then each page's Next.</summary>
+    public static Task<DirectoryPage> DirectoryPageAsync(string? url) => Task.Run(() => Interop.GetDirectoryPage(url));
 
-    internal static Task<T> CallAsync<T>(IntPtr client, string op, object? args)
-    {
-        var request = Request(op, args);
-        return Task.Run(() => Decode<T>(Invoke(client, request)));
-    }
+    /// <summary>Guesses and confirms a directory entry's catalog subdomain.</summary>
+    public static Task<string?> ResolveSubdomainAsync(string name, string? website) => Task.Run(() => Interop.ResolveSubdomain(name, website));
 
-    private static byte[] Request(string op, object? args)
-    {
-        var node = args is null ? new JsonObject() : JsonSerializer.SerializeToNode(args, CoreJson.Options)!.AsObject();
-        node["op"] = op;
-        return Native.Utf8(node.ToJsonString());
-    }
+    // Display helpers (no network)
 
-    private static string Invoke(IntPtr client, byte[] request)
-    {
-        var result = Native.biblio_call(client, request);
-        if (result == IntPtr.Zero) throw new CoreException("unexpected", "Biblio couldn’t reach its library engine.");
-        try { return Marshal.PtrToStringUTF8(result) ?? ""; }
-        finally { Native.biblio_free(result); }
-    }
+    /// <summary>"wccls" from "WCCLS", "https://smpl.bibliocommons.com/", …; null if it isn't one.</summary>
+    public static string? SubdomainFrom(string input) => Interop.SubdomainFrom(input);
 
-    private static T Decode<T>(string json)
-    {
-        var response = JsonNode.Parse(json)!.AsObject();
-        if (response["ok"]?.GetValue<bool>() == true)
-            return response["result"] is { } r ? r.Deserialize<T>(CoreJson.Options)! : default!;
-        var error = response["error"];
-        throw new CoreException(
-            error?["kind"]?.GetValue<string>() ?? "unexpected",
-            error?["message"]?.GetValue<string>() ?? "Something went wrong.",
-            error?["status"]?.GetValue<int>());
-    }
+    public static string FormatName(string code, IReadOnlyDictionary<string, string>? labels) => Interop.FormatName(code, labels) ?? code;
+    public static string SortName(string id, IReadOnlyDictionary<string, string>? labels) => Interop.SortName(id, labels) ?? id;
+
+    /// <summary>Codabar bar and space widths in narrow units, bar first; empty if the value can't be encoded.</summary>
+    public static double[] Codabar(string value) => Interop.Codabar(value);
 }

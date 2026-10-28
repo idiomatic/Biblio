@@ -18,7 +18,7 @@ public static class AddLibraryDialog
         do
         {
             DirectoryPage page;
-            try { page = await Core.Core.CallAsync<DirectoryPage>("directoryPage", new { url = next }); }
+            try { page = await Core.Core.DirectoryPageAsync(next); }
             catch (CoreException) { break; }
             var fresh = page.Entries.Where(e => seen.Add(e.Name)).ToList();
             lock (Directory) Directory.AddRange(fresh);
@@ -71,7 +71,7 @@ public static class AddLibraryDialog
             progress.IsActive = true;
             try
             {
-                LibraryStore.Shared.Upsert(await Core.Core.CallAsync<LibraryInfo>("libraryInfo", new { subdomain }));
+                LibraryStore.Shared.Upsert(await Core.Core.LibraryInfoAsync(subdomain));
                 added = true;
                 return true;
             }
@@ -90,7 +90,7 @@ public static class AddLibraryDialog
             lock (Directory) entry = Directory.FirstOrDefault(e => e.Name == (string)args.SelectedItem);
             if (entry is null) return;
             progress.IsActive = true;
-            var sub = await Core.Core.CallAsync<string?>("resolveSubdomain", new { name = entry.Name, website = entry.Website });
+            var sub = await Core.Core.ResolveSubdomainAsync(entry.Name, entry.Website);
             progress.IsActive = false;
             if (sub is null)
             {
@@ -103,7 +103,7 @@ public static class AddLibraryDialog
         dialog.PrimaryButtonClick += async (_, args) =>
         {
             var deferral = args.GetDeferral();
-            var sub = Core.Core.CallNow<string?>("subdomainFrom", new { input = box.Text });
+            var sub = Core.Core.SubdomainFrom(box.Text);
             args.Cancel = !await Add(sub);
             deferral.Complete();
         };
@@ -150,7 +150,7 @@ public static class AddUserDialog
             using var client = new CoreClient(library.Subdomain, user, () => pw);
             try
             {
-                await client.CallAsync<Patron>("login", new { force = true });
+                await client.LoginAsync(force: true);
                 LibraryStore.Shared.AddUser(library.Subdomain, user, pw);
                 added = user;
             }

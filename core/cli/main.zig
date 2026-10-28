@@ -1,28 +1,31 @@
 //! biblio: a command-line front end to libbiblio, for testing the core against a live library
-//! sparingly. Each invocation is one or two requests.
+//! sparingly. Each invocation is one or two requests; results print as JSON.
 //!
-//!   biblio call '{"op":"libraryInfo","subdomain":"wccls"}'
+//!   biblio info wccls
 //!   biblio search wccls "dune"
-//!   biblio --user NAME call wccls '{"op":"holds"}'   (password from $BIBLIO_PASSWORD)
+//!   biblio --user NAME holds wccls   (password from $BIBLIO_PASSWORD)
 
 const std = @import("std");
 const biblio = @import("biblio");
-
-extern fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, password: *const fn (?*anyopaque, [*:0]const u8, [*:0]const u8) callconv(.c) ?[*:0]u8, ctx: ?*anyopaque) ?*anyopaque;
-extern fn biblio_client_free(client: ?*anyopaque) void;
-extern fn biblio_call(client: ?*anyopaque, request: [*:0]const u8) ?[*:0]u8;
-extern fn biblio_alloc(len: usize) ?[*]u8;
-extern fn biblio_free(ptr: ?*anyopaque) void;
 
 var password_env: ?[]const u8 = null;
 
 fn password(_: ?*anyopaque, _: [*:0]const u8, _: [*:0]const u8) callconv(.c) ?[*:0]u8 {
     const p = password_env orelse return null;
-    const out = biblio_alloc(p.len + 1) orelse return null;
+    const out = biblio.biblio_alloc(p.len + 1) orelse return null;
     @memcpy(out[0..p.len], p);
     out[p.len] = 0;
     return @ptrCast(out);
 }
+
+const usage =
+    \\usage: biblio info SUBDOMAIN
+    \\       biblio search SUBDOMAIN TEXT
+    \\       biblio availability SUBDOMAIN METADATA_ID
+    \\       biblio --user NAME (holds | checkouts | history) SUBDOMAIN
+    \\The password for --user comes from $BIBLIO_PASSWORD.
+    \\
+;
 
 pub fn main(init: std.process.Init) !void {
     const a = init.arena.allocator();
@@ -41,41 +44,36 @@ pub fn main(init: std.process.Init) !void {
     const r = rest.items;
 
     var stdout_buf: [4096]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(init.io, &stdout_buf);
-    defer stdout.interface.flush() catch {};
+    // Streaming, not positional: output appended to a file or pipe must not overwrite earlier output.
+    var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buf);
+    const w = &stdout.interface;
+    defer w.flush() catch {};
 
-    if (r.len == 2 and std.mem.eql(u8, r[0], "call")) {
-        try print(&stdout.interface, null, r[1]);
-    } else if (r.len == 3 and std.mem.eql(u8, r[0], "call")) {
-        const client = biblio_client_new(try a.dupeSentinel(u8, r[1], 0), try a.dupeSentinel(u8, user, 0), password, null);
-        defer biblio_client_free(client);
-        try print(&stdout.interface, client, r[2]);
-    } else if (r.len == 3 and std.mem.eql(u8, r[0], "search")) {
-        const client = biblio_client_new(try a.dupeSentinel(u8, r[1], 0), try a.dupeSentinel(u8, user, 0), password, null);
-        defer biblio_client_free(client);
-        const req = try std.json.Stringify.valueAlloc(a, .{ .op = "search", .query = r[2] }, .{});
-        try print(&stdout.interface, client, req);
-    } else {
-        try stdout.interface.writeAll(
-            \\usage: biblio [--user NAME] call [SUBDOMAIN] JSON
-            \\       biblio [--user NAME] search SUBDOMAIN TEXT
-            \\The password for --user comes from $BIBLIO_PASSWORD.
-            \\
-        );
+    if (r.len < 2) return w.writeAll(usage);
+    const command = r[0];
+    if (std.mem.eql(u8, command, "info")) {
+        var message: []const u8 = "";
+        const info = biblio.lookup().info(a, r[1], &message) catch return show(w, .{ .@"error" = message });
+        return show(w, info);
+    }
+
+    const h = biblio.biblio_client_new(try a.dupeSentinel(u8, r[1], 0), try a.dupeSentinel(u8, user, 0), password, null) orelse
+        return error.OutOfMemory;
+    defer biblio.biblio_client_free(h);
+    const c = h.client;
+    var failure: biblio.Failure = undefined;
+    const kind = std.meta.stringToEnum(enum { search, availability, holds, checkouts, history }, command) orelse return w.writeAll(usage);
+    if ((kind == .search or kind == .availability) and r.len < 3) return w.writeAll(usage);
+    switch (kind) {
+        .search => try show(w, c.search(a, .{ .query = r[2] }, &failure) catch return show(w, failure)),
+        .availability => try show(w, c.availability(a, r[2], &failure) catch return show(w, failure)),
+        .holds => try show(w, c.borrowing(a, .holds, 1, null, &failure) catch return show(w, failure)),
+        .checkouts => try show(w, c.borrowing(a, .checkouts, 1, null, &failure) catch return show(w, failure)),
+        .history => try show(w, c.borrowing(a, .history, 1, null, &failure) catch return show(w, failure)),
     }
 }
 
-fn print(w: *std.Io.Writer, client: ?*anyopaque, request: []const u8) !void {
-    var buf: [64 * 1024]u8 = undefined;
-    if (request.len >= buf.len) return error.RequestTooLong;
-    @memcpy(buf[0..request.len], request);
-    buf[request.len] = 0;
-    const out = biblio_call(client, @ptrCast(&buf)) orelse return error.OutOfMemory;
-    defer biblio_free(out);
-    try w.writeAll(std.mem.span(out));
+fn show(w: *std.Io.Writer, value: anytype) !void {
+    try std.json.Stringify.value(value, .{ .whitespace = .indent_2, .emit_null_optional_fields = false }, w);
     try w.writeAll("\n");
-}
-
-comptime {
-    _ = biblio;
 }

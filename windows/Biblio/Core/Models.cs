@@ -2,7 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace Biblio.Core;
 
-// The data every Biblio app shows, as libbiblio returns it (core/src/models.zig).
+// The data every Biblio app shows, as libbiblio returns it (core/src/models.zig), built from its
+// C structs in Interop.cs.
 
 public sealed record Bib(
     string Id, string Title, string? Subtitle, List<string>? Authors, string Format, string? PublicationDate,
@@ -61,20 +62,11 @@ public sealed record LibraryInfo(string Subdomain, string Name, string? ShortNam
 {
     public string DisplayName => ShortName ?? Name;
 
-    public string FormatName(string code)
-    {
-        try { return Core.CallNow<string>("formatName", new { code, labels = Labels }); }
-        catch { return code; }
-    }
+    public string FormatName(string code) => Core.FormatName(code, Labels);
 
-    public string SortName(string id)
-    {
-        try { return Core.CallNow<string>("sortName", new { id, labels = Labels }); }
-        catch { return id; }
-    }
+    public string SortName(string id) => Core.SortName(id, Labels);
 }
 
 public sealed record DirectoryEntry(string Name, string? Website, string? Region, string? Logo);
 public sealed record DirectoryPage(List<DirectoryEntry> Entries, string? Next);
 public sealed record Refusal(string HoldId, string Reason);
-public sealed record CancelResult(List<Refusal> Refused);

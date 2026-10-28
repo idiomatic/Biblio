@@ -2,40 +2,62 @@ package com.rbrian.biblio.core
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonObjectBuilder
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The bridge to libbiblio, the Zig core shared with the Apple, GNOME and Windows apps.
  *
- * Every operation is a JSON request answered with `{"ok": true, "result": …}` or
- * `{"ok": false, "error": {…}}` (see core/include/biblio.h). Calls block, so they run on
- * [Dispatchers.IO]. The core paces requests app-wide to stay gentle with library sites.
+ * Each operation is a native method (android/native/src/jni.zig) over the core's typed
+ * interface (core/include/biblio.h): it takes strings and numbers, returns this package's
+ * model objects, and throws [Failure]. Calls block, so they run on [Dispatchers.IO]. The core
+ * paces requests app-wide to stay gentle with library sites.
  */
 object Core {
     init {
         System.loadLibrary("biblio_jni")
     }
 
+    /** For saving [LibraryInfo] (see LibraryStore). */
     val json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
 
     @JvmStatic private external fun nativeNewClient(subdomain: ByteArray, username: ByteArray, password: ByteArray?): Long
     @JvmStatic private external fun nativeSetPassword(client: Long, password: ByteArray)
     @JvmStatic private external fun nativeFreeClient(client: Long)
-    @JvmStatic private external fun nativeCall(client: Long, request: ByteArray): ByteArray?
 
-    /** A library error, with a message ready to show. */
+    @JvmStatic private external fun nativeLibraryInfo(subdomain: String): LibraryInfo
+    @JvmStatic private external fun nativeDirectoryPage(url: String?): DirectoryPage
+    @JvmStatic private external fun nativeResolveSubdomain(name: String, website: String?): String?
+    @JvmStatic private external fun nativeSubdomainFrom(input: String): String?
+    @JvmStatic private external fun nativeFormatName(code: String, labels: Array<String>): String?
+    @JvmStatic private external fun nativeSortName(id: String, labels: Array<String>): String?
+    @JvmStatic private external fun nativeCodabar(value: String): DoubleArray?
+
+    @JvmStatic private external fun nativeLogin(client: Long, force: Boolean): Patron
+    @JvmStatic private external fun nativePatron(client: Long): Patron?
+    @JvmStatic private external fun nativeSearch(
+        client: Long, query: String, searchType: String?, filters: Array<String>, page: Int, sort: String?, format: String?,
+    ): ListPage
+    @JvmStatic private external fun nativeHolds(client: Long, page: Int, sort: String?): ListPage
+    @JvmStatic private external fun nativeCheckouts(client: Long, page: Int, sort: String?): ListPage
+    @JvmStatic private external fun nativeHistory(client: Long, page: Int, sort: String?): ListPage
+    @JvmStatic private external fun nativeAvailability(client: Long, metadataId: String): List<CopyAvailability>
+    @JvmStatic private external fun nativeDetails(client: Long, metadataId: String): List<DetailField>
+    @JvmStatic private external fun nativeLocations(client: Long): List<Location>
+    @JvmStatic private external fun nativePlaceHold(client: Long, metadataId: String, materialType: String?, pickupBranch: String?)
+    @JvmStatic private external fun nativeCancelHolds(client: Long, holds: Array<String>): List<Refusal>
+    @JvmStatic private external fun nativeSetPickup(client: Long, branchId: String)
+    @JvmStatic private external fun nativeSetLanguage(client: Long, code: String)
+    @JvmStatic private external fun nativeSetBorrowingHistory(client: Long, enabled: Boolean)
+    @JvmStatic private external fun nativeChangeEmail(client: Long, email: String)
+    @JvmStatic private external fun nativeChangePassword(client: Long, current: String, new: String)
+
+    /** A library error, with a message ready to show. Thrown by the native methods. */
     class Failure(val kind: String, message: String, val status: Int? = null) : Exception(message)
+
+    private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
+
+    /** Keys and values alternating, as the native methods take string maps. */
+    private fun Map<String, String>.flattened(): Array<String> = entries.flatMap { listOf(it.key, it.value) }.toTypedArray()
 
     /** One core client: a (library, username) session, or a guest when [username] is empty. */
     class Client(val subdomain: String, val username: String, password: String?) : AutoCloseable {
@@ -43,11 +65,43 @@ object Core {
             nativeNewClient(subdomain.encodeToByteArray(), username.encodeToByteArray(), password?.encodeToByteArray())
         val isGuest get() = username.isEmpty()
 
-        suspend fun <T> call(serializer: KSerializer<T>, op: String, args: JsonObjectBuilder.() -> Unit = {}): T =
-            Core.call(handle, serializer, op, args)
+        /** Signs in if needed (always, with [force]) and returns the patron. */
+        suspend fun login(force: Boolean = false): Patron = io { nativeLogin(handle, force) }
 
-        suspend fun call(op: String, args: JsonObjectBuilder.() -> Unit = {}): JsonElement =
-            Core.callRaw(handle, op, args)
+        /** The patron from the last sign-in (no network request). */
+        fun patron(): Patron? = nativePatron(handle)
+
+        suspend fun search(
+            query: String, searchType: String? = null, filters: Map<String, String> = emptyMap(),
+            page: Int = 1, sort: String? = null, format: String? = null,
+        ): ListPage = io { nativeSearch(handle, query, searchType, filters.flattened(), page, sort, format) }
+
+        suspend fun holds(page: Int = 1, sort: String? = null): ListPage = io { nativeHolds(handle, page, sort) }
+        suspend fun checkouts(page: Int = 1, sort: String? = null): ListPage = io { nativeCheckouts(handle, page, sort) }
+        suspend fun history(page: Int = 1, sort: String? = null): ListPage = io { nativeHistory(handle, page, sort) }
+
+        suspend fun availability(metadataId: String): List<CopyAvailability> = io { nativeAvailability(handle, metadataId) }
+
+        /** Full record fields ("Details", "About", …). */
+        suspend fun details(metadataId: String): List<DetailField> = io { nativeDetails(handle, metadataId) }
+
+        suspend fun locations(): List<Location> = io { nativeLocations(handle) }
+
+        /** [pickupBranch] null uses the account's preferred branch. */
+        suspend fun placeHold(metadataId: String, materialType: String?, pickupBranch: String?) =
+            io { nativePlaceHold(handle, metadataId, materialType, pickupBranch) }
+
+        /** Returns the holds the library declined to cancel, with its reasons (often none). */
+        suspend fun cancelHolds(holds: List<Hold>): List<Refusal> =
+            io { nativeCancelHolds(handle, holds.flatMap { listOf(it.id, it.metadataId) }.toTypedArray()) }
+
+        suspend fun setPickup(branchId: String) = io { nativeSetPickup(handle, branchId) }
+        suspend fun setLanguage(code: String) = io { nativeSetLanguage(handle, code) }
+        suspend fun setBorrowingHistory(enabled: Boolean) = io { nativeSetBorrowingHistory(handle, enabled) }
+        suspend fun changeEmail(email: String) = io { nativeChangeEmail(handle, email) }
+
+        /** The app must then save the new password (and call [setPassword]). */
+        suspend fun changePassword(current: String, new: String) = io { nativeChangePassword(handle, current, new) }
 
         /** After a password change, so automatic sign-in keeps working. */
         fun setPassword(password: String) = nativeSetPassword(handle, password.encodeToByteArray())
@@ -58,37 +112,26 @@ object Core {
         }
     }
 
-    suspend fun <T> call(serializer: KSerializer<T>, op: String, args: JsonObjectBuilder.() -> Unit = {}): T =
-        call(0L, serializer, op, args)
+    // Library operations (no account)
 
-    suspend fun callRaw(op: String, args: JsonObjectBuilder.() -> Unit = {}): JsonElement = callRaw(0L, op, args)
+    /** Name, brand color, languages and catalog labels from the library's public search page. */
+    suspend fun libraryInfo(subdomain: String): LibraryInfo = io { nativeLibraryInfo(subdomain) }
 
-    private suspend fun <T> call(handle: Long, serializer: KSerializer<T>, op: String, args: JsonObjectBuilder.() -> Unit): T =
-        json.decodeFromJsonElement(serializer, callRaw(handle, op, args))
+    /** A page of BiblioCommons' partner directory: [url] null for the first, then each page's next. */
+    suspend fun directoryPage(url: String?): DirectoryPage = io { nativeDirectoryPage(url) }
 
-    /** Runs an operation that never touches the network (formatName, sortName, codabar) right away. */
-    fun callNow(op: String, args: JsonObjectBuilder.() -> Unit = {}): JsonElement = decode(nativeCall(0L, request(op, args)))
+    /** Guesses and confirms a directory entry's catalog subdomain. */
+    suspend fun resolveSubdomain(name: String, website: String?): String? = io { nativeResolveSubdomain(name, website) }
 
-    private fun request(op: String, args: JsonObjectBuilder.() -> Unit): ByteArray =
-        buildJsonObject {
-            put("op", kotlinx.serialization.json.JsonPrimitive(op))
-            args()
-        }.toString().encodeToByteArray()
+    // Display helpers (no network)
 
-    private suspend fun callRaw(handle: Long, op: String, args: JsonObjectBuilder.() -> Unit): JsonElement {
-        val request = request(op, args)
-        return decode(withContext(Dispatchers.IO) { nativeCall(handle, request) })
-    }
+    /** "wccls" from "WCCLS", "https://smpl.bibliocommons.com/", …; null if it isn't one. */
+    fun subdomainFrom(input: String): String? = nativeSubdomainFrom(input)
 
-    private fun decode(bytes: ByteArray?): JsonElement {
-        if (bytes == null) throw Failure("unexpected", "Biblio couldn’t reach its library engine.")
-        val response = json.parseToJsonElement(bytes.decodeToString()).jsonObject
-        if (response["ok"]?.jsonPrimitive?.boolean == true) return response["result"] ?: JsonNull
-        val error = response["error"]?.jsonObject ?: JsonObject(emptyMap())
-        throw Failure(
-            kind = error["kind"]?.jsonPrimitive?.contentOrNull ?: "unexpected",
-            message = error["message"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong.",
-            status = error["status"]?.jsonPrimitive?.intOrNull,
-        )
-    }
+    fun formatName(code: String, labels: Map<String, String>): String = nativeFormatName(code, labels.flattened()) ?: code
+
+    fun sortName(id: String, labels: Map<String, String>): String = nativeSortName(id, labels.flattened()) ?: id
+
+    /** Codabar bar and space widths in narrow units, bar first; null if [value] can't be encoded. */
+    fun codabar(value: String): DoubleArray? = nativeCodabar(value)
 }

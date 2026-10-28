@@ -5,6 +5,7 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
 const core = @import("core.zig");
+const capi = core.capi;
 const store = @import("store.zig");
 const Window = @import("window.zig").Window;
 
@@ -65,23 +66,17 @@ pub const Account = struct {
         gtk.append(acc.holder, page);
 
         const profile = group("Profile", null);
-        addInfo(acc, profile, "Name", core.str(patron, "name") orelse w.username);
+        const name = std.mem.span(patron.name);
+        addInfo(acc, profile, "Name", if (name.len > 0) name else w.username);
         addInfo(acc, profile, "Library", store.name(w.library));
         c.adw_preferences_page_add(@ptrCast(@alignCast(page)), profile);
 
-        if (core.str(patron, "barcode")) |barcode| {
+        if (core.str(patron.barcode)) |barcode| {
             const card = group("Library Card", "Show this at the library’s self-checkout or desk.");
-            const elements = core.now(acc.a(), .{ .op = "codabar", .value = barcode });
-            var widths: std.ArrayList(f64) = .empty;
-            for (core.items(elements)) |e| widths.append(acc.a(), switch (e) {
-                .float => |f| f,
-                .integer => |i| @floatFromInt(i),
-                else => 1,
-            }) catch {};
-            acc.barcode = widths.items;
+            acc.barcode = core.codabar(acc.a(), barcode);
             const box = gtk.box(true, 6);
             c.gtk_widget_add_css_class(box, "barcode");
-            if (widths.items.len > 0) {
+            if (acc.barcode.len > 0) {
                 const area = c.gtk_drawing_area_new();
                 c.gtk_widget_set_size_request(area, 300, 64);
                 c.gtk_drawing_area_set_draw_func(@ptrCast(@alignCast(area)), &drawBarcode, acc, null);
@@ -98,7 +93,7 @@ pub const Account = struct {
         const email_group = group("Email", null);
         const email: *c.AdwEntryRow = @ptrCast(@alignCast(c.adw_entry_row_new()));
         c.adw_preferences_row_set_title(@ptrCast(@alignCast(email)), "Email address");
-        c.gtk_editable_set_text(@ptrCast(@alignCast(email)), gtk.z(acc.a(), core.str(patron, "email") orelse ""));
+        c.gtk_editable_set_text(@ptrCast(@alignCast(email)), patron.email orelse "");
         c.adw_entry_row_set_show_apply_button(email, 1);
         c.adw_entry_row_set_input_purpose(email, c.GTK_INPUT_PURPOSE_EMAIL);
         gtk.connect(email, "apply", &onEmail, acc);
@@ -121,12 +116,12 @@ pub const Account = struct {
         var pickup_ids: std.ArrayList([]const u8) = .empty;
         var pickup_selected: c.guint = c.GTK_INVALID_LIST_POSITION;
         for (w.locations) |loc| {
-            const id = core.str(loc, "id") orelse continue;
-            if (core.str(patron, "preferredPickup")) |p| if (std.mem.eql(u8, p, id)) {
+            const id = std.mem.span(loc.id);
+            if (core.str(patron.preferred_pickup)) |p| if (std.mem.eql(u8, p, id)) {
                 pickup_selected = @intCast(pickup_ids.items.len);
             };
             pickup_ids.append(acc.a(), id) catch continue;
-            pickup_names.append(acc.a(), gtk.z(acc.a(), core.str(loc, "name") orelse id)) catch {};
+            pickup_names.append(acc.a(), loc.name) catch {};
         }
         pickup_names.append(acc.a(), null) catch {};
         acc.pickup_ids = pickup_ids.items;
@@ -142,14 +137,13 @@ pub const Account = struct {
         var language_names: std.ArrayList(?[*:0]const u8) = .empty;
         var language_ids: std.ArrayList([]const u8) = .empty;
         var language_selected: c.guint = 0;
-        const labels = w.libraryLabels();
-        if (w.library.object.get("languages")) |langs| for (core.items(langs)) |l| {
+        if (w.library.object.get("languages")) |langs| if (langs == .array) for (langs.array.items) |l| {
             if (l != .string) continue;
-            if (std.mem.eql(u8, l.string, core.str(patron, "language") orelse "")) language_selected = @intCast(language_ids.items.len);
+            if (std.mem.eql(u8, l.string, std.mem.span(patron.language))) language_selected = @intCast(language_ids.items.len);
             const key = std.fmt.allocPrint(acc.a(), "LANGUAGE_NAME.{s}", .{l.string}) catch l.string;
-            const name = core.str(labels, key) orelse l.string;
+            const language_name = store.label(w.library, key) orelse l.string;
             language_ids.append(acc.a(), l.string) catch continue;
-            language_names.append(acc.a(), gtk.z(acc.a(), name)) catch {};
+            language_names.append(acc.a(), gtk.z(acc.a(), language_name)) catch {};
         };
         language_names.append(acc.a(), null) catch {};
         acc.language_ids = language_ids.items;
@@ -162,7 +156,8 @@ pub const Account = struct {
         c.adw_preferences_page_add(@ptrCast(@alignCast(page)), language_group);
 
         acc.history = null;
-        if (core.boolean(patron, "borrowingHistoryEnabled")) |enabled| {
+        if (patron.has_borrowing_history_enabled) {
+            const enabled = patron.borrowing_history_enabled;
             const history_group = group("Borrowing History", "When on, the library keeps a list of the items you check out.");
             const history: *c.AdwSwitchRow = @ptrCast(@alignCast(c.adw_switch_row_new()));
             c.adw_preferences_row_set_title(@ptrCast(@alignCast(history)), "Keep borrowing history");
@@ -217,8 +212,14 @@ pub const Account = struct {
 
     // MARK: Saving
 
-    fn run(acc: *Account, request: anytype) void {
-        acc.window.call(request, &onSaved, acc);
+    /// A call that saves a setting, then shows the patron again.
+    fn job(acc: *Account) ?*core.Job {
+        return acc.window.job(&onSaved, acc);
+    }
+
+    fn reloadPatron(acc: *Account) void {
+        const w = acc.window;
+        if (w.job(&onPatron, acc)) |j| j.start(capi.biblio_patron, .{w.client});
     }
 
     fn onSaved(data: ?*anyopaque, r: *core.Result) void {
@@ -232,7 +233,7 @@ pub const Account = struct {
                 acc.pending_password = null;
             }
             w.toast(r.message);
-            return w.call(.{ .op = "patron" }, &onPatron, acc); // put the rows back
+            return acc.reloadPatron(); // put the rows back
         }
         if (acc.pending_password) |p| {
             // Keep the keyring in step so signing in again automatically still works.
@@ -244,16 +245,17 @@ pub const Account = struct {
         } else {
             w.toast("Saved.");
         }
-        w.call(.{ .op = "patron" }, &onPatron, acc);
+        acc.reloadPatron();
     }
 
     fn onPatron(data: ?*anyopaque, r: *core.Result) void {
         const acc: *Account = @ptrCast(@alignCast(data.?));
         const w = acc.window;
         if (w.finishPending()) return;
-        if (!r.ok or r.value != .object) return;
-        w.patron = r.value;
-        w.keep(r);
+        if (!r.ok) return;
+        const patron = r.keep(capi.Patron) orelse return;
+        w.patron = patron;
+        w.keep(patron);
         acc.refresh();
     }
 
@@ -261,7 +263,8 @@ pub const Account = struct {
         const acc: *Account = @ptrCast(@alignCast(data.?));
         const email = std.mem.span(c.gtk_editable_get_text(@ptrCast(@alignCast(row))));
         if (std.mem.findScalar(u8, email, '@') == null) return acc.window.toast("Enter a valid email address.");
-        acc.run(.{ .op = "changeEmail", .email = email });
+        const j = acc.job() orelse return;
+        j.start(capi.biblio_change_email, .{ acc.window.client, j.z(email) });
     }
 
     fn onChangePassword(_: *c.AdwButtonRow, data: ?*anyopaque) callconv(.c) void {
@@ -271,8 +274,9 @@ pub const Account = struct {
         const confirm = std.mem.span(c.gtk_editable_get_text(@ptrCast(@alignCast(acc.confirm_password.?))));
         if (current.len == 0 or new.len == 0) return;
         if (!std.mem.eql(u8, new, confirm)) return acc.window.toast("The new passwords don’t match.");
-        acc.pending_password = core.gpa.dupe(u8, new) catch return;
-        acc.run(.{ .op = "changePassword", .current = current, .new = new });
+        const j = acc.job() orelse return;
+        acc.pending_password = core.gpa.dupe(u8, new) catch null;
+        j.start(capi.biblio_change_password, .{ acc.window.client, j.z(current), j.z(new) });
     }
 
     fn onPickup(row: *c.AdwComboRow, _: ?*c.GParamSpec, data: ?*anyopaque) callconv(.c) void {
@@ -280,7 +284,8 @@ pub const Account = struct {
         if (acc.filling) return;
         const i = c.adw_combo_row_get_selected(row);
         if (i >= acc.pickup_ids.len) return;
-        acc.run(.{ .op = "setPickup", .branchId = acc.pickup_ids[i] });
+        const j = acc.job() orelse return;
+        j.start(capi.biblio_set_pickup, .{ acc.window.client, j.z(acc.pickup_ids[i]) });
     }
 
     fn onLanguage(row: *c.AdwComboRow, _: ?*c.GParamSpec, data: ?*anyopaque) callconv(.c) void {
@@ -288,16 +293,22 @@ pub const Account = struct {
         if (acc.filling) return;
         const i = c.adw_combo_row_get_selected(row);
         if (i >= acc.language_ids.len) return;
-        acc.run(.{ .op = "setLanguage", .code = acc.language_ids[i] });
+        const j = acc.job() orelse return;
+        j.start(capi.biblio_set_language, .{ acc.window.client, j.z(acc.language_ids[i]) });
         // Catalog text (formats, sort names) comes back in the new language.
         for ([_]@import("window.zig").Section{ .search, .new_titles }) |s| if (acc.window.list(s)) |l| l.reloadIfLoaded();
+    }
+
+    fn setHistory(acc: *Account, enabled: bool) void {
+        const j = acc.job() orelse return;
+        j.start(capi.biblio_set_borrowing_history, .{ acc.window.client, enabled });
     }
 
     /// Turning history off can delete it, so it asks first.
     fn onHistory(row: *c.AdwSwitchRow, _: ?*c.GParamSpec, data: ?*anyopaque) callconv(.c) void {
         const acc: *Account = @ptrCast(@alignCast(data.?));
         if (acc.filling) return;
-        if (c.adw_switch_row_get_active(row) != 0) return acc.run(.{ .op = "setBorrowingHistory", .enabled = true });
+        if (c.adw_switch_row_get_active(row) != 0) return acc.setHistory(true);
         const dialog = c.adw_alert_dialog_new("Turn Off Borrowing History?", "The library may permanently delete your existing borrowing history.");
         c.adw_alert_dialog_add_response(@ptrCast(@alignCast(dialog)), "keep", "_Keep History");
         c.adw_alert_dialog_add_response(@ptrCast(@alignCast(dialog)), "off", "_Turn Off");
@@ -311,7 +322,7 @@ pub const Account = struct {
     fn onHistoryResponse(_: *c.AdwAlertDialog, response: [*:0]const u8, data: ?*anyopaque) callconv(.c) void {
         const acc: *Account = @ptrCast(@alignCast(data.?));
         if (std.mem.eql(u8, std.mem.span(response), "off")) {
-            acc.run(.{ .op = "setBorrowingHistory", .enabled = false });
+            acc.setHistory(false);
         } else if (acc.history) |h| {
             acc.filling = true;
             c.adw_switch_row_set_active(h, 1);

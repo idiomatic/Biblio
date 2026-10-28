@@ -109,11 +109,11 @@ public sealed class AccountWindow : Window
 
     private async Task Start()
     {
-        try { Locations = await Client.CallAsync<List<Location>>("locations"); } catch (CoreException) { }
+        try { Locations = await Client.LocationsAsync(); } catch (CoreException) { }
         if (IsGuest) return;
         try
         {
-            Patron = await Client.CallAsync<Patron>("login");
+            Patron = await Client.LoginAsync();
             // Fill the hold and checkout counts without waiting for those lists to be opened.
             ListFor(Section.Holds).LoadIfNeeded();
             ListFor(Section.Checkouts).LoadIfNeeded();
@@ -161,7 +161,7 @@ public sealed class AccountWindow : Window
 
     public async Task RefreshPatron()
     {
-        try { Patron = await Client.CallAsync<Patron?>("patron") ?? Patron; } catch (CoreException) { }
+        try { Patron = await Client.PatronAsync() ?? Patron; } catch (CoreException) { }
     }
 
     /// <summary>After placing or cancelling a hold.</summary>

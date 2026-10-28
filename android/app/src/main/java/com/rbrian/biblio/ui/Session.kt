@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.rbrian.biblio.core.CancelResult
 import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.Hold
 import com.rbrian.biblio.core.LibraryInfo
@@ -18,12 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.nullable
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 enum class Section(val title: String) {
     Search("Search"), NewTitles("New Titles"), Holds("Holds"), Checkouts("Checked Out"), History("Borrowing History"), Account("Account")
@@ -57,11 +50,11 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
 
     init {
         scope.launch {
-            locations = runCatching { client.call(ListSerializer(Location.serializer()), "locations") }.getOrDefault(emptyList())
+            locations = runCatching { client.locations() }.getOrDefault(emptyList())
         }
         if (!isGuest) scope.launch {
             try {
-                patron = client.call(Patron.serializer(), "login")
+                patron = client.login()
                 // Fill the hold and checkout counts without waiting for those lists to be opened.
                 holds.loadIfNeeded()
                 checkouts.loadIfNeeded()
@@ -76,17 +69,13 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
         client.close()
     }
 
-    suspend fun refreshPatron() {
-        patron = runCatching { client.call(Patron.serializer().nullable, "patron") }.getOrNull() ?: patron
+    fun refreshPatron() {
+        patron = runCatching { client.patron() }.getOrNull() ?: patron
     }
 
     fun placeHold(entry: ListEntry, pickup: String?) = scope.launch {
         try {
-            client.call(Boolean.serializer(), "placeHold") {
-                put("metadataId", JsonPrimitive(entry.bib.id))
-                put("materialType", JsonPrimitive(entry.bib.materialType))
-                pickup?.let { put("pickupBranch", JsonPrimitive(it)) }
-            }
+            client.placeHold(entry.bib.id, entry.bib.materialType, pickup)
             message = "Hold placed on “${entry.bib.title}”."
             holds.reload()
             search.markHeld(entry.bib.id)
@@ -98,11 +87,9 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
 
     fun cancel(hold: Hold) = scope.launch {
         try {
-            val result = client.call(CancelResult.serializer(), "cancelHolds") {
-                put("holds", JsonArray(listOf(JsonObject(mapOf("id" to JsonPrimitive(hold.id), "metadataId" to JsonPrimitive(hold.metadataId))))))
-            }
-            message = result.refused.firstOrNull()?.reason ?: "Hold cancelled."
-            if (result.refused.isEmpty()) {
+            val refused = client.cancelHolds(listOf(hold))
+            message = refused.firstOrNull()?.reason ?: "Hold cancelled."
+            if (refused.isEmpty()) {
                 holds.reload()
                 search.reloadIfLoaded()
                 newTitles.reloadIfLoaded()
@@ -157,19 +144,17 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         loading = true
         job = session.scope.launch {
             try {
-                val result = session.client.call(ListPage.serializer(), op()) {
-                    put("page", JsonPrimitive(number))
-                    (sort ?: defaultSort)?.let { put("sort", JsonPrimitive(it)) }
-                    when (section) {
-                        Section.Search -> put("query", JsonPrimitive(query))
-                        Section.NewTitles -> {
-                            put("query", JsonPrimitive("nw:[0 TO 180]"))
-                            put("searchType", JsonPrimitive("bl"))
-                            put("filters", JsonObject(mapOf("f_on_order" to JsonPrimitive("false"))))
-                        }
-                        else -> {}
-                    }
-                    format?.let { put("format", JsonPrimitive(it)) }
+                val client = session.client
+                val order = sort ?: defaultSort
+                val result = when (section) {
+                    Section.Search -> client.search(query, page = number, sort = order, format = format)
+                    Section.NewTitles -> client.search(
+                        "nw:[0 TO 180]", searchType = "bl", filters = mapOf("f_on_order" to "false"),
+                        page = number, sort = order, format = format,
+                    )
+                    Section.Holds -> client.holds(number, order)
+                    Section.Checkouts -> client.checkouts(number, order)
+                    else -> client.history(number, order)
                 }
                 entries += result.entries
                 page = result
@@ -179,13 +164,6 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
                 loading = false
             }
         }
-    }
-
-    private fun op() = when (section) {
-        Section.Search, Section.NewTitles -> "search"
-        Section.Holds -> "holds"
-        Section.Checkouts -> "checkouts"
-        else -> "history"
     }
 
     /** Shows a just-placed hold on catalog rows without reloading. */

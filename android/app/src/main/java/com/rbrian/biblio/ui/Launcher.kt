@@ -54,14 +54,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.DirectoryEntry
-import com.rbrian.biblio.core.DirectoryPage
 import com.rbrian.biblio.core.LibraryInfo
-import com.rbrian.biblio.core.Patron
 import com.rbrian.biblio.data.LibraryStore
 import kotlinx.coroutines.launch
-import kotlinx.serialization.builtins.nullable
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.JsonPrimitive
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -125,9 +120,8 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
         var next: String? = null
         val seen = mutableSetOf<String>()
         do {
-            val page = runCatching {
-                Core.call(DirectoryPage.serializer(), "directoryPage") { next?.let { put("url", JsonPrimitive(it)) } }
-            }.getOrNull() ?: break
+            val url = next
+            val page = runCatching { Core.directoryPage(url) }.getOrNull() ?: break
             val fresh = page.entries.filter { seen.add(it.name) }
             directory += fresh
             next = page.next
@@ -143,7 +137,7 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
         error = null
         scope.launch {
             try {
-                store.upsert(Core.call(LibraryInfo.serializer(), "libraryInfo") { put("subdomain", JsonPrimitive(subdomain)) })
+                store.upsert(Core.libraryInfo(subdomain))
                 onDismiss()
             } catch (e: Core.Failure) {
                 error = e.message
@@ -166,7 +160,7 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = {
-                    add(runCatching { (Core.callNow("subdomainFrom") { put("input", JsonPrimitive(text)) } as? JsonPrimitive)?.content }.getOrNull())
+                    add(runCatching { Core.subdomainFrom(text) }.getOrNull())
                 }),
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !working,
@@ -184,12 +178,7 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
                         modifier = Modifier.clickable(enabled = !working) {
                             working = true
                             scope.launch {
-                                val sub = runCatching {
-                                    Core.call(String.serializer().nullable, "resolveSubdomain") {
-                                        put("name", JsonPrimitive(entry.name))
-                                        entry.website?.let { put("website", JsonPrimitive(it)) }
-                                    }
-                                }.getOrNull()
+                                val sub = runCatching { Core.resolveSubdomain(entry.name, entry.website) }.getOrNull()
                                 working = false
                                 if (sub == null) error = "Couldn’t find the catalog for ${entry.name}. Enter its subdomain instead."
                                 else add(sub)
@@ -279,7 +268,7 @@ fun AddUserDialog(store: LibraryStore, library: LibraryInfo, onDismiss: () -> Un
         scope.launch {
             Core.Client(library.subdomain, user, password).use { client ->
                 try {
-                    client.call(Patron.serializer(), "login") { put("force", JsonPrimitive(true)) }
+                    client.login(force = true)
                     store.addUser(library.subdomain, user, password)
                     onAdded(user)
                 } catch (e: Core.Failure) {

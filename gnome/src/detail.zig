@@ -5,6 +5,7 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
 const core = @import("core.zig");
+const capi = core.capi;
 const Window = @import("window.zig").Window;
 const list = @import("list.zig");
 
@@ -13,7 +14,8 @@ pub const Detail = struct {
     root: *c.GtkWidget,
     content: *c.GtkWidget,
     arena: std.heap.ArenaAllocator,
-    entry: std.json.Value = .null,
+    /// A copy of the shown row, in `arena`.
+    entry: capi.ListEntry = undefined,
     generation: u32 = 0,
     pickup: ?*c.GtkDropDown = null,
     pickup_ids: []const []const u8 = &.{},
@@ -56,28 +58,27 @@ pub const Detail = struct {
         d.window.hideDetail();
     }
 
-    pub fn showEntry(d: *Detail, entry: std.json.Value) void {
+    pub fn showEntry(d: *Detail, entry: *const capi.ListEntry) void {
         d.generation +%= 1;
         gtk.clearBox(d.content);
         _ = d.arena.reset(.retain_capacity);
         // Keep a copy: the list the entry came from may reload while it is shown.
-        const text = std.json.Stringify.valueAlloc(d.a(), entry, .{}) catch return;
-        d.entry = std.json.parseFromSliceLeaky(std.json.Value, d.a(), text, .{}) catch return;
+        d.entry = core.copy(d.a(), entry.*);
         d.pickup = null;
         d.hold_button = null;
         d.build();
-        const bib = core.field(d.entry, "bib");
-        const id = core.str(bib, "id") orelse return;
-        d.request(.{ .op = "availability", .metadataId = id }, &onAvailability);
-        d.request(.{ .op = "details", .metadataId = id }, &onDetails);
+        const id = std.mem.span(d.entry.bib.id);
+        if (d.job(&onAvailability)) |j| j.start(capi.biblio_availability, .{ d.window.client, j.z(id) });
+        if (d.job(&onDetails)) |j| j.start(capi.biblio_details, .{ d.window.client, j.z(id) });
     }
 
     const Ticket = struct { detail: *Detail, generation: u32 };
 
-    fn request(d: *Detail, req: anytype, callback: core.Callback) void {
-        const t = core.gpa.create(Ticket) catch return;
+    /// A window call whose callback gets this detail's ticket.
+    fn job(d: *Detail, callback: core.Callback) ?*core.Job {
+        const t = core.gpa.create(Ticket) catch return null;
         t.* = .{ .detail = d, .generation = d.generation };
-        d.window.call(req, callback, t);
+        return d.window.job(callback, t);
     }
 
     /// The detail for a finished call, or null if the window closed or another item is shown.
@@ -92,8 +93,7 @@ pub const Detail = struct {
 
     fn build(d: *Detail) void {
         const w = d.window;
-        const entry = d.entry;
-        const bib = core.field(entry, "bib");
+        const bib = d.entry.bib;
 
         const top = gtk.box(false, 16);
         const jacket: *c.GtkPicture = @ptrCast(@alignCast(c.gtk_picture_new()));
@@ -101,34 +101,32 @@ pub const Detail = struct {
         c.gtk_widget_set_size_request(gtk.widget(jacket), 110, 165);
         c.gtk_widget_set_valign(gtk.widget(jacket), c.GTK_ALIGN_START);
         c.gtk_widget_add_css_class(gtk.widget(jacket), "jacket");
-        if (core.str(bib, "jacketLarge") orelse core.str(bib, "jacketSmall")) |url| list.loadJacket(w, jacket, url);
+        if (core.str(bib.jacket_large) orelse core.str(bib.jacket_small)) |url| list.loadJacket(w, jacket, url);
         gtk.append(top, gtk.widget(jacket));
         const heading = gtk.box(true, 4);
         c.gtk_widget_set_hexpand(heading, 1);
-        gtk.append(heading, gtk.label(core.str(bib, "title") orelse "Untitled", d.a(), &.{"title-2"}));
-        if (core.str(bib, "subtitle")) |s| gtk.append(heading, gtk.label(s, d.a(), &.{"dim-label"}));
-        const authors = core.items(core.field(bib, "authors"));
-        if (authors.len > 0 and authors[0] == .string) {
+        gtk.append(heading, gtk.label(list.bibTitle(bib), d.a(), &.{"title-2"}));
+        if (core.str(bib.subtitle)) |s| gtk.append(heading, gtk.label(s, d.a(), &.{"dim-label"}));
+        const authors = core.items([*:0]const u8, bib.authors, bib.authors_count);
+        if (authors.len > 0) {
             // Authors link to a search for their other works.
-            const author = c.gtk_button_new_with_label(gtk.z(d.a(), authors[0].string));
+            const author = c.gtk_button_new_with_label(authors[0]);
             c.gtk_widget_add_css_class(author, "flat");
             c.gtk_widget_set_halign(author, c.GTK_ALIGN_START);
             c.gtk_widget_set_tooltip_text(author, "Search for this author");
-            c.g_object_set_data_full(@ptrCast(@alignCast(author)), "author", c.g_strdup(gtk.z(d.a(), authors[0].string)), c.g_free);
+            c.g_object_set_data_full(@ptrCast(@alignCast(author)), "author", c.g_strdup(authors[0]), c.g_free);
             gtk.connect(author, "clicked", &onAuthor, d);
             gtk.append(heading, author);
         }
-        const code = core.str(bib, "format") orelse "UNKNOWN";
-        const format = core.now(d.a(), .{ .op = "formatName", .code = code, .labels = w.libraryLabels() });
-        var meta: []const u8 = if (format) |f| if (f == .string) f.string else code else code;
-        if (core.str(bib, "publicationDate")) |date| meta = std.fmt.allocPrint(d.a(), "{s} · {s}", .{ meta, list.year(date) }) catch meta;
+        var meta = core.formatName(d.a(), std.mem.span(bib.format), w.labels);
+        if (core.str(bib.publication_date)) |date| meta = std.fmt.allocPrint(d.a(), "{s} · {s}", .{ meta, list.year(date) }) catch meta;
         gtk.append(heading, gtk.label(meta, d.a(), &.{"dim-label"}));
         gtk.append(top, heading);
         gtk.append(d.content, top);
 
         d.buildActions();
 
-        if (core.str(bib, "summary")) |summary| {
+        if (core.str(bib.summary)) |summary| {
             const l = gtk.label(summary, d.a(), &.{"body"});
             c.gtk_label_set_selectable(@ptrCast(@alignCast(l)), 1);
             gtk.append(d.content, l);
@@ -152,15 +150,14 @@ pub const Detail = struct {
     fn buildActions(d: *Detail) void {
         const w = d.window;
         const entry = d.entry;
-        const bib = core.field(entry, "bib");
         const row = gtk.box(false, 8);
 
-        const hold = core.field(entry, "hold");
-        if (hold != null) {
-            const status = gtk.label(if (core.boolean(core.field(entry, "accountStatus"), "ready") == true) "Ready for pickup" else "On hold", d.a(), &.{"heading"});
+        if (entry.hold) |hold| {
+            const ready = if (entry.account_status) |s| s.ready else false;
+            const status = gtk.label(if (ready) "Ready for pickup" else "On hold", d.a(), &.{"heading"});
             c.gtk_widget_set_hexpand(status, 1);
             gtk.append(row, status);
-            if (core.boolean(hold, "canCancel") != false) {
+            if (hold.can_cancel) {
                 const cancel = c.gtk_button_new_with_mnemonic("_Cancel Hold");
                 c.gtk_widget_add_css_class(cancel, "destructive-action");
                 c.gtk_widget_add_css_class(cancel, "pill");
@@ -168,25 +165,25 @@ pub const Detail = struct {
                 gtk.append(row, cancel);
                 d.hold_button = cancel;
             }
-        } else if (core.field(entry, "checkout")) |checkout| {
-            const due = core.str(checkout, "dueDate");
+        } else if (entry.checkout) |checkout| {
+            const due = core.str(checkout.due_date);
             const text = if (due) |dd| std.fmt.allocPrint(d.a(), "Checked out · due {s}", .{dd}) catch "Checked out" else "Checked out";
             gtk.append(row, gtk.label(text, d.a(), &.{"heading"}));
         } else if (w.isGuest()) {
             gtk.append(row, gtk.label("Sign in to place holds.", d.a(), &.{"dim-label"}));
-        } else if (core.boolean(bib, "holdable") != false) {
+        } else if (entry.bib.holdable) {
             // Pickup location, defaulting to the account's preferred one.
             var names: std.ArrayList(?[*:0]const u8) = .empty;
             var ids: std.ArrayList([]const u8) = .empty;
             var selected: c.guint = 0;
-            const preferred = core.str(w.patron, "preferredPickup");
+            const preferred = if (w.patron) |p| core.str(p.preferred_pickup) else null;
             for (w.locations) |loc| {
-                const id = core.str(loc, "id") orelse continue;
+                const id = std.mem.span(loc.id);
                 if (preferred) |p| if (std.mem.eql(u8, p, id)) {
                     selected = @intCast(ids.items.len);
                 };
                 ids.append(d.a(), id) catch continue;
-                names.append(d.a(), gtk.z(d.a(), core.str(loc, "name") orelse id)) catch {};
+                names.append(d.a(), loc.name) catch {};
             }
             names.append(d.a(), null) catch {};
             d.pickup_ids = ids.items;
@@ -218,27 +215,28 @@ pub const Detail = struct {
             c.adw_preferences_group_set_description(group, gtk.z(d.a(), r.message));
             return;
         }
-        const copies = core.items(r.value);
+        const copies = if (r.get(capi.CopyList)) |l| core.items(capi.Copy, l.items, l.items_count) else &.{};
         if (copies.len == 0) c.adw_preferences_group_set_description(group, "No copies listed.");
         for (copies) |copy| {
             const row = c.adw_action_row_new();
-            c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), gtk.z(d.a(), core.str(copy, "branch") orelse "—"));
+            const branch = std.mem.span(copy.branch);
+            c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), if (branch.len > 0) copy.branch else "—");
             var parts: std.ArrayList(u8) = .empty;
-            for ([_][]const u8{ "collection", "callNumber" }) |key| if (core.str(copy, key)) |v| {
+            for ([_]?[*:0]const u8{ copy.collection, copy.call_number }) |field| if (core.str(field)) |v| {
                 if (parts.items.len > 0) parts.appendSlice(d.a(), " · ") catch {};
                 parts.appendSlice(d.a(), v) catch {};
             };
-            if (core.str(copy, "dueDate")) |due| {
+            if (core.str(copy.due_date)) |due| {
                 if (parts.items.len > 0) parts.appendSlice(d.a(), " · ") catch {};
                 parts.print(d.a(), "due {s}", .{due}) catch {};
             }
             if (parts.items.len > 0) c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), gtk.z(d.a(), parts.items));
-            const kind = core.str(copy, "kind") orelse "other";
+            const kind = std.mem.span(copy.kind);
             const class = gtk.z(d.a(), std.fmt.allocPrint(d.a(), "copy-{s}", .{kind}) catch "copy-other");
             const icon = c.gtk_image_new_from_icon_name(kindIcon(kind));
             c.gtk_widget_add_css_class(icon, class);
             c.adw_action_row_add_prefix(@ptrCast(@alignCast(row)), icon);
-            const status = gtk.label(core.str(copy, "status") orelse "", d.a(), &.{class});
+            const status = gtk.label(std.mem.span(copy.status), d.a(), &.{class});
             c.gtk_label_set_wrap(@ptrCast(@alignCast(status)), 0);
             c.adw_action_row_add_suffix(@ptrCast(@alignCast(row)), status);
             c.adw_preferences_group_add(group, row);
@@ -265,20 +263,21 @@ pub const Detail = struct {
         const d = current(data) orelse return;
         const group = d.details orelse return;
         if (!r.ok) return;
-        for (core.items(r.value)) |f| {
+        const fields = if (r.get(capi.DetailList)) |l| core.items(capi.DetailField, l.items, l.items_count) else &.{};
+        for (fields) |f| {
             var values: std.ArrayList(u8) = .empty;
-            for (core.items(core.field(f, "values"))) |v| if (v == .string) {
+            for (core.items([*:0]const u8, f.values, f.values_count)) |v| {
                 if (values.items.len > 0) values.append(d.a(), '\n') catch {};
-                values.appendSlice(d.a(), v.string) catch {};
-            };
+                values.appendSlice(d.a(), std.mem.span(v)) catch {};
+            }
             const row = c.adw_action_row_new();
             c.adw_action_row_set_subtitle_selectable(@ptrCast(@alignCast(row)), 1);
             c.gtk_widget_add_css_class(row, "property");
-            c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), gtk.z(d.a(), core.str(f, "label") orelse ""));
+            c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), f.label);
             c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), gtk.z(d.a(), values.items));
             c.adw_preferences_group_add(group, row);
         }
-        c.gtk_widget_set_visible(gtk.widget(group), @intFromBool(core.items(r.value).len > 0));
+        c.gtk_widget_set_visible(gtk.widget(group), @intFromBool(fields.len > 0));
     }
 
     // MARK: Actions
@@ -293,19 +292,15 @@ pub const Detail = struct {
 
     fn onPlaceHold(button: *c.GtkButton, data: ?*anyopaque) callconv(.c) void {
         const d: *Detail = @ptrCast(@alignCast(data.?));
-        const bib = core.field(d.entry, "bib");
+        const bib = d.entry.bib;
         var pickup: ?[]const u8 = null;
         if (d.pickup) |dd| {
             const i = c.gtk_drop_down_get_selected(dd);
             if (i < d.pickup_ids.len) pickup = d.pickup_ids[i];
         }
         c.gtk_widget_set_sensitive(gtk.widget(button), 0);
-        d.request(.{
-            .op = "placeHold",
-            .metadataId = core.str(bib, "id") orelse "",
-            .materialType = core.str(bib, "materialType") orelse "PHYSICAL",
-            .pickupBranch = pickup,
-        }, &onHoldPlaced);
+        const j = d.job(&onHoldPlaced) orelse return;
+        j.start(capi.biblio_place_hold, .{ d.window.client, j.z(std.mem.span(bib.id)), j.z(std.mem.span(bib.material_type)), j.optZ(pickup) });
     }
 
     fn onHoldPlaced(data: ?*anyopaque, r: *core.Result) void {
@@ -317,7 +312,7 @@ pub const Detail = struct {
         if (w.finishPending()) return;
         if (same) if (d.hold_button) |b| c.gtk_widget_set_sensitive(b, 1);
         if (!r.ok) return w.toast(r.message);
-        const title = core.str(core.field(d.entry, "bib"), "title") orelse "the item";
+        const title = list.bibTitle(d.entry.bib);
         w.toast(std.fmt.allocPrint(d.a(), "Hold placed on “{s}”.", .{title}) catch "Hold placed.");
         if (same) if (d.hold_button) |b| c.gtk_widget_set_visible(b, 0);
         w.holdsChanged();
@@ -325,11 +320,11 @@ pub const Detail = struct {
 
     fn onCancelHold(button: *c.GtkButton, data: ?*anyopaque) callconv(.c) void {
         const d: *Detail = @ptrCast(@alignCast(data.?));
-        const hold = core.field(d.entry, "hold") orelse return;
+        const hold = d.entry.hold orelse return;
         c.gtk_widget_set_sensitive(gtk.widget(button), 0);
-        const Ref = struct { id: []const u8, metadataId: []const u8 };
-        const refs = [_]Ref{.{ .id = core.str(hold, "id") orelse "", .metadataId = core.str(hold, "metadataId") orelse "" }};
-        d.request(.{ .op = "cancelHolds", .holds = refs }, &onHoldCancelled);
+        const j = d.job(&onHoldCancelled) orelse return;
+        const refs = j.new([1]capi.HoldRef{.{ .id = j.z(std.mem.span(hold.id)), .metadata_id = j.z(std.mem.span(hold.metadata_id)) }}) orelse return;
+        j.start(capi.biblio_cancel_holds, .{ d.window.client, refs, refs.len });
     }
 
     fn onHoldCancelled(data: ?*anyopaque, r: *core.Result) void {
@@ -341,8 +336,8 @@ pub const Detail = struct {
         if (w.finishPending()) return;
         if (same) if (d.hold_button) |b| c.gtk_widget_set_sensitive(b, 1);
         if (!r.ok) return w.toast(r.message);
-        const refused = core.items(core.field(r.value, "refused"));
-        if (refused.len > 0) return w.toast(core.str(refused[0], "reason") orelse "The library didn’t cancel this hold.");
+        const refused = if (r.get(capi.RefusalList)) |l| core.items(capi.Refusal, l.items, l.items_count) else &.{};
+        if (refused.len > 0) return w.toast(std.mem.span(refused[0].reason));
         w.toast("Hold cancelled.");
         if (same) w.hideDetail();
         w.holdsChanged();

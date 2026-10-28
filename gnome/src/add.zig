@@ -4,6 +4,7 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
 const core = @import("core.zig");
+const capi = core.capi;
 const store = @import("store.zig");
 const Launcher = @import("main.zig").Launcher;
 
@@ -18,8 +19,9 @@ pub const AddLibrary = struct {
     spinner: *c.GtkWidget,
     arena: std.heap.ArenaAllocator,
     /// The partner directory, loaded page by page in the background.
-    directory: std.ArrayList(std.json.Value) = .empty,
-    directory_arenas: std.ArrayList(*std.heap.ArenaAllocator) = .empty,
+    directory: std.ArrayList(capi.DirectoryEntry) = .empty,
+    /// The pages `directory` points into.
+    directory_pages: std.ArrayList(*capi.DirectoryPage) = .empty,
     busy: bool = false,
     closed: bool = false,
 
@@ -82,16 +84,17 @@ pub const AddLibrary = struct {
     }
 
     fn free(d: *AddLibrary) void {
-        for (d.directory_arenas.items) |arena| core.release(arena);
-        d.directory_arenas.deinit(core.gpa);
+        for (d.directory_pages.items) |page| core.release(page);
+        d.directory_pages.deinit(core.gpa);
         d.directory.deinit(core.gpa);
         d.arena.deinit();
         core.gpa.destroy(d);
     }
 
     fn loadDirectory(d: *AddLibrary, url: ?[]const u8) void {
+        const j = core.Job.create(&onDirectoryPage, d) orelse return;
         d.busy = true;
-        core.call(null, .{ .op = "directoryPage", .url = url }, &onDirectoryPage, d);
+        j.start(capi.biblio_directory_page, .{j.optZ(url)});
     }
 
     fn onDirectoryPage(data: ?*anyopaque, r: *core.Result) void {
@@ -99,12 +102,16 @@ pub const AddLibrary = struct {
         d.busy = false;
         if (d.closed) return d.free();
         if (!r.ok) return;
-        const entries = core.items(core.field(r.value, "entries"));
+        const page = r.get(capi.DirectoryPage) orelse return;
+        const entries = core.items(capi.DirectoryEntry, page.entries, page.entries_count);
         if (entries.len == 0) return;
-        d.directory_arenas.append(core.gpa, r.keep()) catch {};
+        d.directory_pages.append(core.gpa, r.keep(capi.DirectoryPage).?) catch {
+            r.kept = false;
+            return;
+        };
         d.directory.appendSlice(core.gpa, entries) catch {};
         d.showSuggestions();
-        if (core.str(r.value, "next")) |next| d.loadDirectory(next);
+        if (core.str(page.next)) |next| d.loadDirectory(next);
     }
 
     fn text(d: *AddLibrary) []const u8 {
@@ -126,12 +133,12 @@ pub const AddLibrary = struct {
         if (t.len < 2) return;
         var shown: usize = 0;
         for (d.directory.items, 0..) |entry, i| {
-            const name = core.str(entry, "name") orelse continue;
-            const site = core.str(entry, "website") orelse "";
+            const name = std.mem.span(entry.name);
+            const site = core.str(entry.website) orelse "";
             if (std.ascii.findIgnoreCase(name, t) == null and std.ascii.findIgnoreCase(site, t) == null) continue;
             const row = c.adw_action_row_new();
-            c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), gtk.z(d.a(), name));
-            if (core.str(entry, "region")) |region| c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), gtk.z(d.a(), region));
+            c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), entry.name);
+            if (entry.region) |region| c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), region);
             c.gtk_list_box_row_set_activatable(@ptrCast(@alignCast(row)), 1);
             c.g_object_set_data(@ptrCast(@alignCast(row)), "index", @ptrFromInt(i + 1));
             gtk.connect(row, "activated", &onSuggestion, d);
@@ -148,8 +155,9 @@ pub const AddLibrary = struct {
         const i = @intFromPtr(c.g_object_get_data(@ptrCast(@alignCast(row)), "index")) - 1;
         if (i >= d.directory.items.len or d.busy) return;
         const entry = d.directory.items[i];
+        const j = core.Job.create(&onResolved, d) orelse return;
         d.setWorking(true);
-        core.call(null, .{ .op = "resolveSubdomain", .name = core.str(entry, "name") orelse "", .website = core.str(entry, "website") }, &onResolved, d);
+        j.start(capi.biblio_resolve_subdomain, .{ j.z(std.mem.span(entry.name)), j.optZ(core.str(entry.website)) });
     }
 
     fn onResolved(data: ?*anyopaque, r: *core.Result) void {
@@ -158,7 +166,7 @@ pub const AddLibrary = struct {
             d.busy = false;
             return d.free();
         }
-        if (r.ok and r.value == .string) return d.lookUp(r.value.string);
+        if (r.ok) return d.lookUp(r.bytes);
         d.setWorking(false);
         d.showError("Couldn’t find that library’s catalog. Enter its subdomain instead.");
     }
@@ -172,15 +180,15 @@ pub const AddLibrary = struct {
         if (d.busy) return;
         var scratch = std.heap.ArenaAllocator.init(core.gpa);
         defer scratch.deinit();
-        const sub = core.now(scratch.allocator(), .{ .op = "subdomainFrom", .input = d.text() }) orelse return d.showError("Enter a library name or catalog address.");
-        if (sub != .string) return d.showError("Enter a library name or catalog address.");
+        const sub = core.subdomainFrom(scratch.allocator(), d.text()) orelse return d.showError("Enter a library name or catalog address.");
         d.setWorking(true);
-        d.lookUp(d.a().dupe(u8, sub.string) catch return);
+        d.lookUp(sub);
     }
 
     fn lookUp(d: *AddLibrary, subdomain: []const u8) void {
+        const j = core.Job.create(&onInfo, d) orelse return;
         d.busy = true;
-        core.call(null, .{ .op = "libraryInfo", .subdomain = subdomain }, &onInfo, d);
+        j.start(capi.biblio_library_info, .{j.z(subdomain)});
     }
 
     fn onInfo(data: ?*anyopaque, r: *core.Result) void {
@@ -191,7 +199,7 @@ pub const AddLibrary = struct {
         }
         d.setWorking(false);
         if (!r.ok) return d.showError(r.message);
-        store.upsert(r.value);
+        store.upsert(r.get(capi.LibraryInfo) orelse return);
         d.launcher.libraryAdded();
         _ = c.adw_dialog_close(d.dialog);
     }
@@ -315,7 +323,8 @@ pub const AddUser = struct {
         c.gtk_widget_set_sensitive(u.sign_in, 0);
         c.gtk_widget_set_visible(u.error_label, 0);
         u.client = core.client(u.subdomain, u.user);
-        core.call(u.client, .{ .op = "login", .force = true }, &onLogin, u);
+        const j = core.Job.create(&onLogin, u) orelse return;
+        j.start(capi.biblio_login, .{ u.client, true });
     }
 
     fn onLogin(data: ?*anyopaque, r: *core.Result) void {

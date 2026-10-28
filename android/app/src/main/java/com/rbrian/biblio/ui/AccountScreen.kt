@@ -54,11 +54,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.rbrian.biblio.core.Core
 import kotlinx.coroutines.launch
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonPrimitive
 
 /** Library card, email, password, pickup location, language and borrowing history. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,10 +61,10 @@ import kotlinx.serialization.json.jsonPrimitive
 fun AccountScreen(session: Session, onSwitch: () -> Unit) {
     val patron = session.patron
     val scope = rememberCoroutineScope()
-    fun save(op: String, done: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit, after: () -> Unit = {}) {
+    fun save(done: String, change: suspend Core.Client.() -> Unit, after: () -> Unit = {}) {
         scope.launch {
             try {
-                session.client.call(Boolean.serializer(), op, args)
+                session.client.change()
                 session.refreshPatron()
                 after()
                 session.message = done
@@ -97,7 +92,7 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                     value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.weight(1f),
                 )
-                Button(onClick = { save("changeEmail", "Email address updated.", { put("email", JsonPrimitive(email)) }) },
+                Button(onClick = { save("Email address updated.", { changeEmail(email) }) },
                     enabled = email.contains('@') && email != patron.email) { Text("Update") }
             }
 
@@ -119,9 +114,8 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                 Button(
                     onClick = {
                         val newPassword = new
-                        save("changePassword", "Password changed.", {
-                            put("current", JsonPrimitive(current)); put("new", JsonPrimitive(newPassword))
-                        }) {
+                        val currentPassword = current
+                        save("Password changed.", { changePassword(currentPassword, newPassword) }) {
                             // Keep the saved password and the core in step so automatic sign-in still works.
                             session.store.setPassword(session.library.subdomain, session.username, newPassword)
                             session.client.setPassword(newPassword)
@@ -137,14 +131,14 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                 options = session.locations.map { it.id to it.name },
                 selected = patron.preferredPickup,
                 footer = "Used for new holds unless you choose another location when placing one.",
-            ) { id -> save("setPickup", "Default pickup location saved.", { put("branchId", JsonPrimitive(id)) }) }
+            ) { id -> save("Default pickup location saved.", { setPickup(id) }) }
 
             Picker(
                 label = "Language",
                 options = session.library.languages.map { it to (session.library.labels["LANGUAGE_NAME.$it"] ?: it) },
                 selected = patron.language,
             ) { code ->
-                save("setLanguage", "Language changed.", { put("code", JsonPrimitive(code)) }) {
+                save("Language changed.", { setLanguage(code) }) {
                     session.search.reloadIfLoaded(); session.newTitles.reloadIfLoaded()
                 }
             }
@@ -156,7 +150,7 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                     supportingContent = { Text("When on, the library keeps a list of the items you check out.") },
                     trailingContent = {
                         Switch(checked = enabled, onCheckedChange = { on ->
-                            if (on) save("setBorrowingHistory", "Borrowing history turned on.", { put("enabled", JsonPrimitive(true)) })
+                            if (on) save("Borrowing history turned on.", { setBorrowingHistory(true) })
                             else confirmOff = true
                         })
                     },
@@ -168,7 +162,7 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                     confirmButton = {
                         TextButton(onClick = {
                             confirmOff = false
-                            save("setBorrowingHistory", "Borrowing history turned off.", { put("enabled", JsonPrimitive(false)) }) {
+                            save("Borrowing history turned off.", { setBorrowingHistory(false) }) {
                                 session.history.reloadIfLoaded()
                             }
                         }) { Text("Turn off", color = MaterialTheme.colorScheme.error) }
@@ -210,8 +204,7 @@ private fun LibraryCard(barcode: String) {
         onDispose { window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = previous ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } } }
     }
     val elements = remember(barcode) {
-        runCatching { (Core.callNow("codabar") { put("value", JsonPrimitive(barcode)) } as JsonArray).mapNotNull { it.jsonPrimitive.doubleOrNull } }
-            .getOrDefault(emptyList())
+        runCatching { Core.codabar(barcode)?.toList() }.getOrNull() ?: emptyList()
     }
     Column(
         Modifier.fillMaxWidth().widthIn(max = 420.dp).background(Color.White, RoundedCornerShape(8.dp)).padding(12.dp)

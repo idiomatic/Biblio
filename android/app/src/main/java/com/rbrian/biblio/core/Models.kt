@@ -2,9 +2,12 @@ package com.rbrian.biblio.core
 
 import kotlinx.serialization.Serializable
 
-/** The data every Biblio app shows, as libbiblio returns it (core/src/models.zig). */
+/**
+ * The data every Biblio app shows, as libbiblio returns it (core/src/models.zig). The JNI shim
+ * builds these with their primary constructors, whose parameters follow the core's C structs
+ * (android/native/src/jni.zig), so keep the parameter order and types in step.
+ */
 
-@Serializable
 data class Bib(
     val id: String,
     val title: String,
@@ -35,7 +38,6 @@ data class Bib(
         }
 }
 
-@Serializable
 data class Hold(
     val id: String,
     val metadataId: String,
@@ -50,7 +52,6 @@ data class Hold(
     val isReady get() = status == "READY_FOR_PICKUP"
 }
 
-@Serializable
 data class Checkout(
     val id: String,
     val metadataId: String,
@@ -60,7 +61,6 @@ data class Checkout(
     val timesRenewed: Int? = null,
 )
 
-@Serializable
 data class HistoryEntry(
     val id: String,
     val metadataId: String,
@@ -69,10 +69,8 @@ data class HistoryEntry(
 )
 
 /** The signed-in account's relationship to an item: kind is "onHold" or "checkedOut". */
-@Serializable
 data class AccountStatus(val kind: String, val ready: Boolean = false, val position: Int? = null, val due: String? = null)
 
-@Serializable
 data class ListEntry(
     val id: String,
     val bib: Bib,
@@ -85,10 +83,9 @@ data class ListEntry(
     val accountStatus: AccountStatus? = null,
 )
 
-@Serializable data class FacetValue(val value: String, val count: Int)
-@Serializable data class Facet(val id: String, val values: List<FacetValue>)
+data class FacetValue(val value: String, val count: Int)
+data class Facet(val id: String, val values: List<FacetValue>)
 
-@Serializable
 data class ListPage(
     val entries: List<ListEntry>,
     val page: Int,
@@ -100,7 +97,6 @@ data class ListPage(
     val appliedSort: String? = null,
 )
 
-@Serializable
 data class CopyAvailability(
     val id: String,
     val branch: String,
@@ -114,10 +110,9 @@ data class CopyAvailability(
     val kind: String = "other",
 )
 
-@Serializable data class DetailField(val label: String, val values: List<String>)
-@Serializable data class Location(val id: String, val name: String)
+data class DetailField(val label: String, val values: List<String>)
+data class Location(val id: String, val name: String)
 
-@Serializable
 data class Patron(
     val userId: Long,
     val accountId: Long,
@@ -142,31 +137,18 @@ data class LibraryInfo(
 ) {
     val displayName get() = shortName ?: name
 
-    private val labelsJson get() = kotlinx.serialization.json.JsonObject(labels.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) })
-
     /** The library's own name for a format code, else the core's English one. */
-    fun formatName(code: String): String = runCatching {
-        Core.callNow("formatName") { put("code", kotlinx.serialization.json.JsonPrimitive(code)); put("labels", labelsJson) }
-            .let { (it as kotlinx.serialization.json.JsonPrimitive).content }
-    }.getOrDefault(code.prettified())
+    fun formatName(code: String): String = runCatching { Core.formatName(code, labels) }.getOrDefault(code.prettified())
 
-    fun sortName(id: String): String = runCatching {
-        Core.callNow("sortName") { put("id", kotlinx.serialization.json.JsonPrimitive(id)); put("labels", labelsJson) }
-            .let { (it as kotlinx.serialization.json.JsonPrimitive).content }
-    }.getOrDefault(id.prettified())
+    fun sortName(id: String): String = runCatching { Core.sortName(id, labels) }.getOrDefault(id.prettified())
 }
 
 /** "NEWLY_ACQUIRED" → "Newly acquired" */
 fun String.prettified(): String = replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
-@Serializable
 data class DirectoryEntry(val name: String, val website: String? = null, val region: String? = null, val logo: String? = null)
 
-@Serializable
 data class DirectoryPage(val entries: List<DirectoryEntry>, val next: String? = null)
 
-@Serializable
+/** A hold the library declined to cancel. */
 data class Refusal(val holdId: String, val reason: String)
-
-@Serializable
-data class CancelResult(val refused: List<Refusal> = emptyList())

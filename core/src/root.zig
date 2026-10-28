@@ -1,18 +1,26 @@
-//! libbiblio's C interface: JSON in, JSON out. See include/biblio.h for the contract.
+//! libbiblio's C interface: clients, memory and transport here; the operations are in capi.zig.
+//! See include/biblio.h for the contract.
 
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const http = @import("http.zig");
 const json = @import("json.zig");
-const models = @import("models.zig");
-const library = @import("library.zig");
+/// The result types, for Zig frontends that call `Client` directly.
+pub const models = @import("models.zig");
+/// Library lookup and display helpers (`subdomainFrom`, `formatName`, …).
+pub const library = @import("library.zig");
 const client_mod = @import("client.zig");
-const Client = client_mod.Client;
-const Failure = client_mod.Failure;
-const J = json.J;
+pub const Client = client_mod.Client;
+pub const Failure = client_mod.Failure;
 
 pub const html = @import("html.zig");
+/// The typed C functions (`biblio_search`, `biblio_login`, …).
+pub const capi = @import("capi.zig");
+
+comptime {
+    _ = capi; // emit its exports
+}
 /// Locks and the allocator the core uses, for hosts written in Zig.
 pub const sync = @import("sync.zig");
 
@@ -24,6 +32,7 @@ test {
     _ = library;
     _ = client_mod;
     _ = @import("fixtures_test.zig");
+    _ = capi;
 }
 
 // MARK: Process-wide state
@@ -152,7 +161,7 @@ pub export fn biblio_free(ptr: ?*anyopaque) void {
     gpa.free(base[0 .. len + @sizeOf(Prefix)]);
 }
 
-fn hostString(s: []const u8) ?[*:0]u8 {
+pub fn hostString(s: []const u8) ?[*:0]u8 {
     const p = biblio_alloc(s.len + 1) orelse return null;
     @memcpy(p[0..s.len], s);
     p[s.len] = 0;
@@ -214,219 +223,7 @@ pub export fn biblio_client_free(h: ?*Handle) void {
     gpa.destroy(handle);
 }
 
-/// Runs one operation. `client` may be null for operations that need no account.
-/// Blocks until done; returns a JSON string the caller frees with `biblio_free`.
-pub export fn biblio_call(h: ?*Handle, request: [*:0]const u8) ?[*:0]u8 {
-    var arena_state = std.heap.ArenaAllocator.init(gpa);
-    defer arena_state.deinit();
-    const a = arena_state.allocator();
-    const out = call(a, if (h) |x| x.client else null, std.mem.span(request));
-    return hostString(out);
-}
-
-// MARK: Dispatch
-
-const Op = enum {
-    // Library information (no client needed).
-    subdomainFrom,
-    libraryInfo,
-    libraryExists,
-    directoryPage,
-    resolveSubdomain,
-    formatName,
-    sortName,
-    readableTint,
-    codabar,
-    fetchImage,
-    // Client operations.
-    configure,
-    status,
-    login,
-    patron,
-    search,
-    availability,
-    details,
-    locations,
-    holds,
-    checkouts,
-    history,
-    placeHold,
-    cancelHolds,
-    accountSettings,
-    setPickup,
-    setLanguage,
-    setBorrowingHistory,
-    changeEmail,
-    changePassword,
-};
-
-/// Runs a request and returns `{"ok":true,"result":…}` or `{"ok":false,"error":{…}}`.
-pub fn call(a: Allocator, c: ?*Client, request: []const u8) []const u8 {
-    var failure: Failure = .{ .kind = "unexpected", .message = "Something went wrong." };
-    const req = json.parse(a, request);
-    const op_name = req.get("op").str(a) orelse "";
-    const op = std.meta.stringToEnum(Op, op_name) orelse {
-        failure = .{ .kind = "badRequest", .message = std.fmt.allocPrint(a, "Unknown operation “{s}”.", .{op_name}) catch "Unknown operation." };
-        return encodeFailure(a, failure);
-    };
-    var out: std.Io.Writer.Allocating = .init(a);
-    var w: std.json.Stringify = .{ .writer = &out.writer, .options = .{ .emit_null_optional_fields = false } };
-    run(a, c, op, req, &w, &failure) catch return encodeFailure(a, failure);
-    return out.written();
-}
-
-fn encodeFailure(a: Allocator, failure: Failure) []const u8 {
-    return std.json.Stringify.valueAlloc(a, .{ .ok = false, .@"error" = failure }, .{ .emit_null_optional_fields = false }) catch
-        "{\"ok\":false,\"error\":{\"kind\":\"outOfMemory\",\"message\":\"Out of memory.\"}}";
-}
-
-fn ok(w: *std.json.Stringify, result: anytype) !void {
-    try w.beginObject();
-    try w.objectField("ok");
-    try w.write(true);
-    try w.objectField("result");
-    try w.write(result);
-    try w.endObject();
-}
-
-fn requireString(a: Allocator, req: J, key: []const u8, failure: *Failure) ![]const u8 {
-    return req.get(key).str(a) orelse {
-        failure.* = .{ .kind = "badRequest", .message = std.fmt.allocPrint(a, "Missing “{s}”.", .{key}) catch "Missing field." };
-        return error.BadRequest;
-    };
-}
-
-fn requireClient(c: ?*Client, failure: *Failure) !*Client {
-    return c orelse {
-        failure.* = .{ .kind = "badRequest", .message = "This operation needs a client." };
-        return error.BadRequest;
-    };
-}
-
-fn lookup() library.Lookup {
+/// Library lookups (info, directory, images) through the shared transport and throttle.
+pub fn lookup() library.Lookup {
     return .{ .fetcher = .{ .transport = transport(), .throttle = &throttle, .jar = null } };
-}
-
-fn run(a: Allocator, c_opt: ?*Client, op: Op, req: J, w: *std.json.Stringify, failure: *Failure) !void {
-    switch (op) {
-        .subdomainFrom => try ok(w, library.subdomainFrom(a, try requireString(a, req, "input", failure))),
-        .libraryInfo => {
-            const subdomain = try requireString(a, req, "subdomain", failure);
-            var message: []const u8 = "";
-            const info = lookup().info(a, subdomain, &message) catch {
-                failure.* = .{ .kind = "notALibrary", .message = message };
-                return error.Failed;
-            };
-            try ok(w, info);
-        },
-        .libraryExists => try ok(w, lookup().exists(a, try requireString(a, req, "subdomain", failure))),
-        .directoryPage => {
-            const page = lookup().directoryPage(a, req.get("url").str(a)) catch {
-                failure.* = .{ .kind = "network", .message = "The library directory could not be loaded." };
-                return error.Failed;
-            };
-            try ok(w, page);
-        },
-        .resolveSubdomain => try ok(w, lookup().resolveSubdomain(a, try requireString(a, req, "name", failure), req.get("website").str(a))),
-        .formatName => try ok(w, library.formatName(a, req.get("labels"), try requireString(a, req, "code", failure))),
-        .sortName => try ok(w, library.sortName(a, req.get("labels"), try requireString(a, req, "id", failure))),
-        .readableTint => {
-            var buf: [7]u8 = undefined;
-            try ok(w, library.readableTint(try requireString(a, req, "hex", failure), req.get("dark").boolean() orelse false, &buf));
-        },
-        .codabar => try ok(w, models.codabar(a, try requireString(a, req, "value", failure))),
-        .fetchImage => {
-            // For apps without an image loader of their own (GNOME): jacket art as base64.
-            const url = try requireString(a, req, "url", failure);
-            const res = lookup().fetcher.fetch(a, .{ .method = "GET", .url = url }) catch {
-                failure.* = .{ .kind = "network", .message = "The image could not be loaded." };
-                return error.Failed;
-            };
-            if (res.status != 200) {
-                failure.* = .{ .kind = "http", .status = res.status, .message = "The image could not be loaded." };
-                return error.Failed;
-            }
-            const encoder = std.base64.standard.Encoder;
-            const out = try a.alloc(u8, encoder.calcSize(res.body.len));
-            try ok(w, encoder.encode(out, res.body));
-        },
-        else => {
-            const c = try requireClient(c_opt, failure);
-            try runClient(a, c, op, req, w, failure);
-        },
-    }
-}
-
-fn runClient(a: Allocator, c: *Client, op: Op, req: J, w: *std.json.Stringify, failure: *Failure) !void {
-    switch (op) {
-        .configure => {
-            if (req.get("language").str(a)) |l| c.setLanguage(l);
-            if (req.get("sampleAccount").boolean()) |b| c.sample_account = b;
-            try ok(w, true);
-        },
-        .status => {
-            c.status_mutex.lock();
-            defer c.status_mutex.unlock();
-            try ok(w, .{
-                .active = c.active.load(.monotonic),
-                .title = if (c.status_title) |s| a.dupe(u8, s) catch null else null,
-                .url = if (c.status_url) |s| a.dupe(u8, s) catch null else null,
-                .bytes = c.status_bytes,
-            });
-        },
-        .login => try ok(w, try c.login(a, req.get("force").boolean() orelse false, failure)),
-        .patron => try ok(w, c.currentPatron(a)),
-        .search => {
-            const q = std.json.parseFromValueLeaky(Client.SearchQuery, a, req.v.?, .{ .ignore_unknown_fields = true }) catch {
-                failure.* = .{ .kind = "badRequest", .message = "Search needs a “query”." };
-                return error.BadRequest;
-            };
-            try ok(w, try c.search(a, q, failure));
-        },
-        .availability => try ok(w, try c.availability(a, try requireString(a, req, "metadataId", failure), failure)),
-        .details => try ok(w, try c.detailFields(a, try requireString(a, req, "metadataId", failure), failure)),
-        .locations => try ok(w, try c.locations(a, failure)),
-        .holds, .checkouts, .history => {
-            const kind: models.BorrowingKind = switch (op) {
-                .holds => .holds,
-                .checkouts => .checkouts,
-                else => .history,
-            };
-            try ok(w, try c.borrowing(a, kind, req.get("page").int() orelse 1, req.get("sort").str(a), failure));
-        },
-        .placeHold => {
-            try c.placeHold(a, try requireString(a, req, "metadataId", failure), req.get("materialType").str(a) orelse "PHYSICAL", req.get("pickupBranch").str(a), failure);
-            try ok(w, true);
-        },
-        .cancelHolds => {
-            var refs: std.ArrayList(Client.HoldRef) = .empty;
-            for (req.get("holds").items()) |v| {
-                const h = J.of(v);
-                try refs.append(a, .{ .id = h.get("id").str(a) orelse continue, .metadataId = h.get("metadataId").str(a) orelse continue });
-            }
-            try ok(w, .{ .refused = try c.cancelHolds(a, refs.items, failure) });
-        },
-        .accountSettings => try ok(w, try c.accountSettings(a, failure)),
-        .setPickup => {
-            try c.setDefaultPickupLocation(a, try requireString(a, req, "branchId", failure), failure);
-            try ok(w, true);
-        },
-        .setLanguage => {
-            try c.changeLanguage(a, try requireString(a, req, "code", failure), failure);
-            try ok(w, true);
-        },
-        .setBorrowingHistory => {
-            try c.setBorrowingHistory(a, req.get("enabled").boolean() orelse return error.BadRequest, failure);
-            try ok(w, true);
-        },
-        .changeEmail => {
-            try c.changeEmail(a, try requireString(a, req, "email", failure), failure);
-            try ok(w, true);
-        },
-        .changePassword => {
-            try c.changePassword(a, try requireString(a, req, "current", failure), try requireString(a, req, "new", failure), failure);
-            try ok(w, true);
-        },
-        else => unreachable,
-    }
 }
