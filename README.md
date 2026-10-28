@@ -142,6 +142,8 @@ As in the Apple app. [PLATFORMS.md](PLATFORMS.md#notes) lists what the other app
 | Windows | The .NET 8 SDK and the Windows App SDK |
 | Terminal | Nothing more; any xterm-256color terminal on macOS or Linux |
 
+The GNOME and terminal apps also cross-compile for 64-bit Raspberry Pi OS.
+
 ## Building
 
 [PLATFORMS.md](PLATFORMS.md#building) has each platform's steps.

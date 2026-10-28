@@ -38,7 +38,7 @@ The core needs Zig 0.17. From `core/`:
 |---|---|
 | `zig build` | `zig-out/lib/libbiblio.a`, the shared library (`.dylib`, `.so` or `.dll`), `zig-out/include/biblio.h`, and the `biblio` CLI |
 | `zig build test` | Runs the unit and fixture tests |
-| `zig build -Dtarget=<triple> -Doptimize=safe` | The library for another platform, such as `x86_64-windows-gnu` or `aarch64-linux-android` |
+| `zig build -Dtarget=<triple> -Doptimize=safe` | The library for another platform, such as `x86_64-windows-gnu`, `aarch64-linux-android` or `aarch64-linux-gnu` (Raspberry Pi) |
 | `zig build apple` | Static libraries for macOS, iOS and the iOS simulator under `zig-out/apple/` |
 
 Each app builds the core in its own way:

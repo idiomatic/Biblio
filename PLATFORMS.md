@@ -90,15 +90,39 @@ bottom line; `/` searches, Tab switches sections, Enter opens an item, and `h` a
 and cancel holds. Character widths are counted one column per code point, so wide (CJK)
 characters can misalign a row.
 
+**Raspberry Pi.** The core, the terminal app and the GNOME app cross-compile for 64-bit
+Raspberry Pi OS (Pi 3, 4, 5 and Zero 2 W) from any machine with Zig, as `aarch64-linux-gnu`.
+The core and the terminal app need nothing else:
+
+```bash
+cd core && zig build -Dtarget=aarch64-linux-gnu -Doptimize=safe
+cd tui && zig build -Dtarget=aarch64-linux-gnu -Doptimize=safe
+```
+
+The GNOME app links against GTK, so it builds against a Debian 13 (trixie) sysroot, the base
+of current Raspberry Pi OS. `gnome/debian-sysroot.sh` downloads the packages from Debian and
+unpacks them (about 25 MB to download, 160 MB on disk; it needs curl, xz, ar and tar, not dpkg):
+
+```bash
+cd gnome
+./debian-sysroot.sh arm64 /tmp/sysroot-arm64
+zig build -Dtarget=aarch64-linux-gnu -Dsysroot=/tmp/sysroot-arm64/root -Doptimize=safe
+```
+
+Copy `zig-out/` to the Pi. The binaries need glibc 2.28 or later; the GNOME app also needs
+the `libgtk-4-1`, `libadwaita-1-0` and `libsecret-1-0` packages, which come with Raspberry Pi
+OS's desktop (Bookworm's libadwaita 1.2 is too old). The same script with `amd64` builds an
+x86_64 Linux sysroot. 32-bit Raspberry Pi OS isn't supported.
+
 ## Status on this branch
 
 | Part | Checked |
 |---|---|
-| Core | 20 unit and fixture tests pass; the C header's 27 structs match the core's layout. Live guest requests work (library info, search, availability, directory). Cross-compiles for macOS, iOS, the iOS simulator, Linux, Android and Windows. |
+| Core | 20 unit and fixture tests pass; the C header's 27 structs match the core's layout. Live guest requests work (library info, search, availability, directory). Cross-compiles for macOS, iOS, the iOS simulator, x86_64 and aarch64 Linux (Raspberry Pi), Android and Windows. |
 | Apple | Builds for macOS and the iOS simulator. On iPhone 17, sign-in, search, item details and availability, the holds list and the holds and checkout counts work through the core's typed functions. |
-| GNOME | Type-checks against GTK 4.18, libadwaita 1.7 and libsecret headers. Run it with `zig build check -Dtarget=x86_64-linux-gnu -Dheaders=<sysroot>`, where the sysroot holds headers extracted from Debian's -dev packages. Not linked or run yet. |
+| GNOME | Links for x86_64 and aarch64 Linux (Raspberry Pi) against Debian trixie sysroots from `gnome/debian-sysroot.sh` (GTK 4.18, libadwaita 1.7). `zig build check -Dsysroot=<sysroot>` type-checks without linking. Not run yet. |
 | Android | The JNI library builds for both ABIs. `zig build test` in `android/native` checks its constructor signatures against the Kotlin models and builds models through a stand-in JVM. The Kotlin has not been compiled. |
-| Terminal | Builds for macOS and cross-compiles for x86_64 Linux; 6 tests pass (keys, text fitting and wrapping, colors, status lines). Driven through a pseudo-terminal against WCCLS as a guest: adding the library, search, item details and availability, New Titles, paging, sorting and quitting work. Signed-in screens and holds haven't been tried against a live account. |
+| Terminal | Builds for macOS and cross-compiles for x86_64 and aarch64 Linux (Raspberry Pi); 6 tests pass (keys, text fitting and wrapping, colors, status lines). Driven through a pseudo-terminal against WCCLS as a guest: adding the library, search, item details and availability, New Titles, paging, sorting and quitting work. Signed-in screens and holds haven't been tried against a live account. |
 | Windows | The core builds for x86_64 and aarch64 Windows. The C# structs in `Interop.cs` match the C header's layout (25 structs, checked by script). The C# has not been compiled. |
 
 ## Notes
