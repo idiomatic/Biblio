@@ -3,10 +3,11 @@ import Foundation
 
 /// The bridge to libbiblio, the Zig core shared with the Android, GNOME and Windows apps.
 ///
-/// Each operation is a JSON request answered with `{"ok": true, "result": …}` or
-/// `{"ok": false, "error": {…}}` (see core/include/biblio.h). Calls block, so they run on
-/// a queue of their own rather than Swift's cooperative pool. The core's HTTP goes through
-/// URLSession so requests use the system trust store, proxies and VPNs.
+/// The app uses the core's typed C interface (see core/include/biblio.h): each operation
+/// returns a `biblio_result` and fills a C struct that CoreModels.swift copies into the app's
+/// models. Calls block, so they run on a queue of their own rather than Swift's cooperative
+/// pool. The core's HTTP goes through URLSession so requests use the system trust store,
+/// proxies and VPNs.
 nonisolated enum Core {
     private static let queue = DispatchQueue(label: "com.rbrian.Biblio.core", attributes: .concurrent)
 
@@ -18,58 +19,45 @@ nonisolated enum Core {
         }, nil)
     }()
 
-    struct Failure: LocalizedError, Decodable, Sendable {
-        var kind: String
-        var message: String
-        var status: Int?
-        var errorDescription: String? { message }
-    }
-
-    private struct Response<T: Decodable>: Decodable {
-        var ok: Bool
-        var result: T?
-        var error: Failure?
-    }
-
-    /// Runs one operation. `client` is nil for operations that need no account.
-    static func call<T: Decodable & Sendable>(_ client: OpaquePointer?, _ request: [String: Any],
-                                               as type: T.Type = T.self) async throws -> T {
+    /// Runs blocking core calls off the cooperative pool.
+    static func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         _ = setUp
-        let body = try JSONSerialization.data(withJSONObject: request)
-        let text = String(decoding: body, as: UTF8.self)
-        let box = ClientBox(client)
-        let data: Data = await withCheckedContinuation { continuation in
-            queue.async {
-                let out = text.withCString { biblio_call(box.pointer, $0) }
-                defer { biblio_free(out) }
-                continuation.resume(returning: out.map { Data(bytes: $0, count: strlen($0)) } ?? Data())
-            }
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { continuation.resume(with: Result { try work() }) }
         }
-        return try decode(data, as: type)
     }
 
-    /// Runs an operation that never touches the network (status, cached patron, display helpers).
-    static func callNow<T: Decodable>(_ client: OpaquePointer?, _ request: [String: Any], as type: T.Type = T.self) throws -> T {
-        _ = setUp
-        let body = try JSONSerialization.data(withJSONObject: request)
-        let out = String(decoding: body, as: UTF8.self).withCString { biblio_call(client, $0) }
-        defer { biblio_free(out) }
-        return try decode(out.map { Data(bytes: $0, count: strlen($0)) } ?? Data(), as: type)
+    /// Runs a call that fills a result struct, converts it and frees it. A NULL result (only
+    /// `biblio_patron` before sign-in) is nil.
+    static func fetch<C, T>(_ call: (UnsafeMutablePointer<UnsafeMutablePointer<C>?>, UnsafeMutablePointer<biblio_error>) -> biblio_result,
+                            free: (UnsafeMutablePointer<C>?) -> Void,
+                            _ convert: (C) -> T) throws -> T? {
+        var out: UnsafeMutablePointer<C>?
+        try check { call(&out, $0) }
+        defer { free(out) }
+        return out.map { convert($0.pointee) }
     }
 
-    private static func decode<T: Decodable>(_ data: Data, as type: T.Type) throws -> T {
-        let response = try JSONDecoder().decode(Response<T>.self, from: data)
-        if let error = response.error { throw error }
-        if let result = response.result { return result }
-        // `null` results decode to nil for optional result types.
-        if let none = (Optional<Any>.none as Any) as? T { return none }
-        throw Failure(kind: "unexpected", message: "The library returned an unexpected response.")
+    /// Runs a call and throws its error, if any.
+    static func check(_ call: (UnsafeMutablePointer<biblio_error>) -> biblio_result) throws {
+        var err = biblio_error()
+        defer { biblio_error_clear(&err) }
+        let result = call(&err)
+        guard result != BIBLIO_OK else { return }
+        let message = string(err.message) ?? "The library returned an unexpected response."
+        switch result {
+        case BIBLIO_MISSING_CREDENTIALS: throw BiblioError.missingCredentials
+        case BIBLIO_SIGN_IN_REQUIRED: throw BiblioError.signInRequired
+        case BIBLIO_LOGIN_FAILED: throw BiblioError.loginFailed(message)
+        case BIBLIO_HTTP: throw BiblioError.http(Int(err.status), message)
+        default: throw BiblioError.unexpected(message)
+        }
     }
 
-    /// Lets a client pointer cross into the core's queue.
-    private struct ClientBox: @unchecked Sendable {
-        let pointer: OpaquePointer?
-        init(_ pointer: OpaquePointer?) { self.pointer = pointer }
+    /// Takes a string the core allocated with biblio_alloc.
+    static func take(_ p: UnsafeMutablePointer<CChar>?) -> String? {
+        defer { biblio_free(p) }
+        return p.map { String(cString: $0) }
     }
 
     /// Copies a Swift string into memory the core frees.
@@ -79,6 +67,25 @@ nonisolated enum Core {
         utf8.withUnsafeBufferPointer { p.update(from: $0.baseAddress!, count: utf8.count) }
         return p
     }
+
+    /// C strings for the length of a call; nil stays NULL.
+    static func withCStrings<R>(_ strings: [String?], _ body: ([UnsafePointer<CChar>?]) throws -> R) rethrows -> R {
+        let copies = strings.map { $0.flatMap { strdup($0) } }
+        defer { copies.forEach { free($0) } }
+        return try body(copies.map { $0.map { UnsafePointer($0) } })
+    }
+}
+
+// MARK: Reading C structs
+
+nonisolated func string(_ p: UnsafePointer<CChar>?) -> String? { p.map { String(cString: $0) } }
+
+nonisolated func strings(_ p: UnsafePointer<UnsafePointer<CChar>?>?, _ count: Int) -> [String] {
+    buffer(p, count).compactMap(string)
+}
+
+nonisolated func buffer<T>(_ p: UnsafePointer<T>?, _ count: Int) -> UnsafeBufferPointer<T> {
+    UnsafeBufferPointer(start: count > 0 ? p : nil, count: count)
 }
 
 /// Sends the core's requests with URLSession: one request at a time per call, no redirects
@@ -86,14 +93,18 @@ nonisolated enum Core {
 nonisolated private final class Transport: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     static let shared = Transport()
 
-    private lazy var session: URLSession = {
+    /// Set once in `init`; it can't be created before `self` exists, since `self` is its delegate.
+    private var session: URLSession!
+
+    override init() {
+        super.init()
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil
         config.httpShouldSetCookies = false
         config.httpCookieAcceptPolicy = .never
         config.urlCache = nil
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-    }()
+        session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {

@@ -11,8 +11,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A10000000000000000000021 /* BiblioCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BiblioCore.xcframework; path = apple/build/BiblioCore.xcframework; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000001 /* Biblio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Biblio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000021 /* BiblioCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BiblioCore.xcframework; path = build/BiblioCore.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -142,7 +142,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/apple/build-core.sh\"\n";
+			shellScript = "\"$SRCROOT/build-core.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -256,10 +256,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Biblio-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Biblio;
@@ -296,10 +296,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Biblio-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Biblio;

@@ -1,3 +1,4 @@
+import BiblioCore
 import Foundation
 import Observation
 
@@ -11,7 +12,7 @@ nonisolated enum LibraryLookup {
 
     /// Accepts "wccls", "WCCLS", "https://smpl.bibliocommons.com/", "smpl.bibliocommons.com/v2/search?…".
     static func subdomain(from input: String) -> String? {
-        (try? Core.callNow(nil, ["op": "subdomainFrom", "input": input], as: String?.self)) ?? nil
+        Core.take(biblio_subdomain_from(input))
     }
 
     /// Fetches a page from a library's own website (for icons), paced with the app's other requests.
@@ -22,16 +23,16 @@ nonisolated enum LibraryLookup {
     }
 
     static func exists(_ subdomain: String) async -> Bool {
-        (try? await Core.call(nil, ["op": "libraryExists", "subdomain": subdomain], as: Bool.self)) ?? false
+        (try? await Core.run { biblio_library_exists(subdomain) }) ?? false
     }
 
     /// Fetches name, brand colour, languages and catalog labels from the library's public search page.
     static func info(for subdomain: String) async throws -> LibraryInfo {
-        do {
-            return try await Core.call(nil, ["op": "libraryInfo", "subdomain": subdomain], as: LibraryInfo.self)
-        } catch let failure as Core.Failure {
-            throw BiblioError.unexpected(failure.message)
+        let info = try await Core.run {
+            try Core.fetch({ biblio_library_info(subdomain, $0, $1) }, free: biblio_library_info_free, LibraryInfo.init)
         }
+        guard let info else { throw BiblioError.unexpected("The library returned an unexpected response.") }
+        return info
     }
 }
 
@@ -39,7 +40,7 @@ nonisolated enum LibraryLookup {
 /// fetched page by page in the background.
 @Observable
 final class LibraryDirectory {
-    nonisolated struct Entry: Identifiable, Hashable, Sendable, Decodable {
+    nonisolated struct Entry: Identifiable, Hashable, Sendable {
         var name: String
         var website: URL?
         var region: String?
@@ -47,16 +48,6 @@ final class LibraryDirectory {
         var logo: URL?
         var id: String { name }
         var iconKey: String { website?.host()?.lowercased() ?? name }
-
-        private enum CodingKeys: String, CodingKey { case name, website, region, logo }
-
-        init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            name = try c.decode(String.self, forKey: .name)
-            website = try c.decodeIfPresent(String.self, forKey: .website).flatMap(URL.init(string:))
-            region = try c.decodeIfPresent(String.self, forKey: .region)
-            logo = try c.decodeIfPresent(String.self, forKey: .logo).flatMap(URL.init(string:))
-        }
     }
 
     static let shared = LibraryDirectory()
@@ -70,13 +61,15 @@ final class LibraryDirectory {
         started = true
         isLoading = true
         Task {
-            struct Page: Decodable, Sendable { var entries: [Entry]; var next: String? }
             var next: String? = nil
             var seen = Set<String>()
             repeat {
-                var request: [String: Any] = ["op": "directoryPage"]
-                if let next { request["url"] = next }
-                guard let page = try? await Core.call(nil, request, as: Page.self) else { break }
+                let url = next
+                guard let page = try? await Core.run({
+                    try Core.fetch({ biblio_directory_page(url, $0, $1) }, free: biblio_directory_page_free) {
+                        (entries: buffer($0.entries, $0.entries_count).map(Entry.init), next: string($0.next))
+                    }
+                }) ?? nil else { break }
                 let fresh = page.entries.filter { seen.insert($0.name).inserted }
                 entries.append(contentsOf: fresh)
                 if fresh.isEmpty { break }
@@ -97,8 +90,7 @@ final class LibraryDirectory {
 
     /// Guesses the catalog subdomain for a directory entry and confirms it against the gateway.
     nonisolated static func resolveSubdomain(for entry: Entry) async -> String? {
-        var request: [String: Any] = ["op": "resolveSubdomain", "name": entry.name]
-        if let website = entry.website { request["website"] = website.absoluteString }
-        return (try? await Core.call(nil, request, as: String?.self)) ?? nil
+        let website = entry.website?.absoluteString
+        return (try? await Core.run { Core.take(biblio_resolve_subdomain(entry.name, website)) }) ?? nil
     }
 }

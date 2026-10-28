@@ -44,63 +44,72 @@ actor BiblioClient {
         handle = Handle(subdomain: subdomain, username: username,
                         password: password ?? { Keychain.password(subdomain: subdomain, username: username) })
         let language = Locale.preferredLanguages.first ?? "en-US"
-        var configure: [String: Any] = ["op": "configure", "language": language]
+        var sampleAccount: Int32 = -1
         #if DEBUG
         // For README screenshots: launch with `-SampleAccount YES` to hide the real card and email.
-        configure["sampleAccount"] = UserDefaults.standard.bool(forKey: "SampleAccount")
+        sampleAccount = UserDefaults.standard.bool(forKey: "SampleAccount") ? 1 : 0
         #endif
-        _ = try? Core.callNow(handle.pointer, configure, as: Bool.self)
+        biblio_configure(handle.pointer, language, sampleAccount)
     }
 
     /// The patron from the last login (no network request).
-    var patron: Patron? { try? Core.callNow(handle.pointer, ["op": "patron"], as: Patron?.self) }
+    var patron: Patron? {
+        try? Core.fetch({ biblio_patron(handle.pointer, $0, $1) }, free: biblio_patron_free, Patron.init) ?? nil
+    }
 
     // MARK: Authentication
 
     /// Logs in (or joins a login already in progress) and returns the patron.
     @discardableResult
     func login(force: Bool = false) async throws -> Patron {
-        try await call(["op": "login", "force": force])
+        try await fetch({ biblio_login($0, force, $1, $2) }, free: biblio_patron_free, Patron.init)
     }
 
     func setLanguage(_ code: String) {
-        _ = try? Core.callNow(handle.pointer, ["op": "configure", "language": code], as: Bool.self)
+        biblio_configure(handle.pointer, code, -1)
     }
 
     // MARK: Requests
 
-    /// Runs a core operation, reporting it in the status bar.
-    func call<T: Decodable & Sendable>(_ request: [String: Any], as type: T.Type = T.self) async throws -> T {
+    /// Runs core calls on the client, reporting them in the status bar.
+    func run<T: Sendable>(_ work: @escaping @Sendable (OpaquePointer?) throws -> T) async throws -> T {
         let status = self.status
+        let handle = self.handle
         await status.began()
         do {
-            let result = try await Core.call(handle.pointer, request, as: type)
+            let result = try await Core.run { try work(handle.pointer) }
             await status.finished(lastFetch())
             return result
-        } catch let failure as Core.Failure {
-            await status.finished(lastFetch())
-            throw Self.error(failure)
         } catch {
-            await status.finished(nil)
+            await status.finished(lastFetch())
             throw error
         }
     }
 
-    private nonisolated func lastFetch() -> FetchStatus.Fetch? {
-        struct Status: Decodable { var title: String?; var url: String?; var bytes: Int }
-        guard let s = try? Core.callNow(handle.pointer, ["op": "status"], as: Status.self),
-              let title = s.title, let url = s.url.flatMap(URL.init(string:)) else { return nil }
-        return .init(title: title, url: url, bytes: s.bytes)
+    /// Runs a call that fills a result struct and returns it as an app model.
+    func fetch<C, T: Sendable>(_ call: @escaping @Sendable (OpaquePointer?, UnsafeMutablePointer<UnsafeMutablePointer<C>?>,
+                                                            UnsafeMutablePointer<biblio_error>) -> biblio_result,
+                               free: @escaping @Sendable (UnsafeMutablePointer<C>?) -> Void,
+                               _ convert: @escaping @Sendable (C) -> T) async throws -> T {
+        try await run { client in
+            guard let value = try Core.fetch({ call(client, $0, $1) }, free: free, convert) else {
+                throw BiblioError.unexpected("The library returned an unexpected response.")
+            }
+            return value
+        }
     }
 
-    private static func error(_ f: Core.Failure) -> Error {
-        switch f.kind {
-        case "missingCredentials": BiblioError.missingCredentials
-        case "signInRequired": BiblioError.signInRequired
-        case "loginFailed": BiblioError.loginFailed(f.message)
-        case "http": BiblioError.http(f.status ?? 0, f.message)
-        default: BiblioError.unexpected(f.message)
-        }
+    /// Runs a call that returns nothing but success or failure.
+    func perform(_ call: @escaping @Sendable (OpaquePointer?, UnsafeMutablePointer<biblio_error>) -> biblio_result) async throws {
+        try await run { client in try Core.check { call(client, $0) } }
+    }
+
+    private nonisolated func lastFetch() -> FetchStatus.Fetch? {
+        try? Core.fetch({ biblio_status(handle.pointer, $0, $1) }, free: biblio_fetch_status_free) { s in
+            string(s.title).flatMap { title in
+                string(s.url).flatMap(URL.init(string:)).map { FetchStatus.Fetch(title: title, url: $0, bytes: Int(s.bytes)) }
+            }
+        } ?? nil
     }
 
     /// Owns the core client and the password callback's context.

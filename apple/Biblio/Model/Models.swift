@@ -1,7 +1,7 @@
 import Foundation
 
 /// A catalog record ("bib") as it appears in search results, holds, checkouts and history.
-/// Parsed from the gateway by libbiblio (core/src/models.zig).
+/// Parsed from the gateway by libbiblio (core/src/models.zig); see CoreModels.swift.
 nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
     var id: String
     var title: String
@@ -28,7 +28,7 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
         case heldCopies, availableCopies, totalCopies, onOrderCopies
     }
 
-    /// Decodes a bib from libbiblio (or a drag-and-drop transfer). A malformed jacket URL
+    /// Decodes a bib from a drag-and-drop transfer. A malformed jacket URL
     /// drops the jacket rather than the whole list.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -129,7 +129,7 @@ nonisolated enum AccountStatus: Hashable, Sendable {
     case checkedOut(due: String?)
 }
 
-nonisolated struct Hold: Hashable, Sendable, Decodable {
+nonisolated struct Hold: Hashable, Sendable {
     var id: String
     var metadataId: String
     var status: String
@@ -139,25 +139,22 @@ nonisolated struct Hold: Hashable, Sendable, Decodable {
     var pickupByDate: String?
     var suspendEndDate: String?
     var canCancel: Bool
-
 }
 
-nonisolated struct Checkout: Hashable, Sendable, Decodable {
+nonisolated struct Checkout: Hashable, Sendable {
     var id: String
     var metadataId: String
     var status: String?
     var dueDate: String?
     var checkoutDate: String?
     var timesRenewed: Int?
-
 }
 
-nonisolated struct HistoryEntry: Hashable, Sendable, Decodable {
+nonisolated struct HistoryEntry: Hashable, Sendable {
     var id: String
     var metadataId: String
     var checkoutDate: String?
     var returnedDate: String?
-
 }
 
 /// A search facet such as FORMAT, with its values and counts.
@@ -186,7 +183,7 @@ nonisolated struct ListPage: Sendable {
 }
 
 /// "Availability by location" row.
-nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable, Decodable {
+nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable {
     var id: String
     var branch: String
     var status: String
@@ -199,7 +196,7 @@ nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable, Decodable
 }
 
 /// A labelled detail field from the full catalog record.
-nonisolated struct DetailField: Identifiable, Hashable, Sendable, Decodable {
+nonisolated struct DetailField: Identifiable, Hashable, Sendable {
     var id: String { label + values.joined() }
     var label: String
     var values: [String]
@@ -211,7 +208,7 @@ nonisolated struct Location: Identifiable, Hashable, Sendable, Codable {
 }
 
 /// The signed-in patron.
-nonisolated struct Patron: Hashable, Sendable, Decodable {
+nonisolated struct Patron: Hashable, Sendable {
     var userId: Int
     var accountId: Int
     var name: String
