@@ -10,16 +10,38 @@ struct ItemListView<Header: View>: View {
 
     @State private var selection = Set<ListEntry.ID>()
     @State private var confirmCancel: [Hold] = []
+    /// The selection bar's Cancel button asked, so its dialog appears there.
+    @State private var confirmBarCancel = false
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     /// Owned here (not by the system Edit button) so window updates can't reset it mid-selection.
     @State private var editMode: EditMode = .inactive
+    @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
+
+    /// Selecting on iPhone, where the item details panel would cover the list: rows only
+    /// toggle, and a bottom toolbar holds the actions.
+    private var selectingInPlace: Bool {
+        #if os(iOS)
+        editMode.isEditing && sizeClass == .compact
+        #else
+        false
+        #endif
+    }
+
+    /// Only lists with actions for several items at once (holding search results, cancelling
+    /// holds) select more than one; guests and checked-out items and history select one at a time.
+    private var selectsMultiple: Bool {
+        guard !session.isGuest else { return false }
+        switch model.source {
+        case .search, .holds: return true
+        case .checkouts, .history: return false
+        }
+    }
 
     var body: some View {
         Group {
-            // Guests can't act on several items at once, so their lists select one at a time.
-            if session.isGuest {
+            if !selectsMultiple {
                 List(selection: Binding(get: { selection.first }, set: { selection = Set([$0].compactMap { $0 }) })) { rows }
             } else {
                 List(selection: $selection) { rows }
@@ -32,13 +54,13 @@ struct ItemListView<Header: View>: View {
         .listStyle(.inset)
         #endif
         .overlay { emptyState }
-        .refreshable { await model.refresh() }
-        .focusedSceneValue(\.refreshList, RefreshAction { Task { await model.refresh() } })
+        .refreshable { await refresh() }
+        .focusedSceneValue(\.refreshList, RefreshAction { Task { await refresh() } })
         .contextMenu(forSelectionType: ListEntry.ID.self) { ids in
             menu(for: entries(ids))
         }
         .onChange(of: selection) { _, ids in
-            session.select(entries: entries(ids))
+            if !selectingInPlace { session.select(entries: entries(ids)) }
         }
         .task { model.loadIfNeeded() }
         // A list left open while the app was in the background may have gone stale.
@@ -48,19 +70,11 @@ struct ItemListView<Header: View>: View {
         .toolbar {
             ListControls(model: model, library: session.library)
             #if os(macOS)
-            if session.isGuest {
-                ToolbarItem {
-                    Button(action: session.requestSignIn) {
-                        Label("Sign In", systemImage: "person.crop.circle")
-                    }
-                    .help("Sign in to place holds and see your account")
-                }
-            }
             ToolbarItem { InspectorToggle(session: session) }
             #endif
             #if os(iOS)
             // Multiple selection on iOS/iPadOS happens in edit mode (or with a two-finger drag).
-            if !session.isGuest {
+            if selectsMultiple {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         withAnimation { editMode = editMode.isEditing ? .inactive : .active }
@@ -73,17 +87,71 @@ struct ItemListView<Header: View>: View {
                     }
                 }
             }
+            let selected = entries(selection)
+            if selectingInPlace && !(selected.holdable.isEmpty && selected.cancellableHolds.isEmpty) {
+                ToolbarItem(placement: .bottomBar) { selectionActions(selected) }
+            }
             #endif
         }
         .confirmationDialog(confirmCancel.count == 1 ? "Cancel this hold?" : "Cancel \(confirmCancel.count) holds?",
                             isPresented: .constant(!confirmCancel.isEmpty), presenting: confirmCancel) { holds in
-            Button(holds.count == 1 ? "Cancel Hold" : "Cancel \(holds.count) Holds", role: .destructive) {
-                Task { await session.cancel(holds) }
-                selection.subtract(holds.map { "hold-\($0.id)" })
-                confirmCancel = []
-            }
-            Button(confirmCancel.count == 1 ? "Keep Hold" : "Keep Holds", role: .cancel) { confirmCancel = [] }
+            cancelActions(holds)
         }
+    }
+
+    #if os(iOS)
+    /// Hold or cancel the selected items, whichever applies; the selection checkmarks show
+    /// what's selected.
+    private func selectionActions(_ selected: [ListEntry]) -> some View {
+        let holdable = selected.holdable
+        let cancellable = selected.cancellableHolds
+        return HStack {
+            if !holdable.isEmpty {
+                Button(holdable.count == 1 ? "Hold 1 Item" : "Hold \(holdable.count) Items") {
+                    Task { await session.placeHolds(holdable.map(\.bib)) }
+                    endSelecting()
+                }
+            }
+            Spacer()
+            if !cancellable.isEmpty {
+                Button(cancellable.count == 1 ? "Cancel 1 Hold" : "Cancel \(cancellable.count) Holds", role: .destructive) {
+                    confirmBarCancel = true
+                }
+                .tint(.red)
+                .confirmationDialog(cancellable.count == 1 ? "Cancel this hold?" : "Cancel \(cancellable.count) holds?",
+                                    isPresented: $confirmBarCancel) {
+                    cancelActions(cancellable)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity)
+    }
+    #endif
+
+    @ViewBuilder
+    private func cancelActions(_ holds: [Hold]) -> some View {
+        Button(holds.count == 1 ? "Cancel Hold" : "Cancel \(holds.count) Holds", role: .destructive) {
+            Task { await session.cancel(holds) }
+            selection.subtract(holds.map { "hold-\($0.id)" })
+            confirmCancel = []
+            endSelecting()
+        }
+        Button(holds.count == 1 ? "Keep Hold" : "Keep Holds", role: .cancel) { confirmCancel = [] }
+    }
+
+    /// Reloads the list and the open item's details, which may have changed with it.
+    private func refresh() async {
+        session.detailsRevision += 1
+        await model.refresh()
+    }
+
+    private func endSelecting() {
+        #if os(iOS)
+        guard selectingInPlace else { return }
+        selection = []
+        withAnimation { editMode = .inactive }
+        #endif
     }
 
     @ViewBuilder

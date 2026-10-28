@@ -67,3 +67,36 @@ struct CodabarView: View {
         }
     }
 }
+
+/// A toolbar button that shows the library card's barcode, for scanning at the library:
+/// a popover on macOS and iPad, a sheet on iPhone.
+struct LibraryCardButton: View {
+    var session: WindowSession
+    @State private var showing = false
+
+    var body: some View {
+        Button {
+            showing = true
+        } label: {
+            Label("Library Card", systemImage: "barcode")
+        }
+        .help("Show your library card")
+        .disabled(session.patron?.barcode == nil)
+        .popover(isPresented: $showing) {
+            if let barcode = session.patron?.barcode {
+                VStack(spacing: 12) {
+                    Text(session.displayName)
+                        .font(.headline)
+                    CodabarView(value: barcode)
+                    Text("Show this at the library’s self-checkout or desk.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+                .frame(idealWidth: 380)
+                .presentationDetents([.height(240)])
+            }
+        }
+    }
+}

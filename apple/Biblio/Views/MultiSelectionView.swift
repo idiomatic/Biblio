@@ -9,18 +9,9 @@ struct MultiSelectionView: View {
     @State private var working = false
     @State private var confirmCancel = false
 
-    private var holdable: [ListEntry] {
-        entries.filter { $0.kind == .catalog && $0.bib.holdable && $0.accountStatus == nil }
-    }
-
-    private var cancellable: [Hold] {
-        entries.compactMap(\.hold).filter(\.canCancel)
-    }
-
-    /// Selected holds the library won't let the patron cancel (e.g. ready for pickup).
-    private var uncancellable: Int {
-        entries.compactMap(\.hold).filter { !$0.canCancel }.count
-    }
+    private var holdable: [ListEntry] { entries.holdable }
+    private var cancellable: [Hold] { entries.cancellableHolds }
+    private var uncancellable: Int { entries.uncancellableHoldCount }
 
     var body: some View {
         ScrollView {
@@ -113,5 +104,21 @@ struct MultiSelectionView: View {
             }
             Button("Keep Holds", role: .cancel) {}
         }
+    }
+}
+
+extension [ListEntry] {
+    /// Catalog items the patron hasn't held or checked out, which can be held.
+    var holdable: [ListEntry] {
+        filter { $0.kind == .catalog && $0.bib.holdable && $0.accountStatus == nil }
+    }
+
+    var cancellableHolds: [Hold] {
+        compactMap(\.hold).filter(\.canCancel)
+    }
+
+    /// Holds the library won't let the patron cancel (e.g. ready for pickup).
+    var uncancellableHoldCount: Int {
+        compactMap(\.hold).filter { !$0.canCancel }.count
     }
 }

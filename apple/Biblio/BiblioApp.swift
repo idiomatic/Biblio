@@ -36,7 +36,9 @@ struct WindowRoot: View {
         Group {
             if let session {
                 MainView(session: session, signOut: signOut, signIn: signIn)
+                    #if os(iOS)
                     .id(ObjectIdentifier(session))
+                    #endif
                     .tint(session.library.tint)
             } else {
                 LauncherView(preselectedLibrary: lastLibrary) { library, user in

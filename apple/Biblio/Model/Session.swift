@@ -86,6 +86,8 @@ final class WindowSession {
     /// All selected rows when more than one is selected (the inspector then shows bulk actions).
     var selectedEntries: [ListEntry] = []
     var showInspector = false
+    /// Bumped by a list refresh so the open item's details and availability load again.
+    var detailsRevision = 0
     var searchText = ""
     var banner: Banner?
     /// Shows the login picker, so a guest can sign in without leaving the window.

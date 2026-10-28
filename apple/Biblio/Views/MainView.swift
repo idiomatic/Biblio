@@ -41,9 +41,15 @@ struct MainView: View {
             .onChange(of: controlActiveState, initial: true) { _, state in
                 if state == .key { SessionRegistry.shared.activate(session) }
             }
+            .onChange(of: ObjectIdentifier(session)) {
+                if controlActiveState == .key { SessionRegistry.shared.activate(session) }
+            }
             #endif
     }
 
+    // A guest signing in swaps the session. On macOS the split view stays (replacing it leaves
+    // the window's toolbar without its sidebar section), and only the detail and inspector,
+    // which keep per-session state, start afresh.
     private var content: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
@@ -51,15 +57,9 @@ struct MainView: View {
             NavigationStack {
                 detail
             }
-            #if os(iOS)
-            // Around the whole split view, the inspector leaves a window restored at launch
-            // with a sidebar under its navigation bar on iPhone.
-            .inspector(isPresented: $session.showInspector) { inspector }
-            #endif
+            .id(ObjectIdentifier(session))
         }
-        #if os(macOS)
-        .inspector(isPresented: $session.showInspector) { inspector }
-        #endif
+        .modifier(ItemInspector(isPresented: $session.showInspector) { inspector.id(ObjectIdentifier(session)) })
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .principal) {
@@ -77,7 +77,7 @@ struct MainView: View {
         #if os(macOS)
         .navigationSubtitle(session.displayName)
         #endif
-        .task { await session.start() }
+        .task(id: ObjectIdentifier(session)) { await session.start() }
         .sheet(isPresented: $session.showingSignIn, onDismiss: session.signInDismissed) {
             LoginPicker(library: session.library, signIn: signIn)
         }
@@ -125,8 +125,11 @@ struct MainView: View {
             // from the toolbar.
             #if os(iOS)
             if !session.isGuest {
-                Section(session.displayName) {
-                    sidebarRow(.account)
+                Section {
+                    NavigationLink(value: AppSection.account) {
+                        Label(session.displayName, systemImage: AppSection.account.systemImage)
+                    }
+                    .accessibilityHint(AppSection.account.title)
                     Button(action: signOut) {
                         Label("Switch User or Library", systemImage: "arrow.left.arrow.right")
                     }
@@ -138,12 +141,26 @@ struct MainView: View {
         .navigationTitle(session.library.shortName ?? "Library")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 190, ideal: 220)
+        .toolbar {
+            ToolbarItem {
+                if session.isGuest {
+                    Button(action: session.requestSignIn) {
+                        Label("Sign In", systemImage: "person.crop.circle")
+                    }
+                    .help("Sign in to place holds and see your account")
+                } else {
+                    LibraryCardButton(session: session)
+                }
+            }
+        }
         #else
         .toolbar {
-            if session.isGuest {
-                // Back to the library and user menu, to pick a user or another library.
-                ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
+                if session.isGuest {
+                    // Back to the library and user menu, to pick a user or another library.
                     Button("Sign In", systemImage: "person.crop.circle", action: signOut)
+                } else {
+                    LibraryCardButton(session: session)
                 }
             }
         }
@@ -175,6 +192,29 @@ struct MainView: View {
         case .history: BorrowingListView(session: session, section: .history)
         case .account: AccountView(session: session)
         }
+    }
+}
+
+/// Item details: an inspector beside the window's content, or a sheet at compact width.
+private struct ItemInspector<Panel: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    @ViewBuilder var panel: Panel
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        // An inspector is a sheet on iPhone anyway, and as one it leaves a window restored at
+        // launch with its sidebar under the navigation bar.
+        if sizeClass == .compact {
+            content.sheet(isPresented: $isPresented) { panel }
+        } else {
+            content.inspector(isPresented: $isPresented) { panel }
+        }
+        #else
+        content.inspector(isPresented: $isPresented) { panel }
+        #endif
     }
 }
 

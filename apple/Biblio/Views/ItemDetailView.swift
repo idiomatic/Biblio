@@ -44,8 +44,9 @@ struct ItemDetailView: View {
         .onChange(of: session.patron?.preferredPickup, initial: true) { _, preferred in
             if pickup == nil { pickup = preferred }
         }
-        .task(id: bib.id) {
-            pickup = session.patron?.preferredPickup
+        // A list refresh bumps the revision, so the item's availability and details load again.
+        .task(id: [bib.id, String(session.detailsRevision)]) {
+            pickup = pickup ?? session.patron?.preferredPickup
             async let avail: Void = loadAvailability()
             async let details: Void = loadFields()
             _ = await (avail, details)

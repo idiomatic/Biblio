@@ -381,6 +381,12 @@ struct BorrowingListView: View {
                      emptyTitle: emptyTitle, emptySystemImage: section.systemImage) {
             if section == .holds {
                 HoldFilterBar(model: model)
+                    // Matches the space above the bar, which the list's top margin adds.
+                    #if os(macOS)
+                    .padding(.bottom, 10)
+                    #else
+                    .padding(.bottom, 16)
+                    #endif
                     .listRowSeparator(.hidden)
             }
         }

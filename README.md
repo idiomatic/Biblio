@@ -115,7 +115,7 @@ As in the Apple app. [PLATFORMS.md](PLATFORMS.md#notes) lists what the other app
 - Select several items in a list to place or cancel holds on all of them at once.
 - List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
   checked out or overdue.
-- Your library card as a scannable Codabar barcode.
+- Your library card as a scannable Codabar barcode, one toolbar button away.
 - Settings for email, password, pickup location, language and borrowing history. On macOS they
   live in the Settings window.
 
