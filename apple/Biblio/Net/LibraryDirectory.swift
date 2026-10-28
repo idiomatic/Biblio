@@ -2,24 +2,11 @@ import BiblioCore
 import Foundation
 import Observation
 
-/// Reads public, unauthenticated library information (through libbiblio, except icons).
+/// Reads public, unauthenticated library information through libbiblio.
 nonisolated enum LibraryLookup {
-    private static let session: URLSession = {
-        let c = URLSessionConfiguration.ephemeral
-        c.httpAdditionalHeaders = ["User-Agent": "Biblio/1.0 (Apple; SwiftUI patron app)"]
-        return URLSession(configuration: c)
-    }()
-
     /// Accepts "wccls", "WCCLS", "https://smpl.bibliocommons.com/", "smpl.bibliocommons.com/v2/search?…".
     static func subdomain(from input: String) -> String? {
         Core.take(biblio_subdomain_from(input))
-    }
-
-    /// Fetches a page from a library's own website (for icons), paced with the app's other requests.
-    static func get(_ url: URL) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await Throttle.shared.run { try await session.data(from: url) }
-        guard let http = response as? HTTPURLResponse else { throw BiblioError.unexpected("No response") }
-        return (data, http)
     }
 
     static func exists(_ subdomain: String) async -> Bool {

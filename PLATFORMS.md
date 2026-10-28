@@ -134,7 +134,6 @@ x86_64 Linux sysroot. 32-bit Raspberry Pi OS isn't supported.
   - multi-select bulk holds
   - the "people waiting" client sort
   - placeholder rows for unloaded pages
-  - library icons
   - the hold-status filter
 - The terminal app shows account settings but doesn't change them, and has no format filter
   or advanced search yet.

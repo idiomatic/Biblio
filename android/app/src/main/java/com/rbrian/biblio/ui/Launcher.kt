@@ -96,7 +96,12 @@ fun LibrariesScreen(store: LibraryStore, onOpen: (String) -> Unit) {
                         supportingContent = {
                             Text(when (lib.users.size) { 0 -> "No users"; 1 -> "1 user"; else -> "${lib.users.size} users" })
                         },
-                        leadingContent = { Icon(Icons.Filled.LocalLibrary, contentDescription = null) },
+                        leadingContent = {
+                            LibraryIcon(
+                                LibraryIcons.key(lib.website, lib.subdomain), lib.website, subdomain = lib.subdomain,
+                                tint = brandColor(lib.primaryColor) ?: MaterialTheme.colorScheme.primary,
+                            )
+                        },
                         modifier = Modifier.clickable { onOpen(lib.subdomain) },
                     )
                 }
@@ -175,6 +180,7 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
                     ListItem(
                         headlineContent = { Text(entry.name) },
                         supportingContent = entry.region?.let { { Text(it) } },
+                        leadingContent = { LibraryIcon(LibraryIcons.key(entry.website, entry.name), entry.website, logo = entry.logo) },
                         modifier = Modifier.clickable(enabled = !working) {
                             working = true
                             scope.launch {

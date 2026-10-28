@@ -370,6 +370,23 @@ double *biblio_codabar(const char *value, size_t *count);
 /* Image bytes through the shared throttle, for apps without an image loader. */
 biblio_result biblio_fetch_image(const char *url, unsigned char **bytes, size_t *len, biblio_error *err);
 
+typedef enum {
+    BIBLIO_ICON_NONE = 0,
+    BIBLIO_ICON_SQUARE, /* fills a square tile */
+    BIBLIO_ICON_LOGO,   /* a wide logo with white margins: trim with biblio_logo_bounds, draw fitted on white */
+} biblio_icon_kind;
+/* A library's icon: its website's largest square icon (at least 64 px), else the directory
+ * logo, else a small favicon. website NULL reads it from subdomain's catalog; logo may be NULL.
+ * The image bytes (PNG, ICO, GIF, BMP or JPEG) go in *bytes, freed with biblio_free; NONE
+ * leaves them NULL. Apps cache the result. */
+biblio_icon_kind biblio_library_icon(const char *website, const char *subdomain, const char *logo,
+                                     unsigned char **bytes, size_t *len);
+/* The part of a decoded logo that isn't white margin, padded, as x, y, width, height. Pixels
+ * are rows stride bytes apart of channels bytes: 3 colors in any order, then alpha if 4.
+ * false if the logo is blank. No network. */
+bool biblio_logo_bounds(const unsigned char *pixels, size_t width, size_t height, size_t stride,
+                        size_t channels, size_t bounds[4]);
+
 /* Client operations. */
 
 /* language NULL leaves it unchanged; sample_account < 0 leaves it unchanged. No network. */

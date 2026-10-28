@@ -295,6 +295,8 @@ these columns:
 | `biblio_readable_tint` | `hex`, `dark` | `"#RRGGBB"` or NULL | No |
 | `biblio_codabar` | `value`, `*count` | `double` array, or NULL | No |
 | `biblio_fetch_image` | `url` | Image bytes and their length | Yes |
+| `biblio_library_icon` | `website`, `subdomain`, `logo`, `*bytes`, `*len` | `biblio_icon_kind`, and image bytes unless `NONE` | Yes |
+| `biblio_logo_bounds` | `pixels`, `width`, `height`, `stride`, `channels`, `bounds[4]` | `true` and the content rectangle, or `false` | No |
 
 **`biblio_subdomain_from`** turns what someone typed into a catalog subdomain. It accepts
 `wccls`, `WCCLS`, `https://smpl.bibliocommons.com/` and `smpl.bibliocommons.com/v2/search?…`.
@@ -334,6 +336,19 @@ It returns NULL if the number has characters Codabar can't encode.
 **`biblio_fetch_image`** fetches an image, such as a book jacket, through the shared throttle.
 It is for apps without an image loader of their own (GNOME). Apps that have one should use it
 instead.
+
+**`biblio_library_icon`** finds a library's icon for its row in the library list. It prefers
+the largest square icon on the library's website (an apple-touch-icon or a sized
+`rel="icon"`, checking the first three candidates) once it is at least 64 pixels wide. Next
+comes `logo`, the wide partner logo from the directory (`BIBLIO_ICON_LOGO`), then a smaller
+favicon. With `website` NULL it reads the website from `subdomain`'s catalog. The bytes may
+be PNG, ICO, GIF, BMP or JPEG. Apps cache the result on disk, keyed by the website's host, so
+each library's site is asked only once.
+
+**`biblio_logo_bounds`** finds the part of a decoded logo that isn't white margin, padded by
+a twentieth of its size, so apps can crop it before fitting it on a white tile. Pixels are
+rows `stride` bytes apart of `channels` bytes each: three colors in any order, then alpha
+when there are four.
 
 ### On a client
 
@@ -635,6 +650,8 @@ Zig 0.17's `std.Io.Threaded` doesn't compile.
   - `biblio info SUBDOMAIN`
   - `biblio search SUBDOMAIN TEXT`
   - `biblio availability SUBDOMAIN METADATA_ID`
+  - `biblio icon SUBDOMAIN`, which prints the icon's kind and size (up to five requests: the
+    catalog, the library's website and three icons)
   - `biblio --user NAME holds SUBDOMAIN` (also `checkouts` and `history`), with the password
     in `$BIBLIO_PASSWORD`
 

@@ -155,6 +155,8 @@ internal static unsafe class Interop
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_format_name(byte* code, Pair* labels, nuint count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_sort_name(byte* id, Pair* labels, nuint count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern double* biblio_codabar(byte* value, nuint* count);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int biblio_library_icon(byte* website, byte* subdomain, byte* logo, byte** bytes, nuint* len);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte biblio_logo_bounds(byte* pixels, nuint width, nuint height, nuint stride, nuint channels, nuint* bounds);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int biblio_login(IntPtr client, byte force, CPatron** @out, Error* err);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int biblio_patron(IntPtr client, CPatron** @out, Error* err);
@@ -229,6 +231,28 @@ internal static unsafe class Interop
         if (widths == null) return [];
         try { return new ReadOnlySpan<double>(widths, (int)count).ToArray(); }
         finally { biblio_free(widths); }
+    }
+
+    /// <summary>A library's icon (PNG, ICO, GIF, BMP or JPEG), or null; a logo is wide, to trim with LogoBounds.</summary>
+    public static (bool IsLogo, byte[] Bytes)? LibraryIcon(string? website, string? subdomain, string? logo)
+    {
+        using var s = new Strings();
+        byte* bytes = null;
+        nuint len;
+        var kind = biblio_library_icon(s[website], s[subdomain], s[logo], &bytes, &len);
+        if (bytes == null) return null;
+        try { return (kind == 2, new ReadOnlySpan<byte>(bytes, (int)len).ToArray()); }
+        finally { biblio_free(bytes); }
+    }
+
+    /// <summary>The part of a decoded logo that isn't white margin: x, y, width, height; null if blank.</summary>
+    public static int[]? LogoBounds(byte[] pixels, int width, int height, int stride, int channels)
+    {
+        if (width <= 0 || height <= 0 || pixels.Length < (height - 1) * stride + width * channels) return null;
+        var bounds = stackalloc nuint[4];
+        fixed (byte* p = pixels)
+            if (biblio_logo_bounds(p, (nuint)width, (nuint)height, (nuint)stride, (nuint)channels, bounds) == 0) return null;
+        return [(int)bounds[0], (int)bounds[1], (int)bounds[2], (int)bounds[3]];
     }
 
     // MARK: Client operations

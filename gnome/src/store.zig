@@ -53,6 +53,10 @@ pub fn name(lib: std.json.Value) []const u8 {
     return if (lib.object.get("name")) |s| if (s == .string) s.string else subdomain(lib) else subdomain(lib);
 }
 
+pub fn website(lib: std.json.Value) ?[]const u8 {
+    return if (lib.object.get("website")) |s| if (s == .string) s.string else null else null;
+}
+
 pub fn shortName(lib: std.json.Value) []const u8 {
     return if (lib.object.get("shortName")) |s| if (s == .string) s.string else name(lib) else name(lib);
 }

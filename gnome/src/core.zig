@@ -19,6 +19,8 @@ pub const Result = struct {
     value: ?*anyopaque = null,
     /// Image bytes from `fetchImage`, or the string a string-returning function gave.
     bytes: []const u8 = &.{},
+    /// What `fetchIcon` found.
+    icon: biblio.icon.Kind = .none,
     kept: bool = false,
 
     /// The result struct, such as `capi.ListPage`.
@@ -51,6 +53,7 @@ pub const Job = struct {
     value: ?*anyopaque = null,
     bytes: ?[*]u8 = null,
     len: usize = 0,
+    icon: biblio.icon.Kind = .none,
 
     pub fn create(callback: Callback, ctx: ?*anyopaque) ?*Job {
         const j = gpa.create(Job) catch return null;
@@ -106,12 +109,7 @@ pub const Job = struct {
                 gtk.idle(deliver, job);
             }
         };
-        const thread = std.Thread.spawn(.{}, Run.run, .{ j, args }) catch {
-            j.result = .out_of_memory;
-            gtk.idle(deliver, j);
-            return;
-        };
-        thread.detach();
+        j.spawn(Run.run, .{ j, args });
     }
 
     /// Fetches image bytes through the core (paced like other library requests).
@@ -122,7 +120,23 @@ pub const Job = struct {
                 gtk.idle(deliver, job);
             }
         };
-        const thread = std.Thread.spawn(.{}, Run.run, .{ j, j.z(url) }) catch {
+        j.spawn(Run.run, .{ j, j.z(url) });
+    }
+
+    /// Looks up a library's icon through the core (see `biblio_library_icon`): its kind in
+    /// `Result.icon` and its bytes in `Result.bytes`.
+    pub fn fetchIcon(j: *Job, website: ?[]const u8, subdomain: ?[]const u8, logo: ?[]const u8) void {
+        const Run = struct {
+            fn run(job: *Job, w: ?[*:0]const u8, s: ?[*:0]const u8, l: ?[*:0]const u8) void {
+                job.icon = capi.biblio_library_icon(w, s, l, &job.bytes, &job.len);
+                gtk.idle(deliver, job);
+            }
+        };
+        j.spawn(Run.run, .{ j, j.optZ(website), j.optZ(subdomain), j.optZ(logo) });
+    }
+
+    fn spawn(j: *Job, comptime run: anytype, args: anytype) void {
+        const thread = std.Thread.spawn(.{}, run, args) catch {
             j.result = .out_of_memory;
             gtk.idle(deliver, j);
             return;
@@ -144,6 +158,7 @@ fn deliver(data: ?*anyopaque) callconv(.c) c.gboolean {
         .message = if (job.err.message) |m| std.mem.span(m) else "Biblio couldn’t reach its library engine.",
         .value = job.value,
         .bytes = if (job.bytes) |b| b[0..job.len] else &.{},
+        .icon = job.icon,
     };
     job.callback(job.ctx, &result);
     if (!result.kept) release(result.value);

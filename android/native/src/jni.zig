@@ -40,9 +40,11 @@ const GetArrayLength = 171;
 const NewObjectArray = 172;
 const GetObjectArrayElement = 173;
 const NewByteArray = 176;
+const NewIntArray = 179;
 const NewDoubleArray = 182;
 const GetByteArrayRegion = 200;
 const SetByteArrayRegion = 208;
+const SetIntArrayRegion = 211;
 const SetDoubleArrayRegion = 214;
 const GetStringRegion = 220;
 const ExceptionCheck = 228;
@@ -290,6 +292,14 @@ const Call = struct {
         return array;
     }
 
+    fn ints(call: *Call, values: []const i32) jarray {
+        const env = call.env;
+        const array = slot(env, NewIntArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, @intCast(values.len));
+        if (array == null) return null;
+        slot(env, SetIntArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const i32) callconv(.c) void)(env, array, 0, @intCast(values.len), values.ptr);
+        return array;
+    }
+
     fn bytes(call: *Call, values: []const u8) jarray {
         const env = call.env;
         const array = slot(env, NewByteArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, @intCast(values.len));
@@ -519,6 +529,38 @@ export fn Java_com_rbrian_biblio_core_Core_nativeFetchImage(env: JNIEnv, _: jcla
     defer if (data) |d| biblio.biblio_free(d);
     if (!call.check(result)) return null;
     return call.bytes(if (data) |d| d[0..len] else &.{});
+}
+
+/// Core.nativeLibraryIcon(website: String?, subdomain: String?, logo: String?): ByteArray? —
+/// the icon's kind (1 square, 2 logo) as the first byte, then the image; null if none.
+export fn Java_com_rbrian_biblio_core_Core_nativeLibraryIcon(env: JNIEnv, _: jclass, website: jstring, subdomain: jstring, logo: jstring) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    var data: ?[*]u8 = null;
+    var len: usize = 0;
+    const kind = capi.biblio_library_icon(call.optStr(website), call.optStr(subdomain), call.optStr(logo), &data, &len);
+    defer if (data) |d| biblio.biblio_free(d);
+    const image = data orelse return null;
+    const out = call.a().alloc(u8, len + 1) catch return null;
+    out[0] = @intCast(@backingInt(kind));
+    @memcpy(out[1..], image[0..len]);
+    return call.bytes(out);
+}
+
+/// Core.nativeLogoBounds(pixels: ByteArray, width: Int, height: Int, stride: Int, channels: Int): IntArray?
+export fn Java_com_rbrian_biblio_core_Core_nativeLogoBounds(env: JNIEnv, _: jclass, pixels: jarray, width: jint, height: jint, stride: jint, channels: jint) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    const p = bytesFromJava(env, pixels, call.a()) orelse return null;
+    if (width <= 0 or height <= 0 or stride <= 0 or channels <= 0) return null;
+    const w: usize = @intCast(width);
+    const h: usize = @intCast(height);
+    const st: usize = @intCast(stride);
+    const ch: usize = @intCast(channels);
+    if (p.len < (h - 1) * st + w * ch) return null;
+    var b: [4]usize = undefined;
+    if (!capi.biblio_logo_bounds(p.ptr, w, h, st, ch, &b)) return null;
+    return call.ints(&.{ @intCast(b[0]), @intCast(b[1]), @intCast(b[2]), @intCast(b[3]) });
 }
 
 // MARK: Client operations

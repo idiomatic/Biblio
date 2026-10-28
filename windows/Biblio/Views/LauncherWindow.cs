@@ -68,12 +68,18 @@ public sealed class LauncherWindow : Window
                 IsClickEnabled = true,
             };
             card.Click += (_, _) => ShowLibrary(lib.Subdomain);
+            SetIcon(card, LibraryIcons.GetAsync(LibraryIcons.Key(lib.Website, lib.Subdomain), lib.Website, lib.Subdomain));
             stack.Children.Add(card);
         }
         var add = new Button { Content = "Add Library…", Style = (Style)Application.Current.Resources["AccentButtonStyle"], Margin = new Thickness(0, 12, 0, 0) };
         add.Click += async (_, _) => { if (await AddLibraryDialog.Show(Content.XamlRoot)) ShowLibraries(); };
         stack.Children.Add(add);
         Show(stack);
+    }
+
+    private static async void SetIcon(CommunityToolkit.WinUI.Controls.SettingsCard card, Task<ImageSource?> icon)
+    {
+        if (await icon is { } source) card.HeaderIcon = new ImageIcon { Source = source };
     }
 
     // MARK: One library

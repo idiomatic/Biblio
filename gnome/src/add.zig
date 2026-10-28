@@ -6,6 +6,7 @@ const c = gtk.c;
 const core = @import("core.zig");
 const capi = core.capi;
 const store = @import("store.zig");
+const icons = @import("icons.zig");
 const Launcher = @import("main.zig").Launcher;
 
 /// Finds a library by catalog subdomain or address, or by name from BiblioCommons' partner directory.
@@ -139,6 +140,7 @@ pub const AddLibrary = struct {
             const row = c.adw_action_row_new();
             c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), entry.name);
             if (entry.region) |region| c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), region);
+            c.adw_action_row_add_prefix(@ptrCast(@alignCast(row)), icons.tile(name, icons.key(d.a(), core.str(entry.website), name), core.str(entry.website), null, core.str(entry.logo)));
             c.gtk_list_box_row_set_activatable(@ptrCast(@alignCast(row)), 1);
             c.g_object_set_data(@ptrCast(@alignCast(row)), "index", @ptrFromInt(i + 1));
             gtk.connect(row, "activated", &onSuggestion, d);

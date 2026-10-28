@@ -15,6 +15,8 @@ pub const Client = client_mod.Client;
 pub const Failure = client_mod.Failure;
 
 pub const html = @import("html.zig");
+/// Finding library icons and trimming logos.
+pub const icon = @import("icon.zig");
 /// The typed C functions (`biblio_search`, `biblio_login`, …).
 pub const capi = @import("capi.zig");
 
@@ -30,6 +32,7 @@ test {
     _ = html;
     _ = http;
     _ = library;
+    _ = icon;
     _ = client_mod;
     _ = @import("fixtures_test.zig");
     _ = capi;

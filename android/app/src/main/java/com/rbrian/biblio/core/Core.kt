@@ -31,6 +31,8 @@ object Core {
     @JvmStatic private external fun nativeFormatName(code: String, labels: Array<String>): String?
     @JvmStatic private external fun nativeSortName(id: String, labels: Array<String>): String?
     @JvmStatic private external fun nativeCodabar(value: String): DoubleArray?
+    @JvmStatic private external fun nativeLibraryIcon(website: String?, subdomain: String?, logo: String?): ByteArray?
+    @JvmStatic private external fun nativeLogoBounds(pixels: ByteArray, width: Int, height: Int, stride: Int, channels: Int): IntArray?
 
     @JvmStatic private external fun nativeLogin(client: Long, force: Boolean): Patron
     @JvmStatic private external fun nativePatron(client: Long): Patron?
@@ -123,7 +125,18 @@ object Core {
     /** Guesses and confirms a directory entry's catalog subdomain. */
     suspend fun resolveSubdomain(name: String, website: String?): String? = io { nativeResolveSubdomain(name, website) }
 
+    /** A library's icon (PNG, ICO, GIF, BMP or JPEG bytes), or null. [website] null reads it from [subdomain]'s catalog. */
+    class LibraryIcon(val isLogo: Boolean, val bytes: ByteArray)
+
+    suspend fun libraryIcon(website: String?, subdomain: String?, logo: String?): LibraryIcon? = io {
+        nativeLibraryIcon(website, subdomain, logo)?.let { LibraryIcon(it[0].toInt() == 2, it.copyOfRange(1, it.size)) }
+    }
+
     // Display helpers (no network)
+
+    /** The part of a decoded logo that isn't white margin, as x, y, width, height; null if blank. */
+    fun logoBounds(pixels: ByteArray, width: Int, height: Int, stride: Int, channels: Int): IntArray? =
+        nativeLogoBounds(pixels, width, height, stride, channels)
 
     /** "wccls" from "WCCLS", "https://smpl.bibliocommons.com/", …; null if it isn't one. */
     fun subdomainFrom(input: String): String? = nativeSubdomainFrom(input)

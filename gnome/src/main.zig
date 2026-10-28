@@ -9,6 +9,7 @@ const gtk = @import("gtk.zig");
 const c = gtk.c;
 const core = @import("core.zig");
 const store = @import("store.zig");
+const icons = @import("icons.zig");
 const Window = @import("window.zig").Window;
 
 pub const app_id = "com.rbrian.Biblio";
@@ -55,6 +56,9 @@ fn installStyles() void {
         \\.copy-withdrawn, .copy-libraryUseOnly { color: alpha(currentColor, 0.6); }
         \\.barcode { background: white; border-radius: 8px; padding: 12px; color: black; }
         \\.jacket { border-radius: 4px; }
+        \\.library-icon { border-radius: 8px; box-shadow: inset 0 0 0 1px alpha(currentColor, 0.12); }
+        \\.library-icon.logo { background: white; }
+        \\.library-icon.fallback { background: @accent_bg_color; color: @accent_fg_color; font-weight: bold; }
     ;
     const provider = c.gtk_css_provider_new();
     c.gtk_css_provider_load_from_string(provider, css);
@@ -144,6 +148,8 @@ pub const Launcher = struct {
             const subtitle = if (n == 0) "No users" else if (n == 1) "1 user" else std.fmt.allocPrint(l.a(), "{d} users", .{n}) catch "";
             c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), gtk.z(l.a(), subtitle));
             c.gtk_list_box_row_set_activatable(@ptrCast(@alignCast(row)), 1);
+            const sub = store.subdomain(lib);
+            c.adw_action_row_add_prefix(@ptrCast(@alignCast(row)), icons.tile(store.name(lib), icons.key(l.a(), store.website(lib), sub), store.website(lib), sub, null));
             c.adw_action_row_add_suffix(@ptrCast(@alignCast(row)), c.gtk_image_new_from_icon_name("go-next-symbolic"));
             c.g_object_set_data(@ptrCast(@alignCast(row)), "index", @ptrFromInt(i + 1));
             gtk.connect(row, "activated", &onLibrary, l);

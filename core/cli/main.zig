@@ -20,6 +20,7 @@ fn password(_: ?*anyopaque, _: [*:0]const u8, _: [*:0]const u8) callconv(.c) ?[*
 
 const usage =
     \\usage: biblio info SUBDOMAIN
+    \\       biblio icon SUBDOMAIN
     \\       biblio search SUBDOMAIN TEXT
     \\       biblio availability SUBDOMAIN METADATA_ID
     \\       biblio --user NAME (holds | checkouts | history) SUBDOMAIN
@@ -51,6 +52,10 @@ pub fn main(init: std.process.Init) !void {
 
     if (r.len < 2) return w.writeAll(usage);
     const command = r[0];
+    if (std.mem.eql(u8, command, "icon")) {
+        const found = biblio.icon.find(biblio.lookup(), a, null, r[1], null);
+        return show(w, .{ .kind = @tagName(found.kind), .bytes = found.bytes.len });
+    }
     if (std.mem.eql(u8, command, "info")) {
         var message: []const u8 = "";
         const info = biblio.lookup().info(a, r[1], &message) catch return show(w, .{ .@"error" = message });

@@ -258,6 +258,39 @@ pub fn directoryNextPage(a: Allocator, html: []const u8, base: []const u8) ?[]co
     return null;
 }
 
+/// A page's icon URLs: sized icons first, largest first (apple-touch-icons count as 180 px
+/// when unsized), then unsized `rel="icon"` links.
+pub fn iconLinks(a: Allocator, html: []const u8, base: []const u8) []const []const u8 {
+    const Link = struct { size: u32, url: []const u8 };
+    var found: std.ArrayList(Link) = .empty;
+    var pos: usize = 0;
+    while (nextTag(html, pos, "link")) |link| {
+        pos = link.tag.end;
+        const rel = attribute(link.tag.attrs, "rel") orelse continue;
+        const href = attribute(link.tag.attrs, "href") orelse continue;
+        const sizes = attribute(link.tag.attrs, "sizes") orelse "";
+        const size = std.fmt.parseInt(u32, sizes[0 .. std.mem.findAny(u8, sizes, "xX") orelse sizes.len], 10) catch 0;
+        const touch = std.ascii.findIgnoreCase(rel, "apple-touch-icon") != null;
+        var words = std.mem.tokenizeAny(u8, rel, " \t\n");
+        const icon = while (words.next()) |w| {
+            if (std.ascii.eqlIgnoreCase(w, "icon")) break true;
+        } else false;
+        if (!touch and !icon) continue;
+        found.append(a, .{ .size = if (touch) @max(size, 180) else size, .url = resolve(a, base, decode(a, href)) }) catch {};
+    }
+    std.sort.insertion(Link, found.items, {}, struct {
+        fn larger(_: void, x: Link, y: Link) bool {
+            return x.size > y.size;
+        }
+    }.larger);
+    var out: std.ArrayList([]const u8) = .empty;
+    outer: for (found.items) |l| {
+        for (out.items) |u| if (eq(u, l.url)) continue :outer;
+        out.append(a, l.url) catch {};
+    }
+    return out.items;
+}
+
 /// Decodes the entities the library pages actually use, plus numeric ones.
 pub fn decode(a: Allocator, s: []const u8) []const u8 {
     if (std.mem.findScalar(u8, s, '&') == null) return s;
@@ -381,4 +414,24 @@ test "page state and directory" {
     try testing.expectEqualStrings("WCCLS & Co", entries[1].name);
     try testing.expect(entries[1].region == null);
     try testing.expectEqualStrings("https://www.bibliocommons.com/libraries-we-work-with?3a_page=2", directoryNextPage(a, dir, "https://www.bibliocommons.com/libraries-we-work-with").?);
+}
+
+test "icon links" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const page =
+        \\<link rel="stylesheet" href="/s.css">
+        \\<link rel="shortcut icon" href="/favicon.ico">
+        \\<link rel="icon" type="image/png" sizes="32x32" href="/i32.png">
+        \\<link rel="apple-touch-icon" href="touch.png?v=1&amp;x=2">
+        \\<link rel="icon" sizes="192x192" href="https://cdn.example/i192.png">
+        \\<link rel="icon" href="/favicon.ico">
+    ;
+    const links = iconLinks(a, page, "https://lib.example/home/");
+    try testing.expectEqual(@as(usize, 4), links.len);
+    try testing.expectEqualStrings("https://cdn.example/i192.png", links[0]);
+    try testing.expectEqualStrings("https://lib.example/home/touch.png?v=1&x=2", links[1]);
+    try testing.expectEqualStrings("https://lib.example/i32.png", links[2]);
+    try testing.expectEqualStrings("https://lib.example/favicon.ico", links[3]);
 }

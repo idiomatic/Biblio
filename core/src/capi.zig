@@ -11,6 +11,7 @@ const root = @import("root.zig");
 const models = @import("models.zig");
 const library = @import("library.zig");
 const html = @import("html.zig");
+const icon = @import("icon.zig");
 const client_mod = @import("client.zig");
 const Client = client_mod.Client;
 const Failure = client_mod.Failure;
@@ -467,6 +468,29 @@ pub export fn biblio_fetch_image(url: Str, bytes: *?[*]u8, len: *usize, err: ?*E
     bytes.* = mem;
     len.* = res.body.len;
     return .ok;
+}
+
+/// A library's icon (see icon.zig) in `*bytes` (free with biblio_free), or none.
+pub export fn biblio_library_icon(website: OptStr, subdomain: OptStr, logo: OptStr, bytes: *?[*]u8, len: *usize) icon.Kind {
+    bytes.* = null;
+    len.* = 0;
+    var w = Work.init();
+    defer w.deinit();
+    const found = icon.find(root.lookup(), w.a(), opt(website), opt(subdomain), opt(logo));
+    if (found.kind == .none) return .none;
+    const mem = root.biblio_alloc(@max(1, found.bytes.len)) orelse return .none;
+    @memcpy(mem[0..found.bytes.len], found.bytes);
+    bytes.* = mem;
+    len.* = found.bytes.len;
+    return found.kind;
+}
+
+/// Fills `bounds` with the logo's x, y, width and height, or returns false if it is blank.
+pub export fn biblio_logo_bounds(pixels: [*]const u8, width: usize, height: usize, stride: usize, channels: usize, bounds: *[4]usize) bool {
+    if (height == 0 or width == 0) return false;
+    const b = icon.logoBounds(pixels[0 .. (height - 1) * stride + width * channels], width, height, stride, channels) orelse return false;
+    bounds.* = .{ b.x, b.y, b.width, b.height };
+    return true;
 }
 
 // MARK: Client operations
