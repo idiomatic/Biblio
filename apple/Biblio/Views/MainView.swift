@@ -51,21 +51,15 @@ struct MainView: View {
             NavigationStack {
                 detail
             }
+            #if os(iOS)
+            // Around the whole split view, the inspector leaves a window restored at launch
+            // with a sidebar under its navigation bar on iPhone.
+            .inspector(isPresented: $session.showInspector) { inspector }
+            #endif
         }
-        .inspector(isPresented: $session.showInspector) {
-            Group {
-                if session.selectedEntries.count > 1 {
-                    MultiSelectionView(session: session, entries: session.selectedEntries)
-                } else if let bib = session.selection {
-                    ItemDetailView(session: session, bib: bib)
-                        .id(bib.id)
-                } else {
-                    ContentUnavailableView("No Selection", systemImage: "book.closed",
-                                           description: Text("Select an item to see its details and availability."))
-                }
-            }
-            .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
-        }
+        #if os(macOS)
+        .inspector(isPresented: $session.showInspector) { inspector }
+        #endif
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .principal) {
@@ -93,6 +87,21 @@ struct MainView: View {
         } message: {
             Text(session.loginError ?? "")
         }
+    }
+
+    private var inspector: some View {
+        Group {
+            if session.selectedEntries.count > 1 {
+                MultiSelectionView(session: session, entries: session.selectedEntries)
+            } else if let bib = session.selection {
+                ItemDetailView(session: session, bib: bib)
+                    .id(bib.id)
+            } else {
+                ContentUnavailableView("No Selection", systemImage: "book.closed",
+                                       description: Text("Select an item to see its details and availability."))
+            }
+        }
+        .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
     }
 
     private var sidebar: some View {
