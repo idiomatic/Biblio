@@ -2,17 +2,21 @@
 
 <img src="icon.png" alt="Biblio app icon" width="128" align="right">
 
-A native SwiftUI app for macOS, iOS and iPadOS that works as a patron front end to any
-public library catalog hosted on [BiblioCommons](https://www.bibliocommons.com/libraries-we-work-with)
+Native apps for macOS, iOS and iPadOS, GNOME, Android, Windows and the terminal that work as a patron front
+end to any public library catalog hosted on
+[BiblioCommons](https://www.bibliocommons.com/libraries-we-work-with)
 (`https://LIBRARY.bibliocommons.com/`).
 
 Search the catalog, place and cancel holds, and keep track of checkouts and borrowing
-history, all in a native interface.
+history, all in an interface that follows each platform's own design. The apps share one
+core, libbiblio, written in Zig; [PLATFORMS.md](PLATFORMS.md) describes how they fit together.
 
 > Biblio is an independent project and isn't affiliated with or endorsed by BiblioCommons
 > or any library.
 
 ## Screenshots
+
+From the Apple app.
 
 Copy status by location, color-coded: available, on order or in process, out, held, in transit.
 
@@ -94,6 +98,8 @@ Copy status by location, color-coded: available, on order or in process, out, he
 
 ## Features
 
+As in the Apple app. [PLATFORMS.md](PLATFORMS.md#notes) lists what the other apps don't have yet.
+
 **Catalog**
 - Search and advanced search (keyword, title, author, subject, …), with filters for format,
   availability location, audience, content, language, publication date and date added.
@@ -127,15 +133,18 @@ Copy status by location, color-coded: available, on order or in process, out, he
 
 ## Requirements
 
-- Xcode 26 or later
-- macOS 15 or later, or iOS / iPadOS 18 or later
+| Platform | Needs |
+|---|---|
+| All | Zig 0.17 |
+| macOS, iOS, iPadOS | Xcode 26 or later; runs on macOS 15 or later, or iOS / iPadOS 18 or later |
+| GNOME | GTK 4, libadwaita 1.6 or later, libsecret |
+| Android | The Android SDK and a JDK |
+| Windows | The .NET 8 SDK and the Windows App SDK |
+| Terminal | Nothing more; any xterm-256color terminal on macOS or Linux |
 
 ## Building
 
-1. Open `Biblio.xcodeproj` in Xcode.
-2. Choose the **Biblio** scheme and a destination (My Mac, an iPhone or iPad simulator, or a device).
-3. Change the signing team under **Signing & Capabilities** to your own.
-4. Build and run (⌘R).
+[PLATFORMS.md](PLATFORMS.md#building) has each platform's steps.
 
 To try it, add a library such as `wccls` or `multcolib`, then sign in with a library card and
 PIN, or choose **Browse as Guest**.
@@ -144,10 +153,22 @@ PIN, or choose **Browse as Guest**.
 
 | Folder | Contents |
 |---|---|
-| `Biblio/Model` | Data models, per-window session state, and the paged list model that drives infinite scrolling |
-| `Biblio/Net` | `BiblioClient` (an actor that handles sign-in and re-authentication), the gateway API calls, account-settings form handling, request throttling, and the library directory |
-| `Biblio/Store` | Keychain access, and the saved libraries with their branding |
-| `Biblio/Views` | SwiftUI views |
+| `core` | libbiblio, the shared Zig core, and its C header |
+| `apple` | The SwiftUI app for macOS, iOS and iPadOS |
+| `gnome` | The GTK 4 and libadwaita app, in Zig |
+| `android` | The Jetpack Compose app, and its Zig JNI shim |
+| `windows` | The WinUI 3 app, in C# |
+| `tui` | The terminal app, in Zig |
+| `docs` | The [core developer guide](docs/core.md) and screenshots |
+
+Inside the Apple app:
+
+| Folder | Contents |
+|---|---|
+| `apple/Biblio/Model` | Data models, per-window session state, and the paged list model that drives infinite scrolling |
+| `apple/Biblio/Net` | `BiblioClient` (an actor that handles sign-in and re-authentication), the gateway API calls, account-settings form handling, request throttling, and the library directory |
+| `apple/Biblio/Store` | Keychain access, and the saved libraries with their branding |
+| `apple/Biblio/Views` | SwiftUI views |
 
 The app uses the same gateway API as the BiblioCommons web app. Account settings go through
 the website's own forms. [NOTES-API.md](NOTES-API.md) lists the endpoints. Requests are

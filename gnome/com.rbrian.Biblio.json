@@ -1,0 +1,27 @@
+{
+    "id": "com.rbrian.Biblio",
+    "runtime": "org.gnome.Platform",
+    "runtime-version": "48",
+    "sdk": "org.gnome.Sdk",
+    "sdk-extensions": ["org.freedesktop.Sdk.Extension.ziglang"],
+    "command": "biblio-gnome",
+    "finish-args": [
+        "--share=network",
+        "--share=ipc",
+        "--socket=fallback-x11",
+        "--socket=wayland",
+        "--device=dri",
+        "--talk-name=org.freedesktop.secrets"
+    ],
+    "build-options": { "append-path": "/usr/lib/sdk/ziglang" },
+    "modules": [
+        {
+            "name": "biblio",
+            "buildsystem": "simple",
+            "build-commands": [
+                "cd gnome && zig build -Doptimize=safe --prefix /app"
+            ],
+            "sources": [{ "type": "dir", "path": ".." }]
+        }
+    ]
+}

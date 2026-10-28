@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Biblio
+Comment=Search your library’s catalog and manage holds
+Exec=biblio-gnome
+Icon=com.rbrian.Biblio
+Terminal=false
+Type=Application
+Categories=Office;Education;
+Keywords=library;books;holds;catalog;BiblioCommons;
+StartupNotify=true
+DBusActivatable=false
+X-Purism-FormFactor=Workstation;Mobile;
