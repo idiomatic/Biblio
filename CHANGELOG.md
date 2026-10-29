@@ -3,6 +3,15 @@
 Notable changes to Biblio. Versions follow the Apple app's version number; the other apps share
 the core and are not yet released.
 
+## Unreleased
+
+### Added
+- List items show the edition after the format and year.
+
+### Changed
+- Editions read as written, without the square brackets and closing period of library
+  catalogs ("[First edition]." reads "First edition").
+
 ## 1.3 — 2026-10-29
 
 ### Added

@@ -339,18 +339,24 @@ struct ItemRow: View {
                 if let author = bib.primaryAuthor {
                     Text(author).font(.subheadline).lineLimit(1)
                 }
-                HStack(spacing: 6) {
-                    Text(library.formatName(bib.format))
-                    if let year = bib.displayDate { Text("· \(year)") }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(details)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 status
             }
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
+    }
+
+    /// Format, year and edition, e.g. "Book · 2019 · Second Ace hardcover edition".
+    private var details: String {
+        [library.formatName(bib.format), bib.displayDate, bib.edition]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
     }
 
     @ViewBuilder

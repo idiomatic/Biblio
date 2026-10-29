@@ -479,7 +479,8 @@ A catalog record.
 | `authors` | string array | Primary author first |
 | `format` | string | A format code; get the display name with `biblio_format_name` |
 | `publication_date`? | string | Shapes vary, such as `"2026"`, `"20261006"` or `"c1999"` |
-| `edition`?, `call_number`?, `summary`? | string | |
+| `edition`? | string | Without enclosing square brackets or a closing period, except one ending an abbreviation |
+| `call_number`?, `summary`? | string | |
 | `jacket_small`?, `jacket_large`? | string | Image URLs |
 | `material_type` | string | Pass it to `biblio_place_hold` |
 | `holdable` | bool | |
