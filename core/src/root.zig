@@ -17,6 +17,8 @@ pub const Failure = client_mod.Failure;
 pub const html = @import("html.zig");
 /// Finding library icons and trimming logos.
 pub const icon = @import("icon.zig");
+/// The paged list state every app shows (`List`).
+pub const item_list = @import("list.zig");
 /// The typed C functions (`biblio_search`, `biblio_login`, …).
 pub const capi = @import("capi.zig");
 
@@ -28,6 +30,7 @@ pub const sync = @import("sync.zig");
 
 test {
     _ = json;
+    _ = item_list;
     _ = models;
     _ = html;
     _ = http;
@@ -174,7 +177,7 @@ pub fn hostString(s: []const u8) ?[*:0]u8 {
 // MARK: Exports
 
 pub export fn biblio_version() [*:0]const u8 {
-    return "1.1.0";
+    return "1.3.0";
 }
 
 /// Routes every request through the host's HTTP stack. Pass null to go back to the built-in one.

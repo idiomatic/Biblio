@@ -625,6 +625,220 @@ pub export fn biblio_change_password(h: ?*Handle, current: Str, new: Str, err: ?
     return perform(h, err, Client.changePassword, .{ std.mem.span(current), std.mem.span(new) });
 }
 
+// MARK: Item lists
+
+const item_list = @import("list.zig");
+const List = item_list.List;
+
+/// What the list needs to know about one entry, for apps that build lists from their own models.
+pub const ListItem = extern struct {
+    id: Str,
+    title: Str,
+    format: Str,
+    held_copies: i64,
+    server_index: i64,
+    is_hold: bool,
+    ready: bool,
+    on_order: bool,
+};
+
+pub const ListRow = extern struct {
+    position: i64,
+    /// NULL for a placeholder.
+    id: OptStr,
+};
+
+pub const FormatCount = extern struct { format: Str, count: i64 };
+
+pub const ListState = extern struct {
+    total: i64,
+    pages: i64,
+    loaded: bool,
+    has_more: bool,
+    loading: bool,
+    refreshing: bool,
+    background: bool,
+    generation: u64,
+};
+
+/// List calls only allocate small bookkeeping; running out of memory there is fatal.
+fn must(v: anytype) @typeInfo(@TypeOf(v)).error_union.payload {
+    return v catch @panic("out of memory");
+}
+
+pub export fn biblio_list_new(kind: item_list.Kind) ?*List {
+    const l = gpa.create(List) catch return null;
+    l.* = .init(gpa, kind);
+    return l;
+}
+
+pub export fn biblio_list_free(l: ?*List) void {
+    const list = l orelse return;
+    list.deinit();
+    gpa.destroy(list);
+}
+
+pub export fn biblio_list_state(l: *const List) ListState {
+    return .{
+        .total = l.total,
+        .pages = l.pages(),
+        .loaded = l.loaded,
+        .has_more = l.hasMore(),
+        .loading = l.isLoading(),
+        .refreshing = l.refreshing,
+        .background = l.background,
+        .generation = l.generation,
+    };
+}
+
+pub export fn biblio_list_reload(l: *List, keep_content: bool) u64 {
+    must(l.reload(keep_content));
+    return l.generation;
+}
+
+pub export fn biblio_list_begin_refresh(l: *List) void {
+    l.beginRefresh();
+}
+
+pub export fn biblio_list_clear(l: *List) void {
+    must(l.clear());
+}
+
+pub export fn biblio_list_request(l: *List, page: i64) bool {
+    return must(l.request(page));
+}
+
+pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*]const ListItem, count: usize,
+    total: i64, page_size: i64, now_ms: i64) bool
+{
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const converted = must(arena.allocator().alloc(item_list.Item, count));
+    for (converted, 0..) |*it, i| {
+        const src = items.?[i];
+        it.* = .{
+            .id = std.mem.span(src.id),
+            .title = std.mem.span(src.title),
+            .format = std.mem.span(src.format),
+            .held_copies = src.held_copies,
+            .server_index = src.server_index,
+            .is_hold = src.is_hold,
+            .ready = src.ready,
+            .on_order = src.on_order,
+        };
+    }
+    return must(l.apply(generation, page, converted, total, page_size, now_ms));
+}
+
+pub export fn biblio_list_apply_page(l: *List, generation: u64, page: i64, result: *const ListPage, now_ms: i64) bool {
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const converted = must(arena.allocator().alloc(item_list.Item, result.entries_count));
+    for (converted, result.entries[0..result.entries_count]) |*it, e| {
+        const on_order_status = if (e.bib.status) |s| std.mem.eql(u8, std.mem.span(s), "ON_ORDER") else false;
+        it.* = .{
+            .id = std.mem.span(e.id),
+            .title = std.mem.span(e.bib.title),
+            .format = std.mem.span(e.bib.format),
+            .held_copies = e.bib.held_copies,
+            .server_index = e.server_index,
+            .is_hold = e.hold != null,
+            .ready = if (e.hold) |h| std.mem.eql(u8, std.mem.span(h.status), "READY_FOR_PICKUP") else false,
+            .on_order = e.bib.on_order_copies > 0 or on_order_status,
+        };
+    }
+    return must(l.apply(generation, page, converted, result.count, result.page_size, now_ms));
+}
+
+pub export fn biblio_list_fail(l: *List, generation: u64, page: i64) bool {
+    return must(l.fail(generation, page));
+}
+
+pub export fn biblio_list_item_appeared(l: *List, position: i64) i64 {
+    return must(l.itemAppeared(position));
+}
+
+pub export fn biblio_list_placeholder_appeared(l: *List, position: i64) void {
+    must(l.placeholderAppeared(position));
+}
+
+pub export fn biblio_list_placeholder_disappeared(l: *List, position: i64) void {
+    l.placeholderDisappeared(position);
+}
+
+pub export fn biblio_list_take_visible_requests(l: *List, pages: [*]i64, capacity: usize) usize {
+    return must(l.takeVisibleRequests(pages[0..capacity]));
+}
+
+pub export fn biblio_list_needs_all_pages(l: *const List) bool {
+    return l.needsAllPages();
+}
+
+pub export fn biblio_list_wants_all_pages(l: *const List) bool {
+    return l.wantsAllPages();
+}
+
+pub export fn biblio_list_begin_background(l: *List) bool {
+    return l.beginBackground();
+}
+
+pub export fn biblio_list_next_background_page(l: *List) i64 {
+    return must(l.nextBackgroundPage());
+}
+
+pub export fn biblio_list_end_background(l: *List) void {
+    l.endBackground();
+}
+
+pub export fn biblio_list_set_sort(l: *List, sort: item_list.Sort) void {
+    must(l.setSort(sort));
+}
+
+pub export fn biblio_list_set_format(l: *List, format: OptStr) void {
+    must(l.setFormat(if (format) |f| std.mem.span(f) else null));
+}
+
+pub export fn biblio_list_set_hold_filter(l: *List, filter: item_list.HoldFilter) void {
+    must(l.setHoldFilter(filter));
+}
+
+pub export fn biblio_list_remove(l: *List, ids: [*]const Str, count: usize) usize {
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const spans = must(arena.allocator().alloc([]const u8, count));
+    for (spans, ids[0..count]) |*s, id| s.* = std.mem.span(id);
+    return must(l.remove(spans));
+}
+
+pub export fn biblio_list_hold_count(l: *const List, filter: item_list.HoldFilter) i64 {
+    return l.holdCount(filter);
+}
+
+pub export fn biblio_list_is_stale(l: *const List, now_ms: i64) bool {
+    return l.isStale(now_ms);
+}
+
+pub export fn biblio_list_rows(l: *const List, count: *usize) [*]const ListRow {
+    count.* = l.rows.items.len;
+    return @ptrCast(l.rows.items.ptr);
+}
+
+pub export fn biblio_list_ids(l: *const List, count: *usize) [*]const Str {
+    count.* = l.ids.items.len;
+    return l.ids.items.ptr;
+}
+
+pub export fn biblio_list_formats(l: *const List, count: *usize) [*]const FormatCount {
+    count.* = l.formats.items.len;
+    return @ptrCast(l.formats.items.ptr);
+}
+
+comptime {
+    // Rows and format counts are handed out in place.
+    std.debug.assert(@sizeOf(item_list.Row) == @sizeOf(ListRow) and @offsetOf(item_list.Row, "id") == @offsetOf(ListRow, "id"));
+    std.debug.assert(@sizeOf(item_list.FormatCount) == @sizeOf(FormatCount) and @offsetOf(item_list.FormatCount, "count") == @offsetOf(FormatCount, "count"));
+}
+
 // MARK: Freeing
 
 /// Frees any result struct (what `biblio_<type>_free` does), for Zig callers.
@@ -743,4 +957,42 @@ test "library helpers" {
     try std.testing.expectEqual(Result.bad_request, biblio_holds(null, 1, null, null, &err));
     defer biblio_error_clear(&err);
     try std.testing.expectEqualStrings("This operation needs a client.", std.mem.span(err.message.?));
+}
+
+test "item lists through the C interface" {
+    const l = biblio_list_new(.holds).?;
+    defer biblio_list_free(l);
+    const gen = biblio_list_reload(l, false);
+    try std.testing.expect(biblio_list_state(l).loading);
+    const page: models.ListPage = .{
+        .entries = &.{
+            .{ .id = "hold-H1", .bib = .{ .id = "S1", .title = "Dune", .format = "BK" }, .kind = "hold", .serverIndex = 0,
+                .hold = .{ .id = "H1", .metadataId = "S1", .status = "READY_FOR_PICKUP" } },
+            .{ .id = "hold-H2", .bib = .{ .id = "S2", .title = "Emma", .format = "DVD", .onOrderCopies = 2 }, .kind = "hold", .serverIndex = 1,
+                .hold = .{ .id = "H2", .metadataId = "S2", .status = "NOT_YET_AVAILABLE" } },
+        },
+        .page = 1,
+        .pages = 1,
+        .count = 2,
+    };
+    var out: ?*ListPage = null;
+    try std.testing.expectEqual(Result.ok, deliver(ListPage, page, &out, null));
+    defer freeOwned(out.?);
+    try std.testing.expect(biblio_list_apply_page(l, gen, 1, out.?, 0));
+    try std.testing.expect(!biblio_list_apply_page(l, gen + 1, 1, out.?, 0));
+    try std.testing.expectEqual(@as(i64, 1), biblio_list_hold_count(l, .ready));
+    try std.testing.expectEqual(@as(i64, 1), biblio_list_hold_count(l, .on_order));
+    var n: usize = 0;
+    const rows = biblio_list_rows(l, &n);
+    try std.testing.expectEqual(@as(usize, 2), n);
+    try std.testing.expectEqualStrings("hold-H2", std.mem.span(rows[1].id.?));
+    biblio_list_set_format(l, "DVD");
+    _ = biblio_list_rows(l, &n);
+    try std.testing.expectEqual(@as(usize, 1), n);
+    const formats = biblio_list_formats(l, &n);
+    try std.testing.expectEqual(@as(usize, 2), n);
+    try std.testing.expectEqual(@as(i64, 1), formats[0].count);
+    const ids = [_]Str{"hold-H1"};
+    try std.testing.expectEqual(@as(usize, 1), biblio_list_remove(l, &ids, 1));
+    try std.testing.expectEqual(@as(i64, 1), biblio_list_state(l).total);
 }

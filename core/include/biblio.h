@@ -426,6 +426,125 @@ biblio_result biblio_change_email(biblio_client *client, const char *email, bibl
 biblio_result biblio_change_password(biblio_client *client, const char *current, const char *new_password,
                                      biblio_error *err);
 
+/* ---------------------------------------------------------------------------------------
+ * Item lists
+ *
+ * A paged list's state: which pages to fetch, and the rows to show after sorting and
+ * filtering. No network: the app fetches each page the list asks for (from biblio_list_request,
+ * biblio_list_item_appeared, biblio_list_take_visible_requests or
+ * biblio_list_next_background_page) and hands the result back with biblio_list_apply_page
+ * (or biblio_list_apply), or biblio_list_fail. Use a list from one thread. Rows, ids and
+ * format counts stay valid until the next call that changes the list. now_ms is any
+ * monotonic clock in milliseconds. Lists abort if memory runs out.
+ * ------------------------------------------------------------------------------------- */
+
+typedef struct biblio_list biblio_list;
+
+typedef enum {
+    BIBLIO_LIST_SEARCH = 0,
+    BIBLIO_LIST_HOLDS,
+    BIBLIO_LIST_CHECKOUTS,
+    BIBLIO_LIST_HISTORY,
+} biblio_list_kind;
+
+/* SERVER keeps the server's order; the others sort fetched items and need every page. */
+typedef enum {
+    BIBLIO_LIST_SORT_SERVER = 0,
+    BIBLIO_LIST_SORT_PEOPLE_WAITING,
+    BIBLIO_LIST_SORT_TITLE,
+} biblio_list_sort;
+
+typedef enum {
+    BIBLIO_HOLD_FILTER_NONE = 0,
+    BIBLIO_HOLD_FILTER_READY,
+    BIBLIO_HOLD_FILTER_NOT_READY,
+    BIBLIO_HOLD_FILTER_ON_ORDER,
+} biblio_hold_filter;
+
+/* What the list needs to know about an entry, for biblio_list_apply. */
+typedef struct {
+    const char *id;
+    const char *title;
+    const char *format;
+    int64_t held_copies;
+    int64_t server_index;
+    bool is_hold;
+    bool ready;    /* a hold ready for pickup */
+    bool on_order; /* waiting on copies the library hasn't received */
+} biblio_list_item;
+
+/* A fetched item at a server position, or a placeholder (id NULL) for one not yet fetched. */
+typedef struct {
+    int64_t position;
+    const char *id;
+} biblio_list_row;
+
+typedef struct {
+    const char *format;
+    int64_t count;
+} biblio_format_count;
+
+typedef struct {
+    int64_t total;
+    int64_t pages;
+    bool loaded;
+    bool has_more;
+    bool loading;
+    bool refreshing; /* stale rows shown until page 1 replaces them */
+    bool background; /* fetching the remaining pages for a client sort or local filter */
+    uint64_t generation;
+} biblio_list_state_t;
+
+biblio_list *biblio_list_new(biblio_list_kind kind);
+void biblio_list_free(biblio_list *list);
+biblio_list_state_t biblio_list_state(const biblio_list *list);
+
+/* Starts again from page 1, which it requests; returns the generation to apply results with.
+ * keep_content leaves the rows, stale, until page 1 replaces them all at once. */
+uint64_t biblio_list_reload(biblio_list *list, bool keep_content);
+/* Marks the rows stale before such a reload (e.g. while signing in afresh). */
+void biblio_list_begin_refresh(biblio_list *list);
+/* Empties the list without requesting anything (an empty search). */
+void biblio_list_clear(biblio_list *list);
+/* True if the app should fetch this page now (it is then in flight). */
+bool biblio_list_request(biblio_list *list, int64_t page);
+/* False if the list was reloaded since the page was requested. */
+bool biblio_list_apply_page(biblio_list *list, uint64_t generation, int64_t page,
+                            const biblio_list_page_t *result, int64_t now_ms);
+bool biblio_list_apply(biblio_list *list, uint64_t generation, int64_t page, const biblio_list_item *items,
+                       size_t count, int64_t total, int64_t page_size, int64_t now_ms);
+bool biblio_list_fail(biblio_list *list, uint64_t generation, int64_t page);
+bool biblio_list_is_stale(const biblio_list *list, int64_t now_ms);
+
+/* Scrolling. An item in view returns a page to prefetch, or 0. Visible placeholders' pages are
+ * requested once they have stayed on screen briefly (about 300 ms). */
+int64_t biblio_list_item_appeared(biblio_list *list, int64_t position);
+void biblio_list_placeholder_appeared(biblio_list *list, int64_t position);
+void biblio_list_placeholder_disappeared(biblio_list *list, int64_t position);
+size_t biblio_list_take_visible_requests(biblio_list *list, int64_t *pages, size_t capacity);
+
+/* Background fetching, one page at a time, after page 1 when biblio_list_wants_all_pages and
+ * after a sort or filter change when biblio_list_needs_all_pages. next returns 0 when done. */
+bool biblio_list_needs_all_pages(const biblio_list *list);
+bool biblio_list_wants_all_pages(const biblio_list *list);
+bool biblio_list_begin_background(biblio_list *list);
+int64_t biblio_list_next_background_page(biblio_list *list);
+void biblio_list_end_background(biblio_list *list);
+
+void biblio_list_set_sort(biblio_list *list, biblio_list_sort sort);
+/* The format filter for account lists, applied locally; NULL for all. */
+void biblio_list_set_format(biblio_list *list, const char *format);
+void biblio_list_set_hold_filter(biblio_list *list, biblio_hold_filter filter);
+/* Returns how many items were removed. */
+size_t biblio_list_remove(biblio_list *list, const char *const *ids, size_t count);
+int64_t biblio_list_hold_count(const biblio_list *list, biblio_hold_filter filter);
+
+const biblio_list_row *biblio_list_rows(const biblio_list *list, size_t *count);
+/* Item ids in server order. */
+const char *const *biblio_list_ids(const biblio_list *list, size_t *count);
+/* The items' formats, most common first. */
+const biblio_format_count *biblio_list_formats(const biblio_list *list, size_t *count);
+
 #ifdef __cplusplus
 }
 #endif

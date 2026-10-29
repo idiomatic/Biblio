@@ -85,20 +85,28 @@ struct AccountView: View {
                     Text("Used for new holds unless you choose another location when placing one.")
                 }
 
-                Section("Language") {
+                Section {
                     HStack {
-                        Picker("Language", selection: savingOnChange($language, key: "language") { code in
+                        Picker("Language", selection: choosingSystemLanguage(savingOnChange($language, key: "language") { code in
                             try await session.client.changeLanguage(code)
                             session.searchList.reload()
                             session.newTitlesList.reload()
-                            return "Language changed to \(languageName(code))."
-                        }) {
+                            return "Library language changed to \(languageName(code))."
+                        })) {
+                            if let system = systemLanguage, system != language {
+                                Text("Use System Language").tag(Optional(Self.useSystemLanguage))
+                                Divider()
+                            }
                             ForEach(session.library.languages, id: \.self) { code in
                                 Text(languageName(code)).tag(Optional(code))
                             }
                         }
                         if working == "language" { ProgressView().controlSize(.small) }
                     }
+                } header: {
+                    Text("Library Language")
+                } footer: {
+                    Text("The language the library uses for your account. It’s separate from your device’s language.")
                 }
 
                 if let enabled = patron.borrowingHistoryEnabled {
@@ -140,6 +148,28 @@ struct AccountView: View {
         if email.isEmpty { email = p.email ?? "" }
         pickup = pickup ?? p.preferredPickup
         language = language ?? p.language
+    }
+
+    /// The picker's tag for "Use System Language".
+    private static let useSystemLanguage = "system"
+
+    /// The library's language closest to the system's preferred languages: the same
+    /// language and region, else the same language.
+    private var systemLanguage: String? {
+        let codes = session.library.languages
+        for preferred in Locale.preferredLanguages {
+            if let exact = codes.first(where: { $0.caseInsensitiveCompare(preferred) == .orderedSame }) { return exact }
+            let base = Locale(identifier: preferred).language.languageCode
+            if let same = codes.first(where: { Locale(identifier: $0).language.languageCode == base }) { return same }
+        }
+        return nil
+    }
+
+    /// Turns choosing "Use System Language" into choosing the system's language.
+    private func choosingSystemLanguage(_ value: Binding<String?>) -> Binding<String?> {
+        Binding(get: { value.wrappedValue }, set: { new in
+            value.wrappedValue = new == Self.useSystemLanguage ? systemLanguage : new
+        })
     }
 
     private func languageName(_ code: String) -> String {

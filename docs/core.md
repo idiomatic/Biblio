@@ -8,6 +8,7 @@ apps use it for everything that talks to a library:
 - the BiblioCommons gateway API, and the library website's account-settings forms
 - library lookup, and the BiblioCommons partner directory
 - request pacing, cookies and redirects
+- paged item lists: which pages to fetch, placeholder rows, client sorts and local filters
 - shared display logic: copy-status grouping, format and sort names, Codabar barcodes,
   readable brand colors
 
@@ -23,10 +24,11 @@ each app binds them.
 4. [Calling conventions](#calling-conventions)
 5. [Operations](#operations)
 6. [Result types](#result-types)
-7. [Writing a transport](#writing-a-transport)
-8. [Using the core from Zig](#using-the-core-from-zig)
-9. [Testing](#testing)
-10. [Adding an operation](#adding-an-operation)
+7. [Item lists](#item-lists)
+8. [Writing a transport](#writing-a-transport)
+9. [Using the core from Zig](#using-the-core-from-zig)
+10. [Testing](#testing)
+11. [Adding an operation](#adding-an-operation)
 
 ---
 
@@ -169,7 +171,7 @@ pass these pointers to `free`.
 const char *biblio_version(void);
 ```
 
-Returns the core's version, for example `"1.1.0"`. The string is static; don't free it.
+Returns the core's version, for example `"1.3.0"`. The string is static; don't free it.
 
 ```c
 typedef char *(*biblio_password_fn)(void *ctx, const char *subdomain, const char *username);
@@ -557,6 +559,27 @@ Dates are passed through as the library sends them.
 
 ---
 
+## Item lists
+
+A `biblio_list` holds one paged list's state ([`list.zig`](../core/src/list.zig)), so every
+app pages, sorts and filters the same way. It makes no requests: it says which pages to fetch,
+the app fetches them with `biblio_search`, `biblio_holds` and so on, and hands back each result.
+Use a list from one thread (the UI thread).
+
+| Step | Calls |
+|---|---|
+| Load | `biblio_list_reload` requests page 1 and returns the generation to apply it with. `keep_content` keeps the rows, stale, until page 1 replaces them (refreshing). `biblio_list_clear` empties it for an empty search. |
+| Apply | `biblio_list_apply_page` (or `biblio_list_apply` with `biblio_list_item`s built from the app's own models), or `biblio_list_fail`. Both return false for a page from before the latest reload. |
+| Scroll | `biblio_list_item_appeared` returns a page to prefetch near the end of the fetched items. Count placeholders with `biblio_list_placeholder_appeared` and `_disappeared`; after about 300 ms, `biblio_list_take_visible_requests` requests the pages still on screen. |
+| Fetch the rest | After page 1 when `biblio_list_wants_all_pages` (client sorts, local filters, holds), or after a sort or filter change when `biblio_list_needs_all_pages`: `biblio_list_begin_background`, then `biblio_list_next_background_page` one page at a time until it returns 0 (at most 40 pages). `biblio_list_end_background` stops after an error. |
+| Show | `biblio_list_rows` (a placeholder's id is NULL), `biblio_list_ids` in server order, `biblio_list_formats`, `biblio_list_hold_count` and `biblio_list_state`. They stay valid until the next call that changes the list. |
+| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally), `biblio_list_remove` (after cancelling holds). |
+
+`biblio_list_is_stale` is true 15 minutes after page 1 arrived; times are milliseconds on any
+monotonic clock. Every call that returns a page to fetch has already marked it in flight.
+
+---
+
 ## Writing a transport
 
 ```c
@@ -645,6 +668,7 @@ Zig 0.17's `std.Io.Threaded` doesn't compile.
   - availability ordering
   - account-form submission with cookies and redirects
   - the C functions' results and errors
+  - item lists: placeholders, prefetching, reloads, refreshes, client sorts, filters and staleness
 - **The `biblio` CLI** (`zig-out/bin/biblio`) makes live calls and prints the results as JSON.
   Each run is one or two requests:
   - `biblio info SUBDOMAIN`

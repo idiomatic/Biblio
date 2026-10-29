@@ -234,17 +234,28 @@ struct InspectorToggle: View {
     }
 }
 
-/// The app's version, subtly at the foot of the sidebar.
+/// The app's version, subtly at the foot of the sidebar; it opens the About box.
 private struct VersionLabel: View {
-    private static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    @State private var showingAbout = false
 
     var body: some View {
-        Text("Biblio \(Self.version)")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .accessibilityLabel("Biblio version \(Self.version)")
+        Button {
+            #if os(macOS)
+            About.showPanel()
+            #else
+            showingAbout = true
+            #endif
+        } label: {
+            Text("Biblio \(About.version)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("About Biblio, version \(About.version)")
+        .sheet(isPresented: $showingAbout) { AboutView() }
     }
 }
 

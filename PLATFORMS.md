@@ -8,6 +8,7 @@ BiblioCommons client:
 - the gateway API and the library website's Rails account forms
 - library lookup and the partner directory
 - request pacing
+- paged item lists: which pages to fetch, placeholder rows, client sorts and local filters
 - copy-status grouping, Codabar barcode encoding and brand-color contrast
 
 Each platform has a native UI that follows that platform's design guidelines. The graphical
@@ -114,27 +115,100 @@ the `libgtk-4-1`, `libadwaita-1-0` and `libsecret-1-0` packages, which come with
 OS's desktop (Bookworm's libadwaita 1.2 is too old). The same script with `amd64` builds an
 x86_64 Linux sysroot. 32-bit Raspberry Pi OS isn't supported.
 
-## Status on this branch
+## Status
 
 | Part | Checked |
 |---|---|
-| Core | 20 unit and fixture tests pass; the C header's 27 structs match the core's layout. Live guest requests work (library info, search, availability, directory). Cross-compiles for macOS, iOS, the iOS simulator, x86_64 and aarch64 Linux (Raspberry Pi), Android and Windows. |
-| Apple | Builds for macOS and the iOS simulator. On iPhone 17, sign-in, search, item details and availability, the holds list and the holds and checkout counts work through the core's typed functions. |
+| Core | 32 unit and fixture tests pass, including the item list's. The C header's original 27 structs match the core's layout. Live guest requests work (library info, search, availability, directory). Cross-compiles for macOS, iOS, the iOS simulator, x86_64 and aarch64 Linux (Raspberry Pi), Android and Windows. |
+| Apple | Builds for macOS and the iOS simulator. On iPhone 17, sign-in, search, item details and availability, the holds and checkout counts, and lists (paging, placeholders, hold filters and the people-waiting sort, through the core's item list) work. |
 | GNOME | Links for x86_64 and aarch64 Linux (Raspberry Pi) against Debian trixie sysroots from `gnome/debian-sysroot.sh` (GTK 4.18, libadwaita 1.7). `zig build check -Dsysroot=<sysroot>` type-checks without linking. Not run yet. |
 | Android | The JNI library builds for both ABIs. `zig build test` in `android/native` checks its constructor signatures against the Kotlin models and builds models through a stand-in JVM. The Kotlin has not been compiled. |
 | Terminal | Builds for macOS and cross-compiles for x86_64 and aarch64 Linux (Raspberry Pi); 6 tests pass (keys, text fitting and wrapping, colors, status lines). Driven through a pseudo-terminal against WCCLS as a guest: adding the library, search, item details and availability, New Titles, paging, sorting and quitting work. Signed-in screens and holds haven't been tried against a live account. |
-| Windows | The core builds for x86_64 and aarch64 Windows. The C# structs in `Interop.cs` match the C header's layout (25 structs, checked by script). The C# has not been compiled. |
+| Windows | The core builds for x86_64 and aarch64 Windows. The C# structs in `Interop.cs` match the C header's layout as of before the item list (25 structs, checked by script). The C# has not been compiled. |
 
-## Notes
+Zig 0.17's `std.Io.Threaded` does not compile for iOS, so the core uses pthreads there
+(`core/src/sync.zig`). iOS always uses the app's URLSession transport.
 
-- Zig 0.17's `std.Io.Threaded` does not compile for iOS, so the core uses pthreads there
-  (`core/src/sync.zig`). iOS always uses the app's URLSession transport.
-- Apple features not yet on the other platforms:
-  - drag and drop between windows
-  - multi-select bulk holds
-  - the "people waiting" client sort
-  - placeholder rows for unloaded pages
-  - the hold-status filter
-- The terminal app shows account settings but doesn't change them, and has no format filter
-  or advanced search yet.
-- Packaging is still to do: Flathub, Play Store, MSIX/winget, and icons.
+## Plan
+
+Bring the GNOME, Android, Windows and terminal apps to the Apple app's features (AGENTS.md),
+each following its own platform's conventions.
+
+### Targets
+
+| App | Targets | Test on |
+|---|---|---|
+| Apple | macOS, iOS, iPadOS | iPhone 13 mini, iPhone 17, iPad (A16) |
+| GNOME | Linux x86_64 and aarch64, glibc and musl | Fedora Workstation, Alpine Linux (GNOME), Raspberry Pi OS |
+| Android | arm64-v8a, x86_64 | Phone, foldable and tablet emulators |
+| Windows | x64, ARM64 | Windows 11 |
+| Terminal | macOS and Linux, x86_64 and aarch64, glibc and musl | Terminal.app, GNOME Terminal on Fedora, Alpine console |
+
+### 1. Build and run every port
+
+- Compile the Kotlin and C# for the first time, and fix them.
+- Move each port's lists onto the core's item list, which brings placeholder rows, the
+  people-waiting sort and the hold filters.
+- Run the GNOME app on Fedora and Alpine. Alpine needs `*-linux-musl` builds against its own
+  packages; keep the Debian sysroot for Raspberry Pi OS.
+- Build the terminal app for musl too.
+- Add CI: macOS (Apple, terminal), a Fedora container (GNOME, terminal, core tests), Alpine
+  (musl), Android (Gradle), and Windows x64 and ARM64 runners. Builds have no warnings.
+
+### 2. Features, by platform convention
+
+| Feature | GNOME | Android | Windows | Terminal |
+|---|---|---|---|---|
+| Sections | `AdwNavigationSplitView` sidebar | `NavigationSuiteScaffold` (bar on phones, rail on larger screens) | `NavigationView` pane | Tab cycles sections |
+| Item detail | `AdwOverlaySplitView` end pane; `AdwBottomSheet` when narrow | `ListDetailPaneScaffold` | Right-hand detail pane | Full-screen detail, Esc to return |
+| Refresh | Ctrl+R and F5, menu item | `PullToRefreshBox` | `RefreshContainer`, F5 | `r` |
+| Multiple selection | Selection mode button in the header bar; action bar at the bottom | Long press starts selection; contextual top app bar | `SelectionMode="Extended"` and a `CommandBar` | Space marks rows |
+| Confirmations | `AdwAlertDialog` | `AlertDialog` | `ContentDialog` | y/n on the bottom line |
+| Notices | `AdwToast` | `Snackbar` | `InfoBar` | Bottom line |
+| Settings | `AdwPreferencesDialog` (Ctrl+,) | Settings screen | Settings page in the `NavigationView` footer | Account screen, editable |
+| Library card | Header-bar button with a popover | Top-app-bar action, full-screen with raised brightness | Header button with a flyout | Account screen |
+| Windows and sessions | One session per window, Ctrl+N | One session per task; new task in split screen on large screens | One session per window, Ctrl+N | One session per process |
+| Sign in from guest | `AdwDialog` of the library's users | Modal bottom sheet | `ContentDialog` | Prompt |
+| Drag to hold or search | `GtkDragSource`/`GtkDropTarget`, across windows | Within the app, and across windows in split screen | `CanDrag`/`AllowDrop`, across windows | None |
+| Request status | Fading bar at the window's bottom | None (not a platform convention) | Fading status bar | Bottom line |
+| Version and About | `AdwAboutDialog` | Settings ▸ About | Settings ▸ About | `--version` and the help line |
+| Restore at launch | Reopen the last windows' logins | Saved state survives process death | Reopen the last windows' logins | Last library |
+| Branding | Library accent color in CSS, checked for contrast | Brand color as the color scheme seed | Accent color resources | 256-color tint |
+| Icon cache | `$XDG_CACHE_HOME/biblio` | `cacheDir` | `ApplicationData.LocalCacheFolder` | None |
+
+Every port also needs the rest of AGENTS.md:
+
+- advanced search and search facets (the terminal app has neither yet)
+- Explore New Titles with its filters
+- hold, cancel and partial refusals
+- availability by location with status symbols
+- pickup location menu
+- adding and removing libraries with suggestions and icons
+- account settings that save on change and revert on error, with confirmation before turning
+  history off (the terminal app only shows them)
+- transparent reauthentication, and one window per login
+- hidden CMS navigation and "Opinion"
+
+### 3. Localization
+
+Do TODO.md's localization item on every platform, following its language settings:
+gettext on GNOME, `strings.xml` on Android, `.resw` on Windows. The library account's language
+stays a separate setting.
+
+### 4. Packaging
+
+| App | Package |
+|---|---|
+| GNOME | Flatpak on Flathub (x86_64, aarch64); APKBUILD for Alpine; RPM spec for Fedora |
+| Android | Signed App Bundle for Google Play |
+| Windows | MSIX for x64 and ARM64, and a winget manifest |
+| Terminal | Release archives per target; Homebrew formula, Alpine package |
+
+Each needs icon.png in the platform's sizes and shape: the GNOME HIG icon style, an Android
+adaptive icon, and Windows tile assets.
+
+### Testing
+
+- With the Keychain or .env logins, follow AGENTS.md's testing rules on every platform.
+- Check narrow layouts: GNOME at 360 px, Android phones, Windows' minimum window size.
+- Update the status table above and README.md's screenshots as each port reaches parity.

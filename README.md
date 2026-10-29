@@ -98,7 +98,7 @@ Copy status by location, color-coded: available, on order or in process, out, he
 
 ## Features
 
-As in the Apple app. [PLATFORMS.md](PLATFORMS.md#notes) lists what the other apps don't have yet.
+As in the Apple app. [PLATFORMS.md](PLATFORMS.md#plan) plans bringing the other apps up to it.
 
 **Catalog**
 - Search and advanced search (keyword, title, author, subject, …), with filters for format,
@@ -128,6 +128,7 @@ As in the Apple app. [PLATFORMS.md](PLATFORMS.md#notes) lists what the other app
   interrupting you.
 - Guest browsing without an account.
 - Pull to refresh on iOS and iPadOS; View ▸ Refresh (⌘R) on macOS.
+- The version at the foot of the sidebar opens the About box (also Biblio ▸ About Biblio on macOS).
 - Drag an item's cover onto Holds to place a hold, or onto a search field to search for it.
   On macOS this also works across windows.
 
@@ -167,7 +168,7 @@ Inside the Apple app:
 
 | Folder | Contents |
 |---|---|
-| `apple/Biblio/Model` | Data models, per-window session state, and the paged list model that drives infinite scrolling |
+| `apple/Biblio/Model` | Data models, per-window session state, and the list model that fetches pages for the core's item list |
 | `apple/Biblio/Net` | `BiblioClient` (an actor that handles sign-in and re-authentication), the gateway API calls, account-settings form handling, request throttling, and the library directory |
 | `apple/Biblio/Store` | Keychain access, and the saved libraries with their branding |
 | `apple/Biblio/Views` | SwiftUI views |

@@ -10,6 +10,9 @@ struct BiblioApp: App {
             SidebarCommands()
             InspectorCommands()
             RefreshCommands()
+            #if os(macOS)
+            AboutCommands()
+            #endif
         }
         #if os(macOS)
         .defaultSize(width: 1180, height: 760)

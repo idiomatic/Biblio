@@ -1,4 +1,4 @@
-* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.1): a patron front-end to https://LIBRARY.bibliocommons.com/.
+* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.3): a patron front-end to https://LIBRARY.bibliocommons.com/.
 ## views
 * holds: view, add, and remove; when the library disallows removal (e.g., "Ready for pickup"), say why, and handle partial refusals.
 * checked out items, borrowing history, search, and advanced search.
@@ -7,18 +7,21 @@
 * the sidebar badges hold and checked out counts, fetched at launch; lists show no item-count footer.
 * lists scroll infinitely: size the scroll bar to the whole list with placeholder rows, fetching only pages actually viewed; refetch a list shown again more than 15 minutes after it was fetched.
 * sort lists, including by people waiting; client-side sorts may fetch remaining pages in the background and animate reordering.
+* list paging, sorting, and filtering live in the shared core (`biblio_list_*`), not the app.
 * multiple selection to place or cancel holds on many items.
-* refresh by pull-down (iOS/iPadOS) or menu item (macOS); refreshing account lists starts a fresh session (works around an intermittently empty checked out list).
+* refresh by pull-down (iOS/iPadOS) or menu item (macOS); refreshing account lists starts a fresh session (works around an intermittently empty checked out list); keep the stale rows, dimmed, until the first page replaces them, and reload the open item's details.
 * list items show availability, including "on order" copies (with a box symbol).
 * an inspector shows item detail; on macOS its toggle is the rightmost toolbar button.
 * item detail fetches "Availability by Location" in the background (collection and call number may be omitted); each copy has a colored symbol for its status (e.g., available, on order or in process, out, held, in transit, repair, missing, withdrawn, claims returned, library use only).
 * item detail has a "Hold" button and pickup location menu (defaulting to the preferred location), or "Cancel Hold" for held items.
 * drag part of item detail onto holds (any window's) to place a hold, or onto any window's search field to search for it; a stealth feature, so no drag hints.
-* the account view shows the library card number as a scannable Codabar barcode.
+* the account view, and a barcode toolbar button (in the sidebar's toolbar on macOS), show the library card number as a scannable Codabar barcode.
+* the app version shows subtly at the foot of the sidebar and opens the platform's About box, which says in everyday words that people made Biblio working with AI assistants, and that it isn't made by BiblioCommons or the library.
 * a bottom status bar shows the latest request as `TITLE [SIZE KiB]` (URL on hover), fading after 2 seconds of inactivity.
 ## settings
 * on macOS, account settings live in the Settings window, not the sidebar.
-* change email; change password (updating the Keychain); change pickup location and language, saving on change and reverting on error.
+* change email; change password (updating the Keychain); change pickup location and library language, saving on change and reverting on error.
+* the library language is the account's preference, separate from the app's language; never set it automatically, but offer "Use System Language" to copy the closest supported system language.
 * toggle borrowing history, confirming before turning it off (the library may delete history).
 ## authentication
 * remember credentials in the Keychain; reauthenticate transparently when sessions expire (after inactivity, or when the same login signs in elsewhere, so allow at most one window per login).
@@ -50,5 +53,6 @@
 ## documentation
 * README.md for GitHub: features, requirements, building, project layout, and license (BSD 3-Clause).
 * NOTES-API.md: the BiblioCommons gateway endpoints the app uses.
+* CHANGELOG.md: user-facing changes per version, with a `vX.Y` tag at each version bump.
 ## miscellaneous
 * delete .zig-cache and zig-out when cleaning up the workspace
