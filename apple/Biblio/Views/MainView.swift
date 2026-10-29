@@ -138,6 +138,7 @@ struct MainView: View {
             }
             #endif
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { VersionLabel() }
         .navigationTitle(session.library.shortName ?? "Library")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 190, ideal: 220)
@@ -230,6 +231,20 @@ struct InspectorToggle: View {
             Label("Item Details", systemImage: "sidebar.trailing")
         }
         .help("Show or hide item details")
+    }
+}
+
+/// The app's version, subtly at the foot of the sidebar.
+private struct VersionLabel: View {
+    private static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+
+    var body: some View {
+        Text("Biblio \(Self.version)")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .accessibilityLabel("Biblio version \(Self.version)")
     }
 }
 
