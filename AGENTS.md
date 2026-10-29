@@ -50,3 +50,5 @@
 ## documentation
 * README.md for GitHub: features, requirements, building, project layout, and license (BSD 3-Clause).
 * NOTES-API.md: the BiblioCommons gateway endpoints the app uses.
+## miscellaneous
+* delete .zig-cache and zig-out when cleaning up the workspace

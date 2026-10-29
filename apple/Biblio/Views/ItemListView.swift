@@ -54,6 +54,8 @@ struct ItemListView<Header: View>: View {
         .listStyle(.inset)
         #endif
         .overlay { emptyState }
+        // Only the mask fades; the fresh rows replace the stale ones at once.
+        .overlay { refreshMask.animation(.easeInOut(duration: 0.2), value: model.isRefreshing) }
         .refreshable { await refresh() }
         .focusedSceneValue(\.refreshList, RefreshAction { Task { await refresh() } })
         .contextMenu(forSelectionType: ListEntry.ID.self) { ids in
@@ -207,6 +209,21 @@ struct ItemListView<Header: View>: View {
                 Spacer()
                 Button("Retry") { model.retry() }
             }
+        }
+    }
+
+    /// Dims the stale rows while a refresh fetches their replacements. On iOS the pull-to-refresh
+    /// control is the spinner.
+    @ViewBuilder
+    private var refreshMask: some View {
+        if model.isRefreshing {
+            Rectangle()
+                .fill(.background.opacity(0.5))
+                #if os(macOS)
+                .overlay { ProgressView().controlSize(.small) }
+                #endif
+                .allowsHitTesting(false)
+                .transition(.opacity)
         }
     }
 

@@ -67,6 +67,8 @@ final class ItemListModel {
     private(set) var facets: [Facet] = []
     private(set) var serverSorts: [String] = []
     private(set) var loaded = false
+    /// Refetching while the stale rows stay in place, until the first page replaces them.
+    private(set) var isRefreshing = false
     /// When the first page was fetched; the list's age.
     private var loadedAt: ContinuousClock.Instant?
 
@@ -148,6 +150,8 @@ final class ItemListModel {
 
     /// Rebuilds `rows` after loading, filtering or sorting.
     private func rebuildRows() {
+        // The stale rows stay until the first page arrives.
+        guard !isRefreshing else { return }
         if hasLocalFilter {
             // A local filter can't know which unfetched items match, so no placeholders.
             rows = sorted(entries.filter(passesLocalFilters)).map(Row.item)
@@ -186,46 +190,58 @@ final class ItemListModel {
     /// Loads a list that hasn't been fetched yet, or refetches one older than `maxAge`.
     func loadIfNeeded() {
         guard !isLoading else { return }
-        if !loaded || isStale { reload() }
+        if !loaded { reload() } else if isStale { reload(keepingContent: true) }
     }
 
     var isStale: Bool {
         loadedAt.map { ContinuousClock.now - $0 > Self.maxAge } ?? false
     }
 
-    func reload() {
+    /// Starts again from the first page. Keeping content leaves the current rows on screen,
+    /// stale, until the first page replaces them all at once.
+    func reload(keepingContent: Bool = false) {
         generation += 1
         backgroundTask?.cancel()
         backgroundTask = nil
         dwellTask?.cancel()
-        slots = []
-        positions = [:]
         loadedPages = []
         inFlight = []
         visiblePlaceholders = [:]
-        rows = []
-        total = 0
         error = nil
-        loaded = false
-        loadedAt = nil
+        isRefreshing = keepingContent && loaded
+        if !isRefreshing { clearContent() }
         if case .search(let q) = source, q.isEmpty {
+            clearContent()
+            isRefreshing = false
             facets = []
             return
         }
         firstPageTask = request(page: 1)
     }
 
+    private func clearContent() {
+        slots = []
+        positions = [:]
+        rows = []
+        total = 0
+        loaded = false
+        loadedAt = nil
+    }
+
     /// Pull to refresh / View > Refresh. Account lists start a fresh session first: the gateway can
     /// keep serving one session a wrong list (checkouts reported empty), and a new session may not.
     func refresh() async {
-        if !source.isSearch { _ = try? await client.login(force: true) }
-        reload()
+        if !source.isSearch {
+            isRefreshing = loaded
+            _ = try? await client.login(force: true)
+        }
+        reload(keepingContent: true)
         await firstPageTask?.value
     }
 
     /// Reloads and fetches every page (for short lists like holds, after a change).
     func reloadAll() async {
-        reload()
+        reload(keepingContent: true)
         await firstPageTask?.value
         guard loaded else { return }
         for p in 2...max(2, pages) where p <= pages {
@@ -242,7 +258,7 @@ final class ItemListModel {
     @discardableResult
     private func request(page: Int, animated: Bool = false) -> Task<Void, Never>? {
         guard page >= 1, !loadedPages.contains(page), !inFlight.contains(page) else { return nil }
-        guard page == 1 || page <= pages else { return nil }
+        guard page == 1 || (page <= pages && !isRefreshing) else { return nil }
         let gen = generation
         inFlight.insert(page)
         return Task {
@@ -255,6 +271,11 @@ final class ItemListModel {
                 if page == 1, needsAllPages || source == .holds { startBackgroundFetch() }
             } catch {
                 guard gen == generation else { return }
+                if isRefreshing {
+                    // Nothing left to retry from: the stale rows go, and the error shows instead.
+                    isRefreshing = false
+                    clearContent()
+                }
                 self.error = error.localizedDescription
             }
         }
@@ -278,6 +299,11 @@ final class ItemListModel {
 
     private func apply(_ result: ListPage, page: Int) {
         if page == 1 {
+            if isRefreshing {
+                slots = []
+                positions = [:]
+                isRefreshing = false
+            }
             pageSize = max(result.pageSize, 1)
             loadedAt = .now
         }
@@ -344,7 +370,7 @@ final class ItemListModel {
     }
 
     private func startBackgroundFetch() {
-        guard backgroundTask == nil, loaded, hasMore else { return }
+        guard backgroundTask == nil, loaded, hasMore, !isRefreshing else { return }
         let gen = generation
         let last = min(pages, Self.clientSortPageLimit)
         isBackgroundFetching = true
