@@ -1,6 +1,6 @@
 # Biblio on Apple, Android, GNOME, Windows and the terminal
 
-Every Biblio app shares one core, **libbiblio**, written in Zig (`core/`). The core is the
+Every Biblio app shares one core, **libbiblio**, written in Zig ([`core/`](core)). The core is the
 BiblioCommons client:
 
 - signing in, and signing in again when a session expires
@@ -17,10 +17,10 @@ in [core/include/biblio.h](core/include/biblio.h) and [docs/core.md](docs/core.m
 
 | Platform | How it calls the core |
 |---|---|
-| Apple | Swift calls the C functions directly; `apple/Biblio/Net/CoreModels.swift` copies the structs into the app's models. |
+| Apple | Swift calls the C functions directly; [`apple/Biblio/Net/CoreModels.swift`](apple/Biblio/Net/CoreModels.swift) copies the structs into the app's models. |
 | GNOME | Zig calls `biblio.capi` and reads the structs in place. |
-| Android | A Zig JNI shim (`android/native/src/jni.zig`) has a native method per operation and builds the Kotlin models with their constructors. |
-| Windows | C# P/Invoke with blittable copies of the structs (`windows/Biblio/Core/Interop.cs`). |
+| Android | A Zig JNI shim ([`android/native/src/jni.zig`](android/native/src/jni.zig)) has a native method per operation and builds the Kotlin models with their constructors. |
+| Windows | C# P/Invoke with blittable copies of the structs ([`windows/Biblio/Core/Interop.cs`](windows/Biblio/Core/Interop.cs)). |
 | Terminal | Zig calls the core's `Client` directly, with Zig types, like the `biblio` CLI. |
 
 | Platform | UI | Language | Passwords | HTTP |
@@ -51,7 +51,7 @@ core/zig-out/bin/biblio search wccls "project hail mary"
 
 **Apple.** Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme and a destination, set
 your own signing team under **Signing & Capabilities**, and build. The "Build libbiblio" phase
-runs `apple/build-core.sh`, which builds `apple/build/BiblioCore.xcframework`. Run that script
+runs [`apple/build-core.sh`](apple/build-core.sh), which builds `apple/build/BiblioCore.xcframework`. Run that script
 once by hand after a fresh clone, so Xcode finds the framework.
 
 **GNOME.** Needs `gtk4`, `libadwaita-1` (1.6 or later) and `libsecret-1`:
@@ -60,7 +60,7 @@ once by hand after a fresh clone, so Xcode finds the framework.
 cd gnome && zig build run
 ```
 
-`gnome/com.rbrian.Biblio.json` is a Flatpak manifest.
+[`gnome/com.rbrian.Biblio.json`](gnome/com.rbrian.Biblio.json) is a Flatpak manifest.
 
 **Android.** Needs Zig on `PATH`, plus the Android SDK and a JDK. Run `gradle wrapper` once,
 or open the project in Android Studio. Then:
@@ -69,7 +69,7 @@ or open the project in Android Studio. Then:
 cd android && ./gradlew installDebug
 ```
 
-Gradle builds `libbiblio_jni.so` for arm64-v8a and x86_64 with `android/native/build.zig`.
+Gradle builds `libbiblio_jni.so` for arm64-v8a and x86_64 with [`android/native/build.zig`](android/native/build.zig).
 
 **Windows.** Needs Zig on `PATH`, the .NET 8 SDK and the Windows App SDK workload:
 
@@ -101,7 +101,7 @@ cd tui && zig build -Dtarget=aarch64-linux-gnu -Doptimize=safe
 ```
 
 The GNOME app links against GTK, so it builds against a Debian 13 (trixie) sysroot, the base
-of current Raspberry Pi OS. `gnome/debian-sysroot.sh` downloads the packages from Debian and
+of current Raspberry Pi OS. [`gnome/debian-sysroot.sh`](gnome/debian-sysroot.sh) downloads the packages from Debian and
 unpacks them (about 25 MB to download, 160 MB on disk; it needs curl, xz, ar and tar, not dpkg):
 
 ```bash
@@ -121,17 +121,17 @@ x86_64 Linux sysroot. 32-bit Raspberry Pi OS isn't supported.
 |---|---|
 | Core | 32 unit and fixture tests pass, including the item list's. The C header's original 27 structs match the core's layout. Live guest requests work (library info, search, availability, directory). Cross-compiles for macOS, iOS, the iOS simulator, x86_64 and aarch64 Linux (Raspberry Pi), Android and Windows. |
 | Apple | Builds for macOS and the iOS simulator. On iPhone 17, sign-in, search, item details and availability, the holds and checkout counts, and lists (paging, placeholders, hold filters and the people-waiting sort, through the core's item list) work. |
-| GNOME | Links for x86_64 and aarch64 Linux (Raspberry Pi) against Debian trixie sysroots from `gnome/debian-sysroot.sh` (GTK 4.18, libadwaita 1.7). `zig build check -Dsysroot=<sysroot>` type-checks without linking. Not run yet. |
+| GNOME | Links for x86_64 and aarch64 Linux (Raspberry Pi) against Debian trixie sysroots from [`gnome/debian-sysroot.sh`](gnome/debian-sysroot.sh) (GTK 4.18, libadwaita 1.7). `zig build check -Dsysroot=<sysroot>` type-checks without linking. Not run yet. |
 | Android | The JNI library builds for both ABIs. `zig build test` in `android/native` checks its constructor signatures against the Kotlin models and builds models through a stand-in JVM. The Kotlin has not been compiled. |
 | Terminal | Builds for macOS and cross-compiles for x86_64 and aarch64 Linux (Raspberry Pi); 6 tests pass (keys, text fitting and wrapping, colors, status lines). Driven through a pseudo-terminal against WCCLS as a guest: adding the library, search, item details and availability, New Titles, paging, sorting and quitting work. Signed-in screens and holds haven't been tried against a live account. |
-| Windows | The core builds for x86_64 and aarch64 Windows. The C# structs in `Interop.cs` match the C header's layout as of before the item list (25 structs, checked by script). The C# has not been compiled. |
+| Windows | The core builds for x86_64 and aarch64 Windows. The C# structs in [`Interop.cs`](windows/Biblio/Core/Interop.cs) match the C header's layout as of before the item list (25 structs, checked by script). The C# has not been compiled. |
 
 Zig 0.17's `std.Io.Threaded` does not compile for iOS, so the core uses pthreads there
-(`core/src/sync.zig`). iOS always uses the app's URLSession transport.
+([`core/src/sync.zig`](core/src/sync.zig)). iOS always uses the app's URLSession transport.
 
-## Plan
+## Porting Plan
 
-Bring the GNOME, Android, Windows and terminal apps to the Apple app's features (AGENTS.md),
+Bring the GNOME, Android, Windows and terminal apps to the Apple app's features ([AGENTS.md](AGENTS.md)),
 each following its own platform's conventions.
 
 ### Targets
@@ -176,7 +176,7 @@ each following its own platform's conventions.
 | Branding | Library accent color in CSS, checked for contrast | Brand color as the color scheme seed | Accent color resources | 256-color tint |
 | Icon cache | `$XDG_CACHE_HOME/biblio` | `cacheDir` | `ApplicationData.LocalCacheFolder` | None |
 
-Every port also needs the rest of AGENTS.md:
+Every port also needs the rest of [AGENTS.md](AGENTS.md):
 
 - advanced search and search facets (the terminal app has neither yet)
 - Explore New Titles with its filters
@@ -191,7 +191,7 @@ Every port also needs the rest of AGENTS.md:
 
 ### 3. Localization
 
-Do TODO.md's localization item on every platform, following its language settings:
+Do [TODO.md](TODO.md)'s localization item on every platform, following its language settings:
 gettext on GNOME, `strings.xml` on Android, `.resw` on Windows. The library account's language
 stays a separate setting.
 
@@ -209,6 +209,6 @@ adaptive icon, and Windows tile assets.
 
 ### Testing
 
-- With the Keychain or .env logins, follow AGENTS.md's testing rules on every platform.
+- With the Keychain or .env logins, follow [AGENTS.md](AGENTS.md)'s testing rules on every platform.
 - Check narrow layouts: GNOME at 360 px, Android phones, Windows' minimum window size.
-- Update the status table above and README.md's screenshots as each port reaches parity.
+- Update the status table above and [README.md](README.md)'s screenshots as each port reaches parity.

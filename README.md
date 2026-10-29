@@ -9,7 +9,8 @@ end to any public library catalog hosted on
 
 Search the catalog, place and cancel holds, and keep track of checkouts and borrowing
 history, all in an interface that follows each platform's own design. The apps share one
-core, libbiblio, written in Zig; [PLATFORMS.md](PLATFORMS.md) describes how they fit together.
+core, libbiblio, written in Zig; [PLATFORMS.md](PLATFORMS.md) describes how they fit together, and
+[CHANGELOG.md](CHANGELOG.md) lists what changed in each version.
 
 > Biblio is an independent project and isn't affiliated with or endorsed by BiblioCommons
 > or any library.

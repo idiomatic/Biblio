@@ -461,11 +461,11 @@ such as `biblio_copy_list_t`. Each app copies these into its own model types:
 
 | App | Where the model types are |
 |---|---|
-| Swift | `Models.swift`, built in `CoreModels.swift` |
+| Swift | [`Models.swift`](../apple/Biblio/Model/Models.swift), built in [`CoreModels.swift`](../apple/Biblio/Net/CoreModels.swift) |
 | Zig (GNOME) | Reads the C structs in place |
 | Zig (terminal) | Uses the core's Zig types from `biblio.models` |
-| Kotlin | `Models.kt`, built by the JNI shim |
-| C# | `Models.cs`, built in `Interop.cs` |
+| Kotlin | [`Models.kt`](../android/app/src/main/java/com/rbrian/biblio/core/Models.kt), built by the JNI shim |
+| C# | [`Models.cs`](../windows/Biblio/Core/Models.cs), built in [`Interop.cs`](../windows/Biblio/Core/Interop.cs) |
 
 ### `biblio_bib_t`
 
@@ -627,7 +627,7 @@ example, see `Transport` in [`apple/Biblio/Net/Core.swift`](../apple/Biblio/Net/
 
 ## Using the core from Zig
 
-Zig apps import `core/src/root.zig` as a module and call the same functions directly. The
+Zig apps import [`core/src/root.zig`](../core/src/root.zig) as a module and call the same functions directly. The
 GNOME app does this:
 
 ```zig
@@ -689,26 +689,26 @@ changing the parser.
 ## Adding an operation
 
 1. Implement it:
-   - Library-wide operations go in `library.zig`.
-   - Account operations go on `Client` in `client.zig`. Parse responses with the lenient `J`
-     reader in `json.zig`, which treats missing or mistyped fields as null instead of failing.
+   - Library-wide operations go in [`library.zig`](../core/src/library.zig).
+   - Account operations go on `Client` in [`client.zig`](../core/src/client.zig). Parse responses with the lenient `J`
+     reader in [`json.zig`](../core/src/json.zig), which treats missing or mistyped fields as null instead of failing.
    - On failure, set `failure.*` to a `kind` and a message written for people, then return an
      error.
-2. Export it from `capi.zig`. A client method is usually one line with `fetch` or `perform`.
+2. Export it from [`capi.zig`](../core/src/capi.zig). A client method is usually one line with `fetch` or `perform`.
    If it returns a new type, add an `extern struct` with the model's fields in snake_case,
    plus `has_<name>` for optional numbers and booleans and `<name>_count` for arrays.
    `deliver` converts it automatically, and the type's free function goes in the `comptime`
    list at the end of the file.
-3. Declare the function, and any new struct, in `include/biblio.h`. Then check that the C and
+3. Declare the function, and any new struct, in [`include/biblio.h`](../core/include/biblio.h). Then check that the C and
    Zig layouts match.
 4. Add the operation to this guide, and add a fixture test.
 5. Use it from each app:
-   - Apple: a method in `apple/Biblio/Net/BiblioAPI.swift`, plus a model initializer in
-     `CoreModels.swift` for a new type.
-   - GNOME: call it with `Job.start` (`gnome/src/core.zig`).
-   - Terminal: call the `Client` method from `tui/src/main.zig`.
-   - Android: a native method in `android/native/src/jni.zig` and `Core.kt`. A new type needs
+   - Apple: a method in [`apple/Biblio/Net/BiblioAPI.swift`](../apple/Biblio/Net/BiblioAPI.swift), plus a model initializer in
+     [`CoreModels.swift`](../apple/Biblio/Net/CoreModels.swift) for a new type.
+   - GNOME: call it with `Job.start` ([`gnome/src/core.zig`](../gnome/src/core.zig)).
+   - Terminal: call the `Client` method from [`tui/src/main.zig`](../tui/src/main.zig).
+   - Android: a native method in [`android/native/src/jni.zig`](../android/native/src/jni.zig) and [`Core.kt`](../android/app/src/main/java/com/rbrian/biblio/core/Core.kt). A new type needs
      a Kotlin model whose constructor follows the struct, an entry in `className`, and a case
      in the signature test.
-   - Windows: the struct and function in `windows/Biblio/Core/Interop.cs`, and a method in
-     `Core.cs`.
+   - Windows: the struct and function in [`windows/Biblio/Core/Interop.cs`](../windows/Biblio/Core/Interop.cs), and a method in
+     [`Core.cs`](../windows/Biblio/Core/Core.cs).

@@ -46,13 +46,13 @@
 * follow the Apple Human Interface Guidelines for macOS, iOS, and iPadOS.
 * panels and sheets must fit narrow iPhones (e.g., iPhone 13 mini); keep minimum widths to macOS.
 * confirmation dialogs appear over the screen and control that asked for them.
-* use icon.png as the app icon: full-bleed on iOS, the standard rounded, shadowed shape on macOS.
+* use [icon.png](icon.png) as the app icon: full-bleed on iOS, the standard rounded, shadowed shape on macOS.
 * may use library branding colors, adjusted for contrast in light and dark mode (e.g., accent-colored toolbar buttons on a dark toolbar).
 * may subtly color availability statuses, and list items by this account's status (on hold, ready for pickup, checked out, overdue).
 * build without compiler warnings.
 ## documentation
-* README.md for GitHub: features, requirements, building, project layout, and license (BSD 3-Clause).
-* NOTES-API.md: the BiblioCommons gateway endpoints the app uses.
-* CHANGELOG.md: user-facing changes per version, with a `vX.Y` tag at each version bump.
+* [README.md](README.md) for GitHub: features, requirements, building, project layout, and license (BSD 3-Clause).
+* [NOTES-API.md](NOTES-API.md): the BiblioCommons gateway endpoints the app uses.
+* [CHANGELOG.md](CHANGELOG.md): user-facing changes per version, with a `vX.Y` tag at each version bump.
 ## miscellaneous
 * delete .zig-cache and zig-out when cleaning up the workspace
