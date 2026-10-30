@@ -24,7 +24,7 @@ Copy status by location, color-coded: available, on order or in process, out, he
 <table>
 <tr>
 <td width="55%"><img src="docs/screenshots/mac-hollow.png" alt="Search on macOS with The Hollow's copies by location in the inspector"></td>
-<td><img src="docs/screenshots/ipad-new-titles.png" alt="New Titles on iPad sorted by people waiting, with The Hollow's copies by location in the inspector"></td>
+<td><img src="docs/screenshots/ipad-new-titles.png" alt="New Titles on iPad sorted by people waiting, with Dungeon Crawler Carl's copies by location in the inspector"></td>
 </tr>
 <tr>
 <td align="center">macOS</td>

@@ -1,4 +1,4 @@
-* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.3): a patron front-end to https://LIBRARY.bibliocommons.com/.
+* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.4): a patron front-end to https://LIBRARY.bibliocommons.com/.
 ## views
 * holds: view, add, and remove; when the library refuses a removal (e.g., "Ready for pickup"), say why, including partial refusals.
 * checked out items, borrowing history, search, and advanced search.
@@ -11,8 +11,8 @@
 * multiple selection places or cancels holds on many items.
 * refresh by pull-down (iOS/iPadOS) or menu item (macOS): account lists start a fresh session; stale rows stay, dimmed, until the first page replaces them; the open item's details reload.
 * list items show format, year, edition, and availability, including "on order" copies (with a box symbol).
-* editions drop catalog punctuation: enclosing square brackets and a closing period, except one ending an abbreviation.
-* an inspector shows item detail; on macOS its toggle is the rightmost toolbar button.
+* editions drop catalog punctuation: matching square brackets and a closing period, except one ending an abbreviation.
+* an inspector shows item detail, closing when the section changes; on macOS its toggle is the rightmost toolbar button.
 * item detail fetches "Availability by Location" in the background (collection and call number are optional), with a colored symbol for each copy's status (e.g., available, on order, out, in transit, missing).
 * item detail has "Hold" with a pickup location menu (defaulting to the preferred location), or "Cancel Hold" for held items.
 * dragging part of item detail onto any window's holds places a hold, or onto its search field searches for it; no drag hints.
@@ -54,5 +54,6 @@
 * [README.md](README.md) for GitHub: features, requirements, building, project layout, and license (BSD 3-Clause).
 * [NOTES-API.md](NOTES-API.md): the BiblioCommons gateway endpoints the app uses.
 * [CHANGELOG.md](CHANGELOG.md): user-facing changes per version, tagged `vX.Y` at each version bump.
+* [SCREENSHOTS.md](SCREENSHOTS.md): how to regenerate the README screenshots; record new capture discoveries there.
 ## miscellaneous
 * delete .zig-cache and zig-out when cleaning up the workspace.

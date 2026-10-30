@@ -41,7 +41,7 @@ pub const Bib = struct {
             .authors = brief.get("authors").strings(a),
             .format = brief.get("format").str(a) orelse "UNKNOWN",
             .publicationDate = brief.get("publicationDate").nonEmpty(a),
-            .edition = if (brief.get("edition").nonEmpty(a)) |e| tidyEdition(e) else null,
+            .edition = if (brief.get("edition").nonEmpty(a)) |e| tidyEdition(a, e) else null,
             .callNumber = brief.get("callNumber").nonEmpty(a),
             .summary = brief.get("description").nonEmpty(a),
             .jacketSmall = small,
@@ -64,16 +64,33 @@ pub const Bib = struct {
 
 /// An edition as readers would write it: without the square brackets catalogers put around
 /// supplied text, or the period that closes the statement ("[First edition]." becomes
-/// "First edition"). Brackets that don't enclose the whole value, and abbreviations
-/// ("40th anniversary ed."), stay.
-pub fn tidyEdition(edition: []const u8) []const u8 {
-    var s = std.mem.trim(u8, edition, " ");
-    if (std.mem.endsWith(u8, s, "].")) s = s[0 .. s.len - 1];
-    if (s.len >= 2 and s[0] == '[' and s[s.len - 1] == ']' and std.mem.findScalar(u8, s[1 .. s.len - 1], ']') == null) {
-        s = std.mem.trim(u8, s[1 .. s.len - 1], " ");
+/// "First edition", "4K Ultra HD [edition]" becomes "4K Ultra HD edition"). Unmatched
+/// brackets, and abbreviations ("40th anniversary ed."), stay.
+pub fn tidyEdition(a: Allocator, edition: []const u8) []const u8 {
+    const trimmed = std.mem.trim(u8, edition, " ");
+    const buf = a.alloc(u8, trimmed.len) catch return trimmed;
+    var n: usize = 0;
+    for (trimmed, 0..) |c, i| {
+        if (c == '[' and closesNext(trimmed[i + 1 ..])) continue;
+        if (c == ']' and opensLast(trimmed[0..i])) continue;
+        buf[n] = c;
+        n += 1;
     }
+    var s = std.mem.trim(u8, buf[0..n], " ");
     if (std.mem.endsWith(u8, s, ".") and !endsWithAbbreviation(s)) s = std.mem.trimEnd(u8, s[0 .. s.len - 1], " ");
     return s;
+}
+
+/// Whether the first bracket in the text after a "[" closes it.
+fn closesNext(after: []const u8) bool {
+    const i = std.mem.findAny(u8, after, "[]") orelse return false;
+    return after[i] == ']';
+}
+
+/// Whether the last bracket in the text before a "]" opens it.
+fn opensLast(before: []const u8) bool {
+    const i = std.mem.findLastAny(u8, before, "[]") orelse return false;
+    return before[i] == '[';
 }
 
 /// Whether the final period belongs to an abbreviation ("rev. ed.", "U.S.").
@@ -89,16 +106,23 @@ fn endsWithAbbreviation(s: []const u8) bool {
 }
 
 test "editions read as written" {
-    try std.testing.expectEqualStrings("First edition", tidyEdition("[First edition]."));
-    try std.testing.expectEqualStrings("Large print edition", tidyEdition("[Large print edition]"));
-    try std.testing.expectEqualStrings("4K Ultra HD + Blu-ray", tidyEdition("4K Ultra HD + Blu-ray."));
-    try std.testing.expectEqualStrings("Unabridged", tidyEdition("Unabridged."));
-    try std.testing.expectEqualStrings("40th anniversary ed.", tidyEdition("40th anniversary ed."));
-    try std.testing.expectEqualStrings("Rev. and enl. Ed.", tidyEdition("Rev. and enl. Ed."));
-    try std.testing.expectEqualStrings("U.S. ed", tidyEdition("U.S. ed"));
-    try std.testing.expectEqualStrings("First U.S.", tidyEdition("First U.S."));
-    try std.testing.expectEqualStrings("[Book club] edition", tidyEdition("[Book club] edition"));
-    try std.testing.expectEqualStrings("[1st] [ed.]", tidyEdition("[1st] [ed.]"));
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("First edition", tidyEdition(a, "[First edition]."));
+    try std.testing.expectEqualStrings("Large print edition", tidyEdition(a, "[Large print edition]"));
+    try std.testing.expectEqualStrings("4K Ultra HD + Blu-ray", tidyEdition(a, "4K Ultra HD + Blu-ray."));
+    try std.testing.expectEqualStrings("Unabridged", tidyEdition(a, "Unabridged."));
+    try std.testing.expectEqualStrings("40th anniversary ed.", tidyEdition(a, "40th anniversary ed."));
+    try std.testing.expectEqualStrings("Rev. and enl. Ed.", tidyEdition(a, "Rev. and enl. Ed."));
+    try std.testing.expectEqualStrings("U.S. ed", tidyEdition(a, "U.S. ed"));
+    try std.testing.expectEqualStrings("First U.S.", tidyEdition(a, "First U.S."));
+    try std.testing.expectEqualStrings("Book club edition", tidyEdition(a, "[Book club] edition"));
+    try std.testing.expectEqualStrings("4K Ultra HD edition", tidyEdition(a, "4K Ultra HD [edition]"));
+    try std.testing.expectEqualStrings("1st ed.", tidyEdition(a, "[1st] [ed.]"));
+    try std.testing.expectEqualStrings("Second edition [", tidyEdition(a, "Second edition [."));
+    try std.testing.expectEqualStrings("Book club] edition", tidyEdition(a, "Book club] edition"));
+    try std.testing.expectEqualStrings("[a b c", tidyEdition(a, "[a [b] c"));
 }
 
 pub const Hold = struct {

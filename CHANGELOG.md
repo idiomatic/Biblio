@@ -10,7 +10,9 @@ the core and are not yet released.
 
 ### Changed
 - Editions read as written, without the square brackets and closing period of library
-  catalogs ("[First edition]." reads "First edition").
+  catalogs ("[First edition]." reads "First edition", "4K Ultra HD [edition]" reads
+  "4K Ultra HD edition").
+- Switching sections closes the item inspector, instead of leaving the last list's item open.
 
 ## 1.3 — 2026-10-29
 

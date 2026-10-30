@@ -177,7 +177,7 @@ pub fn hostString(s: []const u8) ?[*:0]u8 {
 // MARK: Exports
 
 pub export fn biblio_version() [*:0]const u8 {
-    return "1.3.0";
+    return "1.4.0";
 }
 
 /// Routes every request through the host's HTTP stack. Pass null to go back to the built-in one.

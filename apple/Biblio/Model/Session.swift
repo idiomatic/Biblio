@@ -81,7 +81,15 @@ final class WindowSession {
 
     var patron: Patron?
     var loginError: String?
-    var section: AppSection? = .search
+    /// Switching sections closes the inspector and clears its item, which belonged to the old list.
+    var section: AppSection? = .search {
+        didSet {
+            guard section != oldValue else { return }
+            showInspector = false
+            selection = nil
+            selectedEntries = []
+        }
+    }
     var selection: Bib?
     /// All selected rows when more than one is selected (the inspector then shows bulk actions).
     var selectedEntries: [ListEntry] = []
