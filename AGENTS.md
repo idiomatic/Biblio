@@ -16,7 +16,7 @@
 * item detail fetches "Availability by Location" in the background (collection and call number optional), with a colored symbol per copy status.
 * item detail has "Hold" with a pickup location menu (defaulting to the preferred location), or "Cancel Hold" for held items.
 * dragging part of item detail onto any window's holds places a hold, or onto its search field searches for it; no drag hints.
-* the account view and a barcode toolbar button (in the sidebar's toolbar on macOS) show the library card as a scannable Codabar barcode; on iOS, a Lock Screen and Control Center control opens it for the most recently used login (`biblio://card`), and swiping left or right rotates between logins' cards, fetching missing ones in the background.
+* the account view and a barcode toolbar button (in the sidebar's toolbar on macOS) show the library card as a scannable Codabar barcode; on iOS, a Lock Screen and Control Center control opens it for the most recently used login (`biblio://card`), and swiping left or right rotates between logins' cards.
 * the app version shows subtly at the foot of the sidebar and opens the About box, which says in everyday words that people made Biblio with AI assistants, and that BiblioCommons and the library didn't.
 * a bottom status bar shows the latest request as `TITLE [SIZE KiB]` (URL on hover), fading after 2 seconds of inactivity.
 ## settings

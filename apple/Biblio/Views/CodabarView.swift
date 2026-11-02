@@ -104,77 +104,32 @@ struct LibraryCardPager: View {
         _selection = State(initialValue: current.id)
     }
 
-    /// A page per login, the current one first; logins without a card yet get a placeholder.
-    private struct Slot: Identifiable {
-        var id: String
-        var username: String
-        var library: LibraryInfo
-        var card: CardInfo?
-        var unavailable: Bool
-    }
-
-    private var slots: [Slot] {
+    /// The remembered card of every login, the current one first.
+    private var cards: [CardInfo] {
         #if os(iOS)
         let store = LibraryStore.shared
-        let all = store.libraries.flatMap { library in
-            library.users.map { user in
-                let id = CardInfo.id(subdomain: library.subdomain, username: user)
-                return Slot(id: id, username: user, library: library, card: id == current.id ? current : store.cards[id],
-                            unavailable: store.unavailableCards.contains(id))
-            }
-        }
-        return all.filter { $0.id == current.id } + all.filter { $0.id != current.id }
+        let others = store.libraries.flatMap { library in
+            library.users.compactMap { store.cards[CardInfo.id(subdomain: library.subdomain, username: $0)] }
+        }.filter { $0.id != current.id }
+        return [current] + others
         #else
-        []
+        [current]
         #endif
     }
 
     var body: some View {
         #if os(iOS)
-        let slots = slots
+        let cards = cards
         TabView(selection: $selection) {
-            ForEach(slots) { slot in
-                Group {
-                    if let card = slot.card {
-                        page(card)
-                    } else {
-                        placeholder(slot)
-                    }
-                }
-                .tag(slot.id)
+            ForEach(cards) { card in
+                page(card).tag(card.id)
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: slots.count > 1 ? .always : .never))
+        .tabViewStyle(.page(indexDisplayMode: cards.count > 1 ? .always : .never))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
-        .task { await LibraryStore.shared.fetchMissingCards() }
         #else
         page(current)
         #endif
-    }
-
-    private func placeholder(_ slot: Slot) -> some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 2) {
-                Text(slot.username)
-                    .font(.headline)
-                Text(slot.library.shortName ?? slot.library.name)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Group {
-                if slot.unavailable {
-                    Text("This card couldn’t be loaded. Sign in as \(slot.username) to show it.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    ProgressView()
-                }
-            }
-            .frame(height: 100)
-        }
-        .padding()
-        .padding(.bottom, 24)
     }
 
     private func page(_ card: CardInfo) -> some View {

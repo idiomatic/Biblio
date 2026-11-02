@@ -9,7 +9,7 @@ the core and are not yet released.
 - On iPhone, a Library Card control for the Lock Screen and Control Center opens the card's
   barcode for the account you used last.
 - On iPhone and iPad, swipe left or right on the library card to rotate between your logins'
-  cards. Opening the card fetches the cards of logins you haven't used yet.
+  cards.
 
 ### Fixed
 - On iPhone and iPad, the Add Library and Add User sheets focus their first field when they open,

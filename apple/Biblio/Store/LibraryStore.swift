@@ -95,10 +95,6 @@ final class LibraryStore {
 
     /// The remembered library cards, by `CardInfo.id`, kept in the Keychain.
     private(set) var cards: [String: CardInfo] = [:]
-    /// Logins whose card couldn't be fetched in the background this run (no password, a failed
-    /// sign-in, or no barcode); they aren't retried until a window signs in as them.
-    private(set) var unavailableCards: Set<String> = []
-    @ObservationIgnored private var isFetchingCards = false
     /// The login opened most recently, in any window.
     private(set) var lastLogin: (subdomain: String, username: String)?
 
@@ -118,39 +114,9 @@ final class LibraryStore {
     }
 
     func saveCard(_ card: CardInfo) {
-        unavailableCards.remove(card.id)
         guard cards[card.id] != card else { return }
         cards[card.id] = card
         saveCards()
-    }
-
-    /// Signs in, one at a time, as each user without a card that no window is using, to
-    /// remember their cards. These sessions are separate from any window's; each login is
-    /// claimed while signing in, so no window opens it meanwhile.
-    func fetchMissingCards() async {
-        guard !isFetchingCards else { return }
-        isFetchingCards = true
-        defer { isFetchingCards = false }
-        let fetcher = UUID()
-        for library in libraries {
-            for user in library.users {
-                let id = CardInfo.id(subdomain: library.subdomain, username: user)
-                guard cards[id] == nil, !unavailableCards.contains(id),
-                      ClientPool.shared.claim(subdomain: library.subdomain, username: user, window: fetcher)
-                else { continue }
-                defer { ClientPool.shared.release(subdomain: library.subdomain, username: user, window: fetcher) }
-                guard Keychain.password(subdomain: library.subdomain, username: user) != nil else {
-                    unavailableCards.insert(id)
-                    continue
-                }
-                let client = BiblioClient(subdomain: library.subdomain, username: user, status: FetchStatus())
-                if let patron = try? await client.login(), let card = CardInfo(library: library, username: user, patron: patron) {
-                    saveCard(card)
-                } else {
-                    unavailableCards.insert(id)
-                }
-            }
-        }
     }
 
     func noteLogin(subdomain: String, username: String) {
