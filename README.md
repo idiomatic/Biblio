@@ -9,7 +9,7 @@ end to any public library catalog hosted on
 
 Search the catalog, place and cancel holds, and keep track of checkouts and borrowing
 history, all in an interface that follows each platform's own design. The apps share one
-core, libbiblio, written in Zig; [PLATFORMS.md](PLATFORMS.md) describes how they fit together, and
+core, libbiblio, written in Zig ([developer guide](core/README.md)), and each has a native UI.
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each version.
 
 > Biblio is an independent project and isn't affiliated with or endorsed by BiblioCommons
@@ -99,11 +99,10 @@ Copy status by location, color-coded: available, on order or in process, out, he
 
 ## Features
 
-As in the Apple app. [PLATFORMS.md](PLATFORMS.md#plan) plans bringing the other apps up to it.
-
 **Catalog**
 - Search and advanced search (keyword, title, author, subject, …), with filters for format,
   availability location, audience, content, language, publication date and date added.
+  - The terminal app has neither advanced search nor facets yet.
 - Explore New Titles: Just Arrived and On Order, with the library's "Filter by" options.
 - Infinite scrolling. The scroll bar starts at the full list length, and only the pages you
   actually scroll to are fetched.
@@ -119,19 +118,24 @@ As in the Apple app. [PLATFORMS.md](PLATFORMS.md#plan) plans bringing the other 
 - Your library card as a scannable Codabar barcode, one toolbar button away.
 - Settings for email, password, pickup location, language and borrowing history. On macOS they
   live in the Settings window.
+  - The terminal app only shows them.
 
 **App**
 - Multiple windows, each with its own session: different libraries, different accounts, or
   different searches side by side.
+  - The terminal app runs one session per process.
 - Add a library by its subdomain (`wccls`) or URL, with autocomplete from the BiblioCommons
   libraries directory.
 - Credentials are stored in the Keychain, and expired sessions are renewed without
   interrupting you.
+  - GNOME uses the Secret Service, Android the Keystore, and Windows the Credential Locker.
+    The terminal app doesn't save passwords.
 - Guest browsing without an account.
 - Pull to refresh on iOS and iPadOS; View ▸ Refresh (⌘R) on macOS.
 - The version at the foot of the sidebar opens the About box (also Biblio ▸ About Biblio on macOS).
 - Drag an item's cover onto Holds to place a hold, or onto a search field to search for it.
   On macOS this also works across windows.
+  - The terminal app has no drag and drop.
 
 ## Requirements
 
@@ -148,7 +152,19 @@ The GNOME and terminal apps also cross-compile for 64-bit Raspberry Pi OS.
 
 ## Building
 
-[PLATFORMS.md](PLATFORMS.md#building) has each platform's steps.
+The core's tests: `cd core && zig build test`. Then, per platform:
+
+| Platform | Steps |
+|---|---|
+| Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, set your signing team, and build. Run `apple/build-core.sh` once after a fresh clone, so Xcode finds the core's xcframework. |
+| GNOME | `cd gnome && zig build run` |
+| Android | `cd android && ./gradlew installDebug` (run `gradle wrapper` once) |
+| Windows | `cd windows/Biblio && dotnet build -p:Platform=x64` |
+| Terminal | `cd tui && zig build run` |
+
+`zig build cross` at the root cross-compiles the core for Linux, Windows and Android, and
+the GNOME app for Linux. The GNOME app builds against Debian sysroots that
+`gnome/debian-sysroot.sh` downloads, so it also targets 64-bit Raspberry Pi OS.
 
 To try it, add a library such as `wccls` or `multcolib`, then sign in with a library card and
 PIN, or choose **Browse as Guest**.
@@ -157,13 +173,13 @@ PIN, or choose **Browse as Guest**.
 
 | Folder | Contents |
 |---|---|
-| `core` | libbiblio, the shared Zig core, and its C header |
+| `core` | libbiblio, the shared Zig core, its C header, and its [developer guide](core/README.md) |
 | `apple` | The SwiftUI app for macOS, iOS and iPadOS |
 | `gnome` | The GTK 4 and libadwaita app, in Zig |
 | `android` | The Jetpack Compose app, and its Zig JNI shim |
 | `windows` | The WinUI 3 app, in C# |
 | `tui` | The terminal app, in Zig |
-| `docs` | The [core developer guide](docs/core.md) and screenshots |
+| `docs` | Screenshots and external specifications |
 
 Inside the Apple app:
 
@@ -180,7 +196,7 @@ throttled to be gentle on library servers.
 
 ## How it was made
 
-Biblio was written with [Claude Code](https://claude.com/claude-code).
+Biblio was written with [Claude](https://claude.com).
 
 ## License
 

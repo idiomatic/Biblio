@@ -5,7 +5,7 @@
  * biblio_search(client, &query, &page, &err). Calls block (they may make several network
  * requests, paced app-wide to stay gentle with library sites), so make them off the UI
  * thread. Clients are safe to use from several threads at once. The full guide is
- * docs/core.md.
+ * core/README.md.
  */
 #ifndef BIBLIO_H
 #define BIBLIO_H

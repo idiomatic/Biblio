@@ -1,7 +1,7 @@
 # libbiblio developer guide
 
 libbiblio is the BiblioCommons client shared by every Biblio app: Apple (Swift), GNOME (Zig),
-Android (Kotlin), Windows (C#) and the terminal (Zig). It is written in Zig and lives in [`core/`](../core). The
+Android (Kotlin), Windows (C#) and the terminal (Zig). It is written in Zig and lives in [`core/`](.). The
 apps use it for everything that talks to a library:
 
 - signing in, and signing in again when a session expires
@@ -13,8 +13,10 @@ apps use it for everything that talks to a library:
   readable brand colors
 
 Every operation is a C function that takes C arguments and returns C structs, declared in
-[`core/include/biblio.h`](../core/include/biblio.h). [PLATFORMS.md](../PLATFORMS.md) says how
-each app binds them.
+[`core/include/biblio.h`](include/biblio.h). Each app binds them its own way: Apple's Swift
+calls them directly; the GNOME and terminal apps call `biblio.capi` and the core's `Client`
+from Zig; Android goes through a Zig JNI shim ([`android/native/src/jni.zig`](../android/native/src/jni.zig));
+Windows uses C# P/Invoke ([`windows/Biblio/Core/Interop.cs`](../windows/Biblio/Core/Interop.cs)).
 
 ## Contents
 
@@ -454,7 +456,7 @@ password** so the core can sign in again later. Android must also pass it to
 ## Result types
 
 Each type is a struct named `biblio_<type>_t`, matching the Zig structs in
-[`core/src/models.zig`](../core/src/models.zig) with fields in snake_case. Fields marked `?`
+[`core/src/models.zig`](src/models.zig) with fields in snake_case. Fields marked `?`
 are optional: NULL for strings, or a `has_<name>` flag for numbers and booleans. Lists of
 copies, detail fields, locations and refusals come in a struct with `items` and `items_count`,
 such as `biblio_copy_list_t`. Each app copies these into its own model types:
@@ -562,7 +564,7 @@ Dates are passed through as the library sends them.
 
 ## Item lists
 
-A `biblio_list` holds one paged list's state ([`list.zig`](../core/src/list.zig)), so every
+A `biblio_list` holds one paged list's state ([`list.zig`](src/list.zig)), so every
 app pages, sorts and filters the same way. It makes no requests: it says which pages to fetch,
 the app fetches them with `biblio_search`, `biblio_holds` and so on, and hands back each result.
 Use a list from one thread (the UI thread).
@@ -628,7 +630,7 @@ example, see `Transport` in [`apple/Biblio/Net/Core.swift`](../apple/Biblio/Net/
 
 ## Using the core from Zig
 
-Zig apps import [`core/src/root.zig`](../core/src/root.zig) as a module and call the same functions directly. The
+Zig apps import [`core/src/root.zig`](src/root.zig) as a module and call the same functions directly. The
 GNOME app does this:
 
 ```zig
@@ -659,7 +661,7 @@ Zig 0.17's `std.Io.Threaded` doesn't compile.
 ## Testing
 
 - **`zig build test`** runs unit tests in each source file, plus
-  [`fixtures_test.zig`](../core/src/fixtures_test.zig). The fixture tests run whole
+  [`fixtures_test.zig`](src/fixtures_test.zig). The fixture tests run whole
   client operations against a fake transport that serves canned gateway and website responses. They
   cover:
   - sign-in, and signing in again after a 401
@@ -690,17 +692,17 @@ changing the parser.
 ## Adding an operation
 
 1. Implement it:
-   - Library-wide operations go in [`library.zig`](../core/src/library.zig).
-   - Account operations go on `Client` in [`client.zig`](../core/src/client.zig). Parse responses with the lenient `J`
-     reader in [`json.zig`](../core/src/json.zig), which treats missing or mistyped fields as null instead of failing.
+   - Library-wide operations go in [`library.zig`](src/library.zig).
+   - Account operations go on `Client` in [`client.zig`](src/client.zig). Parse responses with the lenient `J`
+     reader in [`json.zig`](src/json.zig), which treats missing or mistyped fields as null instead of failing.
    - On failure, set `failure.*` to a `kind` and a message written for people, then return an
      error.
-2. Export it from [`capi.zig`](../core/src/capi.zig). A client method is usually one line with `fetch` or `perform`.
+2. Export it from [`capi.zig`](src/capi.zig). A client method is usually one line with `fetch` or `perform`.
    If it returns a new type, add an `extern struct` with the model's fields in snake_case,
    plus `has_<name>` for optional numbers and booleans and `<name>_count` for arrays.
    `deliver` converts it automatically, and the type's free function goes in the `comptime`
    list at the end of the file.
-3. Declare the function, and any new struct, in [`include/biblio.h`](../core/include/biblio.h). Then check that the C and
+3. Declare the function, and any new struct, in [`include/biblio.h`](include/biblio.h). Then check that the C and
    Zig layouts match.
 4. Add the operation to this guide, and add a fixture test.
 5. Use it from each app:

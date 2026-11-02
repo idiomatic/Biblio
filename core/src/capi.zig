@@ -1,5 +1,5 @@
 //! The typed C interface: one function per operation, with C arguments and C structs in place
-//! of JSON. See include/biblio.h for the declarations and docs/core.md for the contract.
+//! of JSON. See include/biblio.h for the declarations and core/README.md for the contract.
 //!
 //! Results come back through an out-parameter as a single allocation owned by the result
 //! (strings and arrays included), freed with that type's `biblio_<type>_free`. Failures return

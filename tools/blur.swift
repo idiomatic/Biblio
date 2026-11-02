@@ -1,4 +1,4 @@
-// swift docs/screenshots/blur.swift IN OUT POINT_WIDTH x,y,w,h... — Gaussian-blur each rect (in points, top-left origin), keeping alpha.
+// swift tools/blur.swift IN OUT POINT_WIDTH x,y,w,h... — Gaussian-blur each rect (in points, top-left origin), keeping alpha.
 import CoreImage
 import Foundation
 import ImageIO

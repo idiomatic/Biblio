@@ -1,9 +1,22 @@
+# macOS and editors
 .DS_Store
 *~
+
+# Secrets
 .env
+
+# Xcode
 xcuserdata/
 DerivedData/
-build/
 
+# Build output
+build/
+zig-out/
+.zig-cache/
+
+# Local and agent files
 AGENTS?*.md
+*.egress/
+
+# Unblurred screenshots
 docs/screenshots/raw

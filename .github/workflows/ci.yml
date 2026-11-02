@@ -1,0 +1,105 @@
+# Preliminary: jobs for the ports that have never been compiled
+# (Android, Windows) are allowed to fail until they are fixed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  ZIG_VERSION: 0.17.0
+
+jobs:
+  core:
+    name: Core and terminal (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: zig build test --summary all
+        working-directory: core
+      - run: zig build test --summary all
+        working-directory: tui
+      - run: zig build --summary all
+        working-directory: tui
+
+  gnome:
+    name: GNOME (Fedora)
+    runs-on: ubuntu-latest
+    container: fedora:42
+    steps:
+      - run: >
+          dnf -y install git tar xz gtk4-devel libadwaita-devel
+          libsecret-devel
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: zig build test --summary all
+        working-directory: core
+      - run: zig build --summary all
+        working-directory: gnome
+
+  apple:
+    name: Apple (macOS, iOS Simulator)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: sh apple/build-core.sh
+      - name: Build for macOS
+        run: >
+          xcodebuild -project apple/Biblio.xcodeproj
+          -scheme Biblio -destination 'generic/platform=macOS'
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Build for the iOS Simulator
+        run: >
+          xcodebuild -project apple/Biblio.xcodeproj
+          -scheme Biblio
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build
+
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: zig build test --summary all
+        working-directory: android/native
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: gradle assembleDebug
+        working-directory: android
+
+  windows:
+    name: Windows (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: x64, runner: windows-latest }
+          - { platform: ARM64, runner: windows-11-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet build -p:Platform=${{ matrix.platform }}
+        working-directory: windows/Biblio
