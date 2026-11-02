@@ -16,7 +16,7 @@
 * item detail fetches "Availability by Location" in the background (collection and call number optional), with a colored symbol per copy status.
 * item detail has "Hold" with a pickup location menu (defaulting to the preferred location), or "Cancel Hold" for held items.
 * dragging part of item detail onto any window's holds places a hold, or onto its search field searches for it; no drag hints.
-* the account view and a barcode toolbar button (in the sidebar's toolbar on macOS) show the library card as a scannable Codabar barcode.
+* the account view and a barcode toolbar button (in the sidebar's toolbar on macOS) show the library card as a scannable Codabar barcode; on iOS, a Lock Screen and Control Center control opens it for the most recently used login (`biblio://card`), and swiping left or right rotates between logins' cards, fetching missing ones in the background.
 * the app version shows subtly at the foot of the sidebar and opens the About box, which says in everyday words that people made Biblio with AI assistants, and that BiblioCommons and the library didn't.
 * a bottom status bar shows the latest request as `TITLE [SIZE KiB]` (URL on hover), fading after 2 seconds of inactivity.
 ## settings
@@ -25,7 +25,7 @@
 * the library language is the account's preference, not the app's; never set it automatically, but offer "Use System Language" for the closest supported language.
 * toggle borrowing history, confirming before turning it off.
 ## authentication
-* remember credentials in the Keychain; reauthenticate transparently when sessions expire; allow one window per login.
+* remember credentials and library cards in the Keychain; reauthenticate transparently when sessions expire; allow one window per login.
 * multiple libraries, each with multiple users; each new window, with its own session, offers a menu of libraries, then of that library's users.
 * on macOS, windows restored at launch reopen their login, unless it was removed or is open elsewhere.
 * guests may browse, without holds or settings.

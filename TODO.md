@@ -9,4 +9,6 @@
 - **Selected content bleeds into sidebar and detail.** On iPadOS, selecting an item has a
   detrimental visual effect on the adjacent views. Is this a Biblio bug or bad design from
   Apple?
-- **Lock-screen barcode.** Show the barcode on the lock screen when in the library.
+- **Lock-screen barcode.** A Lock Screen control now opens the barcode. Showing it
+  automatically when in the library needs a Wallet pass (Code128, not Codabar) or similar.
+

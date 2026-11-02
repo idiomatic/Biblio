@@ -55,6 +55,35 @@ nonisolated struct LibraryInfo: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+/// A signed-in user's library card, remembered from the last sign-in so the cards can be
+/// shown, and rotated between, without signing in to each.
+nonisolated struct CardInfo: Identifiable, Hashable, Codable, Sendable {
+    var subdomain: String
+    var username: String
+    var name: String
+    var library: String
+    var barcode: String
+
+    var id: String { Self.id(subdomain: subdomain, username: username) }
+
+    static func id(subdomain: String, username: String) -> String { "\(subdomain)/\(username)" }
+
+    /// The card of `patron`, signed in as `username`, if the library gave a barcode.
+    init?(library: LibraryInfo, username: String, patron: Patron) {
+        guard let barcode = patron.barcode else { return nil }
+        self.init(subdomain: library.subdomain, username: username, name: patron.name,
+                  library: library.shortName ?? library.name, barcode: barcode)
+    }
+
+    init(subdomain: String, username: String, name: String, library: String, barcode: String) {
+        self.subdomain = subdomain
+        self.username = username
+        self.name = name
+        self.library = library
+        self.barcode = barcode
+    }
+}
+
 /// Persists added libraries and the usernames added for each. Passwords live in the Keychain.
 @Observable
 final class LibraryStore {
@@ -62,12 +91,72 @@ final class LibraryStore {
 
     private(set) var libraries: [LibraryInfo] = []
     private let key = "libraries.v1"
+    private let lastLoginKey = "lastLogin.v1"
+
+    /// The remembered library cards, by `CardInfo.id`, kept in the Keychain.
+    private(set) var cards: [String: CardInfo] = [:]
+    /// Logins whose card couldn't be fetched in the background this run (no password, a failed
+    /// sign-in, or no barcode); they aren't retried until a window signs in as them.
+    private(set) var unavailableCards: Set<String> = []
+    @ObservationIgnored private var isFetchingCards = false
+    /// The login opened most recently, in any window.
+    private(set) var lastLogin: (subdomain: String, username: String)?
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
            let list = try? JSONDecoder().decode([LibraryInfo].self, from: data) {
             libraries = list
         }
+        if let data = Keychain.cards, let saved = try? JSONDecoder().decode([String: CardInfo].self, from: data) {
+            cards = saved
+        }
+        // Prerelease builds kept the cards in the defaults.
+        UserDefaults.standard.removeObject(forKey: "cards.v1")
+        if let pair = UserDefaults.standard.stringArray(forKey: lastLoginKey), pair.count == 2 {
+            lastLogin = (pair[0], pair[1])
+        }
+    }
+
+    func saveCard(_ card: CardInfo) {
+        unavailableCards.remove(card.id)
+        guard cards[card.id] != card else { return }
+        cards[card.id] = card
+        saveCards()
+    }
+
+    /// Signs in, one at a time, as each user without a card that no window is using, to
+    /// remember their cards. These sessions are separate from any window's; each login is
+    /// claimed while signing in, so no window opens it meanwhile.
+    func fetchMissingCards() async {
+        guard !isFetchingCards else { return }
+        isFetchingCards = true
+        defer { isFetchingCards = false }
+        let fetcher = UUID()
+        for library in libraries {
+            for user in library.users {
+                let id = CardInfo.id(subdomain: library.subdomain, username: user)
+                guard cards[id] == nil, !unavailableCards.contains(id),
+                      ClientPool.shared.claim(subdomain: library.subdomain, username: user, window: fetcher)
+                else { continue }
+                defer { ClientPool.shared.release(subdomain: library.subdomain, username: user, window: fetcher) }
+                guard Keychain.password(subdomain: library.subdomain, username: user) != nil else {
+                    unavailableCards.insert(id)
+                    continue
+                }
+                let client = BiblioClient(subdomain: library.subdomain, username: user, status: FetchStatus())
+                if let patron = try? await client.login(), let card = CardInfo(library: library, username: user, patron: patron) {
+                    saveCard(card)
+                } else {
+                    unavailableCards.insert(id)
+                }
+            }
+        }
+    }
+
+    func noteLogin(subdomain: String, username: String) {
+        guard !username.isEmpty else { return }
+        lastLogin = (subdomain, username)
+        UserDefaults.standard.set([subdomain, username], forKey: lastLoginKey)
     }
 
     func library(_ subdomain: String) -> LibraryInfo? {
@@ -90,6 +179,7 @@ final class LibraryStore {
             Keychain.delete(subdomain: subdomain, username: user)
         }
         libraries.removeAll { $0.subdomain == subdomain }
+        cards = cards.filter { $0.value.subdomain != subdomain }
         save()
     }
 
@@ -104,6 +194,7 @@ final class LibraryStore {
         guard let i = libraries.firstIndex(where: { $0.subdomain == subdomain }) else { return }
         Keychain.delete(subdomain: subdomain, username: username)
         libraries[i].users.removeAll { $0 == username }
+        cards[CardInfo.id(subdomain: subdomain, username: username)] = nil
         save()
     }
 
@@ -111,6 +202,11 @@ final class LibraryStore {
         if let data = try? JSONEncoder().encode(libraries) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        saveCards()
+    }
+
+    private func saveCards() {
+        if let data = try? JSONEncoder().encode(cards) { Keychain.setCards(data) }
     }
 }
 

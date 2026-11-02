@@ -284,12 +284,14 @@ struct AddLibraryView: View {
     @State private var directory = LibraryDirectory.shared
     @State private var isWorking = false
     @State private var error: String?
+    @FocusState private var focused: Bool
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("Library", text: $text, prompt: Text("wccls or https://wccls.bibliocommons.com"))
+                        .focused($focused)
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
@@ -330,6 +332,7 @@ struct AddLibraryView: View {
             }
             .formStyle(.grouped)
             .disabled(isWorking)
+            .onAppear { focused = true }
             .navigationTitle("Add Library")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -382,18 +385,25 @@ struct AddUserView: View {
     @State private var password = ""
     @State private var isWorking = false
     @State private var error: String?
+    @FocusState private var focused: Field?
+
+    private enum Field { case username, password }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("Username or card number", text: $username)
+                        .focused($focused, equals: .username)
+                        .disabled(isWorking)
                         .textContentType(.username)
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
                     SecureField("PIN or password", text: $password)
+                        .focused($focused, equals: .password)
+                        .disabled(isWorking)
                         .textContentType(.password)
                         .onSubmit { Task { await signIn() } }
                 } footer: {
@@ -404,7 +414,7 @@ struct AddUserView: View {
                 }
             }
             .formStyle(.grouped)
-            .disabled(isWorking)
+            .onAppear { focused = .username }
             .navigationTitle("Sign In to \(library.shortName ?? library.name)")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -433,7 +443,10 @@ struct AddUserView: View {
         error = nil
         defer { isWorking = false }
         let previous = Keychain.password(subdomain: library.subdomain, username: user)
-        Keychain.setPassword(password, subdomain: library.subdomain, username: user)
+        guard Keychain.setPassword(password, subdomain: library.subdomain, username: user) else {
+            error = "The password couldn't be saved to the Keychain."
+            return
+        }
         let client = ClientPool.shared.client(subdomain: library.subdomain, username: user)
         do {
             try await client.login(force: true)

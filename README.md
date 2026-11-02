@@ -115,7 +115,8 @@ Copy status by location, color-coded: available, on order or in process, out, he
 - Select several items in a list to place or cancel holds on all of them at once.
 - List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
   checked out or overdue.
-- Your library card as a scannable Codabar barcode, one toolbar button away.
+- Your library card as a scannable Codabar barcode, one toolbar button away, or on iPhone from a
+  Lock Screen or Control Center control. Swipe between your logins' cards.
 - Settings for email, password, pickup location, language and borrowing history. On macOS they
   live in the Settings window.
   - The terminal app only shows them.

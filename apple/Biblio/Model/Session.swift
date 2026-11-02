@@ -81,6 +81,8 @@ final class WindowSession {
 
     var patron: Patron?
     var loginError: String?
+    /// Whether the library card barcode is showing; the Lock Screen control sets it.
+    var showingLibraryCard = false
     /// Switching sections closes the inspector and clears its item, which belonged to the old list.
     var section: AppSection? = .search {
         didSet {
@@ -139,6 +141,7 @@ final class WindowSession {
         do {
             patron = try await client.login()
             loginError = nil
+            rememberCard()
             // Fill the sidebar's hold and checkout counts without waiting for those lists to be opened.
             holdsList.loadIfNeeded()
             checkoutsList.loadIfNeeded()
@@ -300,5 +303,18 @@ final class WindowSession {
 
     func refreshPatron() async {
         patron = await client.patron
+        rememberCard()
+    }
+
+    /// Keeps this user's card for the card view's rotation between logins.
+    private func rememberCard() {
+        guard let card else { return }
+        LibraryStore.shared.saveCard(card)
+    }
+
+    /// This user's library card, once the patron has loaded with a barcode.
+    var card: CardInfo? {
+        guard !isGuest, let patron else { return nil }
+        return CardInfo(library: library, username: username, patron: patron)
     }
 }

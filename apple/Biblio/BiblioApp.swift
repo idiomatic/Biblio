@@ -49,7 +49,14 @@ struct WindowRoot: View {
                 }
             }
         }
-        .task { restoreLogin() }
+        .task {
+            restoreLogin()
+            showRequestedCard()
+        }
+        .onOpenURL { url in
+            if url.scheme == "biblio", url.host == "card" { LibraryCardRequest.request() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryCardRequested)) { _ in showRequestedCard() }
         // Closing the window (or quitting) frees its login but keeps it in scene storage,
         // so a window restored at the next launch can reopen it.
         .onDisappear(perform: releaseLogin)
@@ -60,9 +67,31 @@ struct WindowRoot: View {
         guard ClientPool.shared.claim(subdomain: library.subdomain, username: user, window: windowID) else { return }
         lastLibrary = library.subdomain
         openUser = user
+        LibraryStore.shared.noteLogin(subdomain: library.subdomain, username: user)
         let new = WindowSession(library: library, username: user)
         session = new
         SessionRegistry.shared.register(new)
+        showRequestedCard()
+    }
+
+    /// Shows the requested library card in this window's signed-in session. A launcher window
+    /// first opens the most recently used login, if no other window has it.
+    private func showRequestedCard() {
+        guard LibraryCardRequest.pending else { return }
+        guard let session else {
+            openMostRecentLogin()
+            return
+        }
+        guard !session.isGuest else { return }
+        LibraryCardRequest.consume()
+        session.showingLibraryCard = true
+    }
+
+    private func openMostRecentLogin() {
+        guard let last = LibraryStore.shared.lastLogin, let library = LibraryStore.shared.library(last.subdomain),
+              library.users.contains(last.username),
+              !ClientPool.shared.isInUse(subdomain: last.subdomain, username: last.username) else { return }
+        open(library, last.username)   // shows the card once the session is open
     }
 
     /// Reopens the login a restored window had, unless the library or user was removed
@@ -87,8 +116,10 @@ struct WindowRoot: View {
         new.continueBrowsing(from: guest)
         SessionRegistry.shared.unregister(guest)
         openUser = user
+        LibraryStore.shared.noteLogin(subdomain: library.subdomain, username: user)
         session = new
         SessionRegistry.shared.register(new)
+        showRequestedCard()
     }
 
     /// Back to the launcher.

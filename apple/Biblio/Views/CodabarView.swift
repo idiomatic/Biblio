@@ -71,32 +71,128 @@ struct CodabarView: View {
 /// A toolbar button that shows the library card's barcode, for scanning at the library:
 /// a popover on macOS and iPad, a sheet on iPhone.
 struct LibraryCardButton: View {
-    var session: WindowSession
-    @State private var showing = false
+    @Bindable var session: WindowSession
 
     var body: some View {
         Button {
-            showing = true
+            session.showingLibraryCard = true
         } label: {
             Label("Library Card", systemImage: "barcode")
         }
         .help("Show your library card")
         .disabled(session.patron?.barcode == nil)
-        .popover(isPresented: $showing) {
-            if let barcode = session.patron?.barcode {
-                VStack(spacing: 12) {
-                    Text(session.displayName)
-                        .font(.headline)
-                    CodabarView(value: barcode)
-                    Text("Show this at the library’s self-checkout or desk.")
+        .popover(isPresented: $session.showingLibraryCard) {
+            if let card = session.card {
+                LibraryCardPager(current: card)
+                    .frame(idealWidth: 380)
+                    .presentationDetents([.height(300)])
+            } else {
+                ProgressView().padding()
+            }
+        }
+    }
+}
+
+/// The library cards of every login, the one in use first. On iOS and iPadOS, swipe left or
+/// right to rotate between them; macOS shows only the current card.
+struct LibraryCardPager: View {
+    var current: CardInfo
+    @State private var selection: String
+
+    init(current: CardInfo) {
+        self.current = current
+        _selection = State(initialValue: current.id)
+    }
+
+    /// A page per login, the current one first; logins without a card yet get a placeholder.
+    private struct Slot: Identifiable {
+        var id: String
+        var username: String
+        var library: LibraryInfo
+        var card: CardInfo?
+        var unavailable: Bool
+    }
+
+    private var slots: [Slot] {
+        #if os(iOS)
+        let store = LibraryStore.shared
+        let all = store.libraries.flatMap { library in
+            library.users.map { user in
+                let id = CardInfo.id(subdomain: library.subdomain, username: user)
+                return Slot(id: id, username: user, library: library, card: id == current.id ? current : store.cards[id],
+                            unavailable: store.unavailableCards.contains(id))
+            }
+        }
+        return all.filter { $0.id == current.id } + all.filter { $0.id != current.id }
+        #else
+        []
+        #endif
+    }
+
+    var body: some View {
+        #if os(iOS)
+        let slots = slots
+        TabView(selection: $selection) {
+            ForEach(slots) { slot in
+                Group {
+                    if let card = slot.card {
+                        page(card)
+                    } else {
+                        placeholder(slot)
+                    }
+                }
+                .tag(slot.id)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: slots.count > 1 ? .always : .never))
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .task { await LibraryStore.shared.fetchMissingCards() }
+        #else
+        page(current)
+        #endif
+    }
+
+    private func placeholder(_ slot: Slot) -> some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 2) {
+                Text(slot.username)
+                    .font(.headline)
+                Text(slot.library.shortName ?? slot.library.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Group {
+                if slot.unavailable {
+                    Text("This card couldn’t be loaded. Sign in as \(slot.username) to show it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                } else {
+                    ProgressView()
                 }
-                .padding()
-                .frame(idealWidth: 380)
-                .presentationDetents([.height(240)])
             }
+            .frame(height: 100)
         }
+        .padding()
+        .padding(.bottom, 24)
+    }
+
+    private func page(_ card: CardInfo) -> some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 2) {
+                Text(card.name)
+                    .font(.headline)
+                Text(card.library)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            CodabarView(value: card.barcode)
+            Text("Show this at the library’s self-checkout or desk.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .padding(.bottom, 24)
     }
 }

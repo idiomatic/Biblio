@@ -8,17 +8,53 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000020 /* BiblioCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* BiblioCore.xcframework */; };
+		A10000000000000000000041 /* BiblioControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000031 /* BiblioControls.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000043 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000009 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000036;
+			remoteInfo = BiblioControls;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A10000000000000000000040 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A10000000000000000000041 /* BiblioControls.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* Biblio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Biblio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000021 /* BiblioCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BiblioCore.xcframework; path = build/BiblioCore.xcframework; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000031 /* BiblioControls.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BiblioControls.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A10000000000000000000002 /* Biblio */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Biblio;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000032 /* BiblioControls */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BiblioControls;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000044 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +68,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000034 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -39,6 +82,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000002 /* Biblio */,
+				A10000000000000000000032 /* BiblioControls */,
+				A10000000000000000000044 /* Shared */,
 				A10000000000000000000023 /* Frameworks */,
 				A10000000000000000000005 /* Products */,
 			);
@@ -48,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* Biblio.app */,
+				A10000000000000000000031 /* BiblioControls.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -71,18 +117,42 @@
 				A10000000000000000000007 /* Sources */,
 				A10000000000000000000003 /* Frameworks */,
 				A10000000000000000000008 /* Resources */,
+				A10000000000000000000040 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000042 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000002 /* Biblio */,
+				A10000000000000000000044 /* Shared */,
+			);
+			name = Biblio;
+			productName = Biblio;
+			productReference = A10000000000000000000001 /* Biblio.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000036 /* BiblioControls */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000037 /* Build configuration list for PBXNativeTarget "BiblioControls" */;
+			buildPhases = (
+				A10000000000000000000033 /* Sources */,
+				A10000000000000000000034 /* Frameworks */,
+				A10000000000000000000035 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				A10000000000000000000002 /* Biblio */,
+				A10000000000000000000032 /* BiblioControls */,
+				A10000000000000000000044 /* Shared */,
 			);
-			name = Biblio;
-			productName = Biblio;
-			productReference = A10000000000000000000001 /* Biblio.app */;
-			productType = "com.apple.product-type.application";
+			name = BiblioControls;
+			productName = BiblioControls;
+			productReference = A10000000000000000000031 /* BiblioControls.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -92,9 +162,12 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2630;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					A10000000000000000000006 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					A10000000000000000000036 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -114,12 +187,20 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000006 /* Biblio */,
+				A10000000000000000000036 /* BiblioControls */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A10000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000035 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -154,7 +235,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000033 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000042 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = A10000000000000000000036 /* BiblioControls */;
+			targetProxy = A10000000000000000000043 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000000000000000000012 /* Debug */ = {
@@ -326,6 +423,58 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000038 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "BiblioControls-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Biblio Controls";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rbrian.Biblio.Controls;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A10000000000000000000039 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "BiblioControls-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Biblio Controls";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rbrian.Biblio.Controls;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -343,6 +492,15 @@
 			buildConfigurations = (
 				A10000000000000000000012 /* Debug */,
 				A10000000000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000037 /* Build configuration list for PBXNativeTarget "BiblioControls" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000038 /* Debug */,
+				A10000000000000000000039 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
