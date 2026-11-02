@@ -3,6 +3,18 @@
 Notable changes to Biblio. Versions follow the Apple app's version number; the other apps share
 the core and are not yet released.
 
+## 1.5 — 2026-11-02
+
+### Added
+- On iPhone, a Library Card control for the Lock Screen and Control Center opens the card's
+  barcode for the account you used last.
+- On iPhone and iPad, swipe left or right on the library card to rotate between your logins'
+  cards. Opening the card fetches the cards of logins you haven't used yet.
+
+### Fixed
+- On iPhone and iPad, the Add Library and Add User sheets focus their first field when they open,
+  and Add User accepts typing.
+
 ## 1.4 — 2026-10-29
 
 ### Added

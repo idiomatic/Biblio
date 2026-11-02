@@ -1,4 +1,4 @@
-* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.4): a patron front-end to https://LIBRARY.bibliocommons.com/.
+* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.5): a patron front-end to https://LIBRARY.bibliocommons.com/.
 ## views
 * holds: view, add, and remove; when the library refuses a removal, say why, including partial refusals.
 * checked out items, borrowing history, search, and advanced search.

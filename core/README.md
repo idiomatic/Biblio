@@ -173,7 +173,7 @@ pass these pointers to `free`.
 const char *biblio_version(void);
 ```
 
-Returns the core's version, for example `"1.4.0"`. The string is static; don't free it.
+Returns the core's version, for example `"1.5.0"`. The string is static; don't free it.
 
 ```c
 typedef char *(*biblio_password_fn)(void *ctx, const char *subdomain, const char *username);
