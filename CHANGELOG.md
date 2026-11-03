@@ -6,6 +6,8 @@ the core and are not yet released.
 ## 1.5 — 2026-11-02
 
 ### Added
+- The library card barcode can be shown as Code 128 as well as Codabar, for scanners that don't
+  read Codabar. Your choice sticks for every card.
 - On iPhone, a Library Card control for the Lock Screen and Control Center opens the card's
   barcode for the account you used last.
 - On iPhone and iPad, swipe left or right on the library card to rotate between your logins'

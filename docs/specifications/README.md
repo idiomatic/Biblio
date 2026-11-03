@@ -7,6 +7,7 @@ goes in this directory when one is saved.
 |---|---|---|
 | BiblioCommons gateway and website | None published; observed from `https://LIBRARY.bibliocommons.com/` and recorded in [NOTES-API.md](../../NOTES-API.md) | The service every app is a client of |
 | BiblioCommons libraries directory | <https://www.bibliocommons.com/libraries-we-work-with> | Library suggestions and partner logos |
+| Code 128 | ISO/IEC 15417; see [Wikipedia](https://en.wikipedia.org/wiki/Code_128) | The alternative library card barcode |
 | Codabar | None freely published; see [Wikipedia](https://en.wikipedia.org/wiki/Codabar) | The library card barcode |
 | Apple Human Interface Guidelines | <https://developer.apple.com/design/human-interface-guidelines/> | Apple app design |
 | SwiftUI | <https://developer.apple.com/documentation/swiftui> | Apple UI |

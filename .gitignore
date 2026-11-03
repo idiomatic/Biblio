@@ -14,9 +14,21 @@ build/
 zig-out/
 .zig-cache/
 
-# Local and agent files
+# Subprojects
 AGENTS?*.md
+*.draft.md
 *.egress/
 
 # Unblurred screenshots
 docs/screenshots/raw
+
+# local Argent
+package*.json
+node_modules/
+.argent
+.agents
+.claude
+.opencode
+.mcp.json
+opencode.json
+skills*.json

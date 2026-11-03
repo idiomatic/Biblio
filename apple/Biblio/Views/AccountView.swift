@@ -23,7 +23,7 @@ struct AccountView: View {
 
                 if let barcode = patron.barcode {
                     Section {
-                        CodabarView(value: barcode)
+                        BarcodeView(value: barcode)
                             .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
                     } header: {
                         Text("Library Card")
