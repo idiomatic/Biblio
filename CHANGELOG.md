@@ -3,6 +3,15 @@
 Notable changes to Biblio. Versions follow the Apple app's version number; the other apps share
 the core and are not yet released.
 
+## 1.6 — 2026-11-04
+
+### Added
+- The Android and Windows (x64 and ARM64) apps build for the first time, checked by continuous
+  integration. They are still unreleased and untested on devices.
+
+### Fixed
+- On the Mac, switching sections in the sidebar is faster when a list holds many items.
+
 ## 1.5 — 2026-11-02
 
 ### Added
