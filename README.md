@@ -157,7 +157,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 | macOS, iOS, iPadOS | Xcode 26 or later; runs on macOS 15 or later, or iOS / iPadOS 18 or later |
 | GNOME | GTK 4, libadwaita 1.6 or later, libsecret |
 | Android | The Android SDK and a JDK |
-| Windows | The .NET 8 SDK and the Windows App SDK |
+| Windows | The .NET 10 SDK and the Windows App SDK |
 | Terminal | Nothing more; any xterm-256color terminal on macOS or Linux |
 
 The GNOME and terminal apps also cross-compile for 64-bit Raspberry Pi OS.
