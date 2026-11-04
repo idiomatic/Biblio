@@ -1,0 +1,3094 @@
+[
+ {
+  "metadataId": "S900C0003",
+  "title": "The Rise and Fall of Sanctuary Moon",
+  "subtitle": "The Complete Series",
+  "format": "BLURAY",
+  "callNumber": "4K BLU SANC",
+  "description": "Seven seasons of premium quality content: the crew of the Sanctuary Moon, their rivals, and the long fall of the colony, as watched by a very particular audience.",
+  "authors": [],
+  "publicationDate": "2024",
+  "edition": "4K Ultra HD Blu-ray",
+  "kind": "video",
+  "collection": "Adult 4K Blu-ray",
+  "copies": [],
+  "held": 14,
+  "onOrder": 3,
+  "order": 0,
+  "new": true
+ },
+ {
+  "metadataId": "S900C0002",
+  "title": "The Rise and Fall of Sanctuary Moon",
+  "subtitle": "The Complete Series",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY SANC",
+  "description": "Seven seasons of premium quality content: the crew of the Sanctuary Moon, their rivals, and the long fall of the colony, as watched by a very particular audience.",
+  "authors": [],
+  "publicationDate": "2024",
+  "edition": "Blu-ray",
+  "kind": "video",
+  "collection": "Adult Blu-ray",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY SANC",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY SANC",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY SANC",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   }
+  ],
+  "held": 1,
+  "onOrder": 0,
+  "order": 1,
+  "new": false
+ },
+ {
+  "metadataId": "S900C0001",
+  "title": "The Rise and Fall of Sanctuary Moon",
+  "subtitle": "The Complete Series",
+  "format": "DVD",
+  "callNumber": "DVD SANC",
+  "description": "Seven seasons of premium quality content: the crew of the Sanctuary Moon, their rivals, and the long fall of the colony, as watched by a very particular audience.",
+  "authors": [],
+  "publicationDate": "2024",
+  "edition": "Widescreen",
+  "kind": "video",
+  "collection": "Adult DVD",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD SANC",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD SANC",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD SANC",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD SANC",
+    "status": "HELD"
+   }
+  ],
+  "held": 9,
+  "onOrder": 0,
+  "order": 2,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4010003",
+  "title": "Dune",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD DUN",
+  "description": "Paul Atreides, a brilliant, gifted young man born into a destiny beyond his understanding, must travel to the most dangerous planet in the universe to ensure the future of his family and people. As malevolent forces explode into conflict over the planet's exclusive supply of the most precious resource in existence, only those who can conquer their fear will survive.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1286081843&upc=883929701698",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1286081843&upc=883929701698",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1286081843&upc=883929701698",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD DUN",
+    "status": "CHECKED_OUT",
+    "dueDays": 17
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 3,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4099834",
+  "title": "Dune",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU DUNE",
+  "description": "A mythic and emotionally charged hero's journey that tells the story of Paul Atreides, a brilliant and gifted young man born into a great destiny beyond his understanding, must travel to the most dangerous planet in the universe to ensure the future of his family and his people. As malevolent forces explode into conflict over the planet's exclusive supply of the most precious resource in existence, a commodity capable of unlocking humanity's greatest potential, only those who can conquer their fear will survive.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1292552230&upc=883929701711",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1292552230&upc=883929701711",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1292552230&upc=883929701711",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray]",
+  "kind": "video",
+  "copies": [],
+  "held": 29,
+  "onOrder": 5,
+  "order": 4,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3920532",
+  "title": "Dune",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY DUNE",
+  "description": "It is the year 10191. Arrakis is a desert planet, which contains the only source of 'Melange, ' which is necessary for space travel. Two rival families, the Atreides and the Harkonnens, fight to control of the mining operations. When Duke Leto Atreides is assassinated by the evil Baron Harkonnen, his son Paul and Leto's wife, Lady Jessica, flee deep into the desert and are befriended by natives of Arrakis. Paul learns that he has special powers and can see into the future. Paul unites the natives and forms a army of warriors, leading them into battle against Baron Harkonnen and the corrupt Emperor Padishah Shaddam IV.",
+  "authors": [],
+  "publicationDate": "2010",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=607529956&upc=025192046865",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=607529956&upc=025192046865",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=607529956&upc=025192046865",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY DUNE",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY DUNE",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 5,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4376803",
+  "title": "Dune",
+  "subtitle": "Part Two",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY DUNE",
+  "description": "\"...[T]he mythic journey of Paul Atreides as he unites with Chani and the Fremen while on a warpath of revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the known universe, he endeavors to prevent a terrible future only he can foresee\" --Container.",
+  "authors": [],
+  "publicationDate": "2024",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1427206843&upc=883929802371",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1427206843&upc=883929802371",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1427206843&upc=883929802371",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY DUNE",
+    "status": "HELD"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY DUNE",
+    "status": "CHECKED_OUT",
+    "dueDays": 4
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY DUNE",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 6,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4374344",
+  "title": "Dune",
+  "subtitle": "Part Two",
+  "format": "DVD",
+  "callNumber": "DVD DUNE",
+  "description": "\"...[T]he mythic journey of Paul Atreides as he unites with Chani and the Fremen while on a warpath of revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the known universe, he endeavors to prevent a terrible future only he can foresee\" --Container.",
+  "authors": [],
+  "publicationDate": "2024",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1427207831&upc=883929802395",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1427207831&upc=883929802395",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1427207831&upc=883929802395",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD DUNE",
+    "status": "CHECKED_OUT",
+    "dueDays": 4
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 7,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3441257",
+  "title": "Blade Runner 2049",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD BLADE",
+  "description": "A young blade runner's discovery of a long buried secret leads him to track down former blade runner Rick Deckard, who's been missing for thirty years.",
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9786317099869/SC.GIF&client=wccls&type=xw12&oclc=1013977215&upc=883929571864",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9786317099869/MC.GIF&client=wccls&type=xw12&oclc=1013977215&upc=883929571864",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9786317099869/LC.JPG&client=wccls&type=xw12&oclc=1013977215&upc=883929571864",
+   "local_url": null
+  },
+  "edition": "[Rental edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD BLADE",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD BLADE",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "DVD BLADE",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD BLADE",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 10,
+  "onOrder": 0,
+  "order": 8,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4200103",
+  "title": "Blade Runner 2049",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU BLADE",
+  "description": "A young blade runner's discovery of a long buried secret leads him to track down former blade runner Rick Deckard, who's been missing for thirty years.",
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1026411955&upc=883929571857",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1026411955&upc=883929571857",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1026411955&upc=883929571857",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU BLADE",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 9,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3441003",
+  "title": "Blade Runner 2049",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY BLADE",
+  "description": "A young blade runner's discovery of a long buried secret leads him to track down former blade runner Rick Deckard, who's been missing for thirty years.",
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1013927961&upc=883929571901",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1013927961&upc=883929571901",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1013927961&upc=883929571901",
+   "local_url": null
+  },
+  "edition": "[Rental edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BLADE",
+    "status": "HELD"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BLADE",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BLADE",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BLADE",
+    "status": "CHECKED_OUT",
+    "dueDays": 10
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BLADE",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 10,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3440372",
+  "title": "Arrival",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD ARRIVAL",
+  "description": "When mysterious spacecraft touch down around the world, a team, including linguist Louise Banks, is brought together to investigate. As mankind teeters on the verge of global war, Banks and the team race against time for answers, and to find them, she will take a chance that could threaten her life, and quite possibly humanity.",
+  "authors": [],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=967782551&upc=032429263407",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=967782551&upc=032429263407",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=967782551&upc=032429263407",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD ARRIVAL",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD ARRIVAL",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD ARRIVAL",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD ARRIVAL",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   }
+  ],
+  "held": 8,
+  "onOrder": 0,
+  "order": 11,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2816870",
+  "title": "Arrival",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY ARRIVAL",
+  "description": "When mysterious spacecraft touch down around the world, a team ,including linguist Louise Banks, is brought together to investigate. As mankind teeters on the verge of global war, Banks and the team race against time for answers, and to find them, she will take a chance that could threaten her life, and quite possibly humanity.",
+  "authors": [],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=967732387&upc=032429263421",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=967732387&upc=032429263421",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=967732387&upc=032429263421",
+   "local_url": null
+  },
+  "edition": "[English/Spanish/French version]",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY ARRIVAL",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY ARRIVAL",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 12,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4218604",
+  "title": "Arrival",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY ARRIVAL",
+  "description": "When mysterious spacecraft touch down around the world, a team, including linguist Louise Banks, is brought together to investigate. As mankind teeters on the verge of global war, Banks and the team race against time for answers, and to find them, she will take a chance that could threaten her life, and quite possibly humanity.",
+  "authors": [],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=974490061&upc=032429263445",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=974490061&upc=032429263445",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=974490061&upc=032429263445",
+   "local_url": "https://cor-liv-cdn-static.bibliocommons.com/image_proxy?url=http://midwesttapes.com/images/movies/000/000/000/011/767/000000000011767023.jpg"
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ARRIVAL",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ARRIVAL",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ARRIVAL",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ARRIVAL",
+    "status": "CHECKED_OUT",
+    "dueDays": 4
+   }
+  ],
+  "held": 15,
+  "onOrder": 0,
+  "order": 13,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3017011",
+  "title": "Interstellar",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD INT",
+  "description": "With our time on Earth coming to an end, a team of explorers undertakes the most important mission in human history; traveling beyond this galaxy to discover whether mankind has a future among the stars.",
+  "authors": [],
+  "publicationDate": "2015",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=902688693&upc=032429209238",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=902688693&upc=032429209238",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=902688693&upc=032429209238",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD INT",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD INT",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 14,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2834500",
+  "title": "Interstellar",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU INTERSTELLAR",
+  "description": "With our time on Earth coming to an end, a team of explorers undertakes the most important mission in human history: traveling beyond this galaxy to discover whether mankind has a future among the stars.",
+  "authors": [],
+  "publicationDate": "2015",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=905699415&upc=883929486588",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=905699415&upc=883929486588",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=905699415&upc=883929486588",
+   "local_url": null
+  },
+  "edition": "[Blu-ray-only version].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Blu-ray",
+    "call": "BLU INTERSTELLAR",
+    "status": "HELD"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU INTERSTELLAR",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU INTERSTELLAR",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 15,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4178569",
+  "title": "Interstellar",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU INTERSTELLAR",
+  "description": "Ex-pilot-turned-farmer Cooper must leave his family and a foundering Earth behind to lead an expedition traveling beyond this galaxy to discover whether mankind has a future among the stars.",
+  "authors": [],
+  "publicationDate": "2019",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1124925343&upc=032429300478",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1124925343&upc=032429300478",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1124925343&upc=032429300478",
+   "local_url": null
+  },
+  "edition": "4K Ultra HD + Blu-ray [edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU INTERSTELLAR",
+    "status": "CHECKED_OUT",
+    "dueDays": 4
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU INTERSTELLAR",
+    "status": "CHECKED_OUT",
+    "dueDays": 2
+   }
+  ],
+  "held": 10,
+  "onOrder": 0,
+  "order": 16,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2460704",
+  "title": "The Martian",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD MAR",
+  "description": "After a bad storm blows across Mars Astronaut Mark Watney is presumed dead and left behind. Now stuck on a hostile planet he must find a way to signal to Earth and in the meantime, survive on limited supplies.",
+  "authors": [],
+  "publicationDate": "2015",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=930929100&upc=024543206385",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=930929100&upc=024543206385",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=930929100&upc=024543206385",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD MAR",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 17,
+  "new": true
+ },
+ {
+  "metadataId": "S143C2686157",
+  "title": "The Martian",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU MARTIAN",
+  "description": "After a bad storm blows across Mars Astronaut Mark Watney is presumed dead and left behind. Now stuck on a hostile planet, he must find a way to signal to Earth and in the meantime, survive on limited supplies. When NASA realizes he is alive, they must devise a rescue mission.",
+  "authors": [],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=930929114&upc=024543206507",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=930929114&upc=024543206507",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=930929114&upc=024543206507",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MARTIAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MARTIAN",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MARTIAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MARTIAN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MARTIAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 5
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MARTIAN",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 18,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4103299",
+  "title": "The Martian",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU MARTIAN",
+  "description": "After a bad storm blows across Mars Astronaut Mark Watney is presumed dead and left behind. Now stuck on a hostile planet, he must find a way to signal to Earth and in the meantime, survive on limited supplies. When NASA realizes he is alive, they must devise a rescue mission.",
+  "authors": [],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=988950332&upc=024543278252",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=988950332&upc=024543278252",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=988950332&upc=024543278252",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU MARTIAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU MARTIAN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU MARTIAN",
+    "status": "HELD"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU MARTIAN",
+    "status": "HELD"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU MARTIAN",
+    "status": "HELD"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU MARTIAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   }
+  ],
+  "held": 13,
+  "onOrder": 0,
+  "order": 19,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3329408",
+  "title": "Inception",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "INCEPTION",
+  "description": "Dom Cobb is a skilled thief, the absolute best in the dangerous art of extraction, stealing valuable secrets from deep within the subconscious during the dream state, when the mind is at its most vulnerable. Cobb's rare ability has made him a coveted player in this treacherous new world of corporate espionage, but it has also made him an international fugitive and cost him everything he has ever loved. Now Cobb is being offered a chance at redemption. One last job could give him his life back but only if he can accomplish the impossible--inception. Instead of the perfect heist, Cobb and his team of specialists have to pull off the reverse: their task is not to steal an idea but to plant one. If they succeed, it could be the perfect crime. But no amount of careful planning or expertise can prepare the team for the dangerous enemy that seems to predict their every move. An enemy that only Cobb could have seen coming.",
+  "authors": [],
+  "publicationDate": "2010",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781419893124/SC.GIF&client=wccls&type=xw12&oclc=670212756&upc=883929106127",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781419893124/MC.GIF&client=wccls&type=xw12&oclc=670212756&upc=883929106127",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781419893124/LC.JPG&client=wccls&type=xw12&oclc=670212756&upc=883929106127",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "INCEPTION",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "INCEPTION",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "INCEPTION",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 9,
+  "onOrder": 0,
+  "order": 20,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3391864",
+  "title": "Inception",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU INCEPTION",
+  "description": "Dom Cobb is the best there is at extraction; stealing valuable secrets inside the subconscious during the mind's vulnerable dream state. His skill has made him a coveted player in industrial espionage, but also has made him a fugitive and cost him dearly. Now he may get a second chance if he can do the impossible; inception, planting an idea rather than stealing one. If they succeed, Cobb and his team could pull off the perfect crime.",
+  "authors": [],
+  "publicationDate": "2010",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781419893148/SC.GIF&client=wccls&type=xw12&oclc=670213101&upc=883929159703",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781419893148/MC.GIF&client=wccls&type=xw12&oclc=670213101&upc=883929159703",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781419893148/LC.JPG&client=wccls&type=xw12&oclc=670213101&upc=883929159703",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "BLU INCEPTION",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU INCEPTION",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 9,
+  "onOrder": 0,
+  "order": 21,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4178568",
+  "title": "Inception",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY INCEPTION",
+  "description": "Dom Cobb is the best there is at extraction: stealing valuable secrets inside the subconscious during the mind's vulnerable dream state. His skill has made him a coveted player in industrial espionage but has also made him a fugitive and cost him dearly. Now he may get a second chance if he can do the impossible: inception, planting an idea rather than stealing one. If they succeed, Cobb and his team could pull off the perfect crime. But no planning or expertise can prepare them for a dangerous enemy who seems to predict their every move.",
+  "authors": [],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1124923870&upc=883929593941",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1124923870&upc=883929593941",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1124923870&upc=883929593941",
+   "local_url": null
+  },
+  "edition": "4K Ultra HD + Blu-ray [edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY INCEPTION",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 22,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2063458",
+  "title": "Gravity",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD Gravity",
+  "description": "Dr. Ryan Stone is a brilliant medical engineer on her first shuttle mission with veteran astronaut Matt Kowalsky. On a seemingly routine spacewalk, the shuttle is destroyed, leaving Stone and Kowalsky spiraling out into the blackness. The deafening silence tells them they have lost any link to Earth and any chance for rescue. As fear turns to panic, every gulp of air eats away at what little oxygen is left, and the only way home may be to go further out into the terrifying expanse of space.",
+  "authors": [],
+  "publicationDate": null,
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=868338769&upc=883929246236",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=868338769&upc=883929246236",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=868338769&upc=883929246236",
+   "local_url": null
+  },
+  "edition": "Rental [edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD Gravity",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD Gravity",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD Gravity",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD Gravity",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   }
+  ],
+  "held": 4,
+  "onOrder": 0,
+  "order": 23,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4562514",
+  "title": "Gravity",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU GRAVITY",
+  "description": "Dr. Ryan Stone, a brilliant medical engineer on her first shuttle mission, with veteran astronaut Matt Kowalsky. But on a seemingly routine spacewalk, disaster strikes. The shuttle is destroyed, leaving Stone and Kowalsky completely alone.",
+  "authors": [],
+  "publicationDate": "2024",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1463448628&upc=883929823468",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1463448628&upc=883929823468",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1463448628&upc=883929823468",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "BLU GRAVITY",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU GRAVITY",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 24,
+  "new": true
+ },
+ {
+  "metadataId": "S143C2461462",
+  "title": "Ex Machina",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY EX",
+  "description": "Caleb, a 24-year-old coder at the world's largest Internet company, wins a competition to spend a week at a retreat belonging to the company's reclusive CEO, Nathan. But when Caleb arrives he finds that he will have to participate in a fascinating experiment with the world's first true artificial intelligence, housed in the body of a beautiful robot woman, Ava. Truths, emotions, and motives are blurred as the relationship between Caleb, Ava, and Nathan intensifies.",
+  "authors": [],
+  "publicationDate": "2015",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=910524380&upc=031398221159",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=910524380&upc=031398221159",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=910524380&upc=031398221159",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY EX",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 25,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4257706",
+  "title": "Ex Machina",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU EX",
+  "description": "Caleb, a 24-year-old coder at the world's largest Internet company, wins a competition to spend a week at a retreat belonging to the company's reclusive CEO, Nathan. But when Caleb arrives he finds that he will have to participate in a fascinating experiment with the world's first true artificial intelligence, housed in the body of a beautiful robot woman, Ava. Truths, emotions, and motives are blurred as the relationship between Caleb, Ava, and Nathan intensifies.",
+  "authors": [],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1028675218&upc=031398264477",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1028675218&upc=031398264477",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1028675218&upc=031398264477",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD + Blu-ray + Digital HD edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU EX",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU EX",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU EX",
+    "status": "CHECKED_OUT",
+    "dueDays": 10
+   }
+  ],
+  "held": 1,
+  "onOrder": 0,
+  "order": 26,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2317014",
+  "title": "Ex Machina",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD Ex",
+  "description": "Caleb, a coder at the world's largest Internet company, wins a competition to spend a week at a retreat belonging to the company's reclusive CEO, Nathan. But when Caleb arrives he finds that he will have to participate in a fascinating experiment with the world's first true artificial intelligence, housed in the body of a beautiful robot woman, Ava. Truths, emotions, and motives are blurred as the relationship between Caleb, Ava, and Nathan intensifies.",
+  "authors": [],
+  "publicationDate": "2015",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=910524337&upc=031398221074",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=910524337&upc=031398221074",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=910524337&upc=031398221074",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD Ex",
+    "status": "CHECKED_OUT",
+    "dueDays": 8
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD Ex",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD Ex",
+    "status": "CHECKED_OUT",
+    "dueDays": 4
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD Ex",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD Ex",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD Ex",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   }
+  ],
+  "held": 4,
+  "onOrder": 0,
+  "order": 27,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2938768",
+  "title": "Mad Max",
+  "subtitle": "Fury Road",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY MAD",
+  "description": "Haunted by his turbulent past, Max believes the best way to survive is to wander alone. Nevertheless, he becomes swept up with a group fleeing across the Wasteland in a War Rig driven by an elite Imperator, Furiosa. They are escaping a Citadel tyrannized by the Immortan Joe, from whom something irreplaceable has been taken. Enraged, the Warlord with his gangs pursues the rebels ruthlessly in the high-octane Road War that follows.",
+  "authors": [],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=971022879&upc=883929568277",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=971022879&upc=883929568277",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=971022879&upc=883929568277",
+   "local_url": null
+  },
+  "edition": "Blu-ray discs (original and Black & chrome edition)",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY MAD",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY MAD",
+    "status": "CHECKED_OUT",
+    "dueDays": 19
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY MAD",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY MAD",
+    "status": "HELD"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY MAD",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY MAD",
+    "status": "CHECKED_OUT",
+    "dueDays": 8
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 28,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3047388",
+  "title": "Mad Max",
+  "subtitle": "Fury Road",
+  "format": "DVD",
+  "callNumber": "DVD MAD",
+  "description": "A return to the world of the Road Warrior, Max Rockatansky. Haunted by his turbulent past, he believes the best way to survive is to wander alone. Nevertheless, he becomes swept up with a group fleeing across the Wasteland in a War Rig driven by an elite Imperator, Furiosa. They are escaping a Citadel tyrannized by the Immortan Joe, from whom something irreplaceable has been taken. Enraged, the Warlord with his gangs, pursues the rebels ruthlessly in the high-octane Road War that follows.",
+  "authors": [],
+  "publicationDate": "2015",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=922677622&upc=883929411665",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=922677622&upc=883929411665",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=922677622&upc=883929411665",
+   "local_url": null
+  },
+  "edition": "Widescreen version.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "DVD MAD",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD MAD",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD MAD",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 8,
+  "onOrder": 0,
+  "order": 29,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4202147",
+  "title": "Top Gun",
+  "subtitle": "Maverick",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY TOP",
+  "description": "After more than 30 years of service as one of the navy's top aviators, Pete 'Maverick' Mitchell is where he belongs, pushing the envelope as a courageous test pilot and dodging the advancement in rank that would ground him. Training a detachment of graduates for a special assignment, Maverick must confront the ghosts of his past and his deepest fears, culminating in a mission that demands the ultimate sacrifice from those who choose to fly it.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1341684345&upc=032429343338",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1341684345&upc=032429343338",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1341684345&upc=032429343338",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY TOP",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY TOP",
+    "status": "HELD"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY TOP",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY TOP",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY TOP",
+    "status": "HELD"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY TOP",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 4,
+  "onOrder": 0,
+  "order": 30,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4138610",
+  "title": "Top Gun",
+  "subtitle": "Maverick",
+  "format": "DVD",
+  "callNumber": "TOP",
+  "description": "After more than 30 years of service as one of the navy's top aviators, Pete 'Maverick' Mitchell is where he belongs, pushing the envelope as a courageous test pilot and dodging the advancement in rank that would ground him. Training a detachment of graduates for a special assignment, Maverick must confront the ghosts of his past and his deepest fears, culminating in a mission that demands the ultimate sacrifice from those who choose to fly it.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1341684299&upc=032429343352",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1341684299&upc=032429343352",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1341684299&upc=032429343352",
+   "local_url": "https://m.media-amazon.com/images/I/71nqZf5nRbL.jpg"
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "TOP",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "TOP",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 6,
+  "onOrder": 0,
+  "order": 31,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4346084",
+  "title": "Top Gun",
+  "subtitle": "Maverick",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY TOP",
+  "description": "After more than 30 years of service as one of the Navy's top aviators, Pete 'Maverick' Mitchell is where he belongs, pushing the envelope as a courageous test pilot and dodging the advancement in rank that would ground him. Training a detachment of graduates for a special assignment, Maverick must confront the ghosts of his past and his deepest fears, culminating in a mission that demands the ultimate sacrifice from those who choose to fly it.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1341684328&upc=032429343291",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1341684328&upc=032429343291",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1341684328&upc=032429343291",
+   "local_url": null
+  },
+  "edition": "4K Ultra HD [edition].",
+  "kind": "video",
+  "copies": [],
+  "held": 24,
+  "onOrder": 3,
+  "order": 32,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4294964",
+  "title": "Oppenheimer",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD OPPENHEIMER",
+  "description": "The story of American scientist J. Robert Oppenheimer and his role in the development of the atomic bomb.",
+  "authors": [],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1404460838&upc=191329253113",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1404460838&upc=191329253113",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1404460838&upc=191329253113",
+   "local_url": null
+  },
+  "edition": "[English/Spanish version].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD OPPENHEIMER",
+    "status": "HELD"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 33,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4460952",
+  "title": "Oppenheimer",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY OPPENHEIMER",
+  "description": "The story of American scientist J. Robert Oppenheimer and his role in the development of the atomic bomb.",
+  "authors": [],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1410323540&upc=191329253120",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1410323540&upc=191329253120",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1410323540&upc=191329253120",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray]",
+  "kind": "video",
+  "copies": [],
+  "held": 11,
+  "onOrder": 2,
+  "order": 34,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4379862",
+  "title": "Barbie",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY BARBIE",
+  "description": "The Barbies are perfect beings in a perfect place until stereotypical Barbie's owner in the real world is depressed. Weird Barbie suggests she go to the real world and correct the problem. Ken tags along and discovers that men are the leaders there, and he brings back patriarchy to Barbieland. Now no one is happy and the mess must be sorted.",
+  "authors": [],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1393187025&upc=883929801817",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1393187025&upc=883929801817",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1393187025&upc=883929801817",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BARBIE",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BARBIE",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BARBIE",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BARBIE",
+    "status": "CHECKED_OUT",
+    "dueDays": 17
+   }
+  ],
+  "held": 15,
+  "onOrder": 0,
+  "order": 35,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4379861",
+  "title": "Barbie",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD BARBIE",
+  "description": "The Barbies are perfect beings in a perfect place until stereotypical Barbie's owner in the real world is depressed. Weird Barbie suggests she go to the real world and correct the problem. Ken tags along and discovers that men are the leaders there, and he brings back patriarchy to Barbieland. Now no one is happy and the mess must be sorted.",
+  "authors": [],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9786319063141/SC.GIF&client=wccls&type=xw12&oclc=1393187463&upc=883929801831",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9786319063141/MC.GIF&client=wccls&type=xw12&oclc=1393187463&upc=883929801831",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9786319063141/LC.JPG&client=wccls&type=xw12&oclc=1393187463&upc=883929801831",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [],
+  "held": 24,
+  "onOrder": 4,
+  "order": 36,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4056596",
+  "title": "The Batman",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD BATMAN",
+  "description": "Two years of stalking the streets as the Batman, striking fear into the hearts of criminals, has led Bruce Wayne deep into the shadows of Gotham City. With only a few trusted allies, Alfred Pennyworth, Lt. James Gordon, amongst the city's corrupt network of officials and high-profile figures, the lone vigilante has established himself as the sole embodiment of vengeance amongst his fellow citizens. When a killer targets Gotham's elite with a series of sadistic machinations, a trail of cryptic clues sends the World's Greatest Detective on an investigation into the underworld, where he encounters such characters as Selina Kyle/aka Catwoman, Oswald Cobblepot/aka the Penguin, Carmine Falcone, and Edward Nashton/aka the Riddler. As the evidence begins to lead closer to home and the scale of the perpetrator's plans becomes clear, Batman must forge new relationships, unmask the culprit, and bring justice to the abuse of power and corruption that has long plagued Gotham City.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1306242412&upc=883929728251",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1306242412&upc=883929728251",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1306242412&upc=883929728251",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "DVD BATMAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 12
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD BATMAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 37,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4154884",
+  "title": "The Batman",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU BATMAN",
+  "description": "Two years of stalking the streets as the Batman, striking fear into the hearts of criminals, has led Bruce Wayne deep into the shadows of Gotham City. With only a few trusted allies, Alfred Pennyworth, Lt. James Gordon, amongst the city's corrupt network of officials and high-profile figures, the lone vigilante has established himself as the sole embodiment of vengeance amongst his fellow citizens. When a killer targets Gotham's elite with a series of sadistic machinations, a trail of cryptic clues sends the World's Greatest Detective on an investigation into the underworld, where he encounters such characters as Selina Kyle/aka Catwoman, Oswald Cobblepot/aka the Penguin, Carmine Falcone, and Edward Nashton/aka the Riddler. As the evidence begins to lead closer to home and the scale of the perpetrator's plans becomes clear, Batman must forge new relationships, unmask the culprit, and bring justice to the abuse of power and corruption that has long plagued Gotham City.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1319485047&upc=883929728466",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1319485047&upc=883929728466",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1319485047&upc=883929728466",
+   "local_url": null
+  },
+  "edition": "4K Ultra HD + Blu-ray [edition].",
+  "kind": "video",
+  "copies": [],
+  "held": 16,
+  "onOrder": 2,
+  "order": 38,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4268106",
+  "title": "Spider-Man, Across the Spider-Verse",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "J SPIDER-MAN",
+  "description": "Miles Morales catapults across the Multiverse, where he encounters a team of Spider-People charged with protecting its very existence. When the heroes clash on how to handle a new threat, Miles must redefine what it means to be a hero.",
+  "authors": [],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1391642508&upc=043396581562",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1391642508&upc=043396581562",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1391642508&upc=043396581562",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "J SPIDER-MAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "J SPIDER-MAN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "J SPIDER-MAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 2
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "J SPIDER-MAN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "J SPIDER-MAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 10
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "J SPIDER-MAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   }
+  ],
+  "held": 3,
+  "onOrder": 0,
+  "order": 39,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4420480",
+  "title": "Spider-Man, Across the Spider-Verse",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K J BLU-RAY SPIDER-MAN",
+  "description": "Miles Morales catapults across the Multiverse, where he encounters a team of Spider-People charged with protecting its very existence. When the heroes clash on how to handle a new threat, Miles must redefine what it means to be a hero.",
+  "authors": [],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1398228520&upc=043396581609",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1398228520&upc=043396581609",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1398228520&upc=043396581609",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray combo].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY SPIDER-MAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 19
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY SPIDER-MAN",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 40,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4086532",
+  "title": "Everything Everywhere All at Once",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY EVE",
+  "description": "Evelyn Wang, a flustered immigrant mother, is contacted from a parallel universe and told that only she can save the world. The unlikely hero must learn to channel her newfound powers and fight through the splintering timelines of the multiverse to save her home, her family, and herself in this big-hearted and irreverent adventure.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1320869002&upc=031398334934",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1320869002&upc=031398334934",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1320869002&upc=031398334934",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY EVE",
+    "status": "CHECKED_OUT",
+    "dueDays": 4
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY EVE",
+    "status": "CHECKED_OUT",
+    "dueDays": 19
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 41,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4085805",
+  "title": "Everything Everywhere All at Once",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD EVERYTHING",
+  "description": "Evelyn Wang, a flustered immigrant mother, is contacted from a parallel universe and told that only she can save the world. The unlikely hero must learn to channel her newfound powers and fight through the splintering timelines of the multiverse to save her home, her family, and herself in this big-hearted and irreverent adventure.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1320868993&upc=031398334927",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1320868993&upc=031398334927",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1320868993&upc=031398334927",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD EVERYTHING",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD EVERYTHING",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 7,
+  "onOrder": 0,
+  "order": 42,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4307926",
+  "title": "Everything Everywhere All at Once",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY EVERYTHING",
+  "description": "Evelyn Wang, a flustered immigrant mother, is contacted from a parallel universe and told that only she can save the world. The unlikely hero must learn to channel her newfound powers and fight through the splintering timelines of the multiverse to save her home, her family, and herself in this big-hearted and irreverent adventure.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1335038290&upc=031398335610",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1335038290&upc=031398335610",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1335038290&upc=031398335610",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray]",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY EVERYTHING",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY EVERYTHING",
+    "status": "HELD"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 43,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3723997",
+  "title": "Knives Out",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD KNI",
+  "description": "A tribute to mystery mastermind Agatha Christie and a fun, modern-day murder mystery where everyone is a suspect. When renowned crime novelist Harlan Thrombey is found dead at his estate just after his 85th birthday, the inquisitive and debonair Detective Benoit Blanc is mysteriously enlisted to investigate. From Harlan's dysfunctional family to his devoted staff, Blanc sifts through a web of red herrings and self-serving lies to uncover the truth behind Harlan's untimely death.",
+  "authors": [],
+  "publicationDate": "2020",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1135313917&upc=031398314936",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1135313917&upc=031398314936",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1135313917&upc=031398314936",
+   "local_url": null
+  },
+  "edition": "Widescreen ed.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD KNI",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 44,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4234632",
+  "title": "Knives Out",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU KNIVES",
+  "description": "A tribute to mystery mastermind Agatha Christie and a fun, modern-day murder mystery where everyone is a suspect. When renowned crime novelist Harlan Thrombey is found dead at his estate just after his 85th birthday, the inquisitive and debonair Detective Benoit Blanc is mysteriously enlisted to investigate. From Harlan's dysfunctional family to his devoted staff, Blanc sifts through a web of red herrings and self-serving lies to uncover the truth behind Harlan's untimely death.",
+  "authors": [],
+  "publicationDate": "2020",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1141793915&upc=031398314929",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1141793915&upc=031398314929",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1141793915&upc=031398314929",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU KNIVES",
+    "status": "HELD"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 45,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3436665",
+  "title": "John Wick",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD JOHN",
+  "description": "When sadistic young thugs senselessly attack a brilliantly lethal ex-assassin, they have no idea that they've just awakened the boogeyman. With New York City as his bullet-riddled playground, Wick embarks on a merciless rampage, hunting down his adversaries with the skill and ruthlessness that made him an underworld legend.",
+  "authors": [],
+  "publicationDate": null,
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=897438666&upc=031398211037",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=897438666&upc=031398211037",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=897438666&upc=031398211037",
+   "local_url": null
+  },
+  "edition": "Widescreen.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD JOHN",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD JOHN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD JOHN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD JOHN",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD JOHN",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD JOHN",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 4,
+  "onOrder": 0,
+  "order": 46,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4154887",
+  "title": "John Wick",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU JOHN",
+  "description": "When sadistic young thugs senselessly attack a brilliantly lethal ex-assassin, they have no idea that they've just awakened the boogeyman. With New York City as his bullet-riddled playground, Wick embarks on a merciless rampage, hunting down his adversaries with the skill and ruthlessness that made him an underworld legend.",
+  "authors": [],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1028641278&upc=031398260516",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1028641278&upc=031398260516",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1028641278&upc=031398260516",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD + Blu-ray combo]",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU JOHN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU JOHN",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 47,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2113865",
+  "title": "Jurassic Park",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD JURASSIC",
+  "description": "This epic film is sheer movie-making magic that was 65 million years in the making. Jurassic Park takes you to an amazing theme park on a remote island where dinosaurs once again roam the earth and five people must battle to survive among the prehistoric predators.",
+  "authors": [],
+  "publicationDate": "2012",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=807789687&upc=025192126444",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=807789687&upc=025192126444",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=807789687&upc=025192126444",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "DVD JURASSIC",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 48,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4439871",
+  "title": "Jurassic Park",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU JURASSIC",
+  "description": null,
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1333964976&upc=191329221211",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1333964976&upc=191329221211",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1333964976&upc=191329221211",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU JURASSIC",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU JURASSIC",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU JURASSIC",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 49,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2313378",
+  "title": "Jurassic Park",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU JUR #1",
+  "description": "Experience one of the biggest films in motion picture history with director Steven Spielberg's ultimate thrill ride, Jurassic Park. Featuring Academy Award winning visual effects and groundbreaking filmmaking, this epic film is sheer movie-making magic that was 65 million years in the making. Jurassic Park takes you to an amazing theme park on a remote island where dinosaurs once again roam the earth and five people must battle to survive among the prehistoric predators.",
+  "authors": [],
+  "publicationDate": "2013",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=848895207&upc=025192179143",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=848895207&upc=025192179143",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=848895207&upc=025192179143",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "BLU JUR #1",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU JUR #1",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 50,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4329774",
+  "title": "Back to the Future",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "BACK",
+  "description": "When teenager Marty McFly is blasted to 1955 in the DeLorean time machine created by the eccentric Doc Brown, he finds himself mixed up in a time-shattering chain reaction that could vaporize his future, and leave him trapped in the past.",
+  "authors": [],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=936187913&upc=025192336997",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=936187913&upc=025192336997",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=936187913&upc=025192336997",
+   "local_url": "https://cor-liv-cdn-static.bibliocommons.com/image_proxy?url=http://midwesttapes.com/images/movies/000/000/000/011/521/000000000011521254.jpg"
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "BACK",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "BACK",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 51,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4182297",
+  "title": "Back to the Future, the Ultimate Trilogy",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY BACK",
+  "description": "Join Marty McFly, Doc Brown, and a time traveling DeLorean for the adventure of a lifetime as they travel to the past, present and future, setting off a time-shattering chain reaction that disrupts the space-time continuum, and more importantly -- affects Marty's love life.",
+  "authors": [],
+  "publicationDate": "2020",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1202025528&upc=191329144671",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1202025528&upc=191329144671",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1202025528&upc=191329144671",
+   "local_url": null
+  },
+  "edition": "35th anniversary edition.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BACK",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY BACK",
+    "status": "CHECKED_OUT",
+    "dueDays": 2
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 52,
+  "new": true
+ },
+ {
+  "metadataId": "S143C2575510",
+  "title": "Alien",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU ALIEN",
+  "description": "A mindless, savage, and merciless alien is attacking the crew of an intergalactic freighter, and it must be stopped before they are all killed.",
+  "authors": [],
+  "publicationDate": "2011",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=ocn714896137&upc=024543711193",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=ocn714896137&upc=024543711193",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=ocn714896137&upc=024543711193",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 17
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIEN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIEN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIEN",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 8,
+  "onOrder": 0,
+  "order": 53,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2576540",
+  "title": "Alien",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "ALIEN",
+  "description": "A mindless, savage, and merciless alien is attacking the crew of an intergalactic freighter and it must be stopped before they are all killed.",
+  "authors": [],
+  "publicationDate": "2003",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=ocm54012482&upc=024543098508",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=ocm54012482&upc=024543098508",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=ocm54012482&upc=024543098508",
+   "local_url": null
+  },
+  "edition": "Director's cut.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 5
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "ALIEN",
+    "status": "IN_TRANSIT"
+   }
+  ],
+  "held": 13,
+  "onOrder": 0,
+  "order": 54,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4154054",
+  "title": "Alien",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU ALIEN",
+  "description": "When the crew of the space-tug Nostromo responds to a distress signal from a barren planet, they discover a mysterious life form that breeds within human hosts. The acid-blooded extraterrestrial proves to be the ultimate adversary as crew members battle to stay alive and prevent the deadly creature from reaching Earth.",
+  "authors": [],
+  "publicationDate": "2019",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1114337437&upc=024543627678",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1114337437&upc=024543627678",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1114337437&upc=024543627678",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray] ; 40th anniversary [edition].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU ALIEN",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU ALIEN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU ALIEN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 19
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU ALIEN",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   }
+  ],
+  "held": 10,
+  "onOrder": 0,
+  "order": 55,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2569657",
+  "title": "Aliens",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "ALIENS",
+  "description": "In this sequel to Alien, Ripley is the only survivor from mankind's first encounter with the monstrous Alien. Her account of the Alien and the fate of her crew are received with skepticism--until the mysterious disappearnce of colonists on LV-426 lead her to join a team of high-tech colonial marines sent in to investigate.",
+  "authors": [],
+  "publicationDate": "2004",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=156930553&upc=024543982531",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=156930553&upc=024543982531",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=156930553&upc=024543982531",
+   "local_url": null
+  },
+  "edition": "Special ed. ; widescreen ed.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "ALIENS",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 4,
+  "onOrder": 0,
+  "order": 56,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2567658",
+  "title": "Aliens",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU ALIENS",
+  "description": "Ripley returns to the alien planet to stop them from killing off an entire colony. But when she gets there, along with a group of marines, they only find one survivor, a small girl. Now they must fight hordes of aliens to save her.",
+  "authors": [],
+  "publicationDate": "2011",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=ocn720691403&upc=024543711216",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=ocn720691403&upc=024543711216",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=ocn720691403&upc=024543711216",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIENS",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIENS",
+    "status": "HELD"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIENS",
+    "status": "HELD"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIENS",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU ALIENS",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 7,
+  "onOrder": 0,
+  "order": 57,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4360077",
+  "title": "Aliens",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY ALIENS",
+  "description": "\"Ripley -- the sole survivor of the space tug Nostromo's deadly encounter with the monstrous Alien -- is found after drifting through space in hypersleep for 57 years. She aggress to accompany a team of Colonial Marines back to LV-426...and this time it's war!\" --Container.",
+  "authors": [],
+  "publicationDate": "2024",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1428573372&upc=786936900576",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1428573372&upc=786936900576",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1428573372&upc=786936900576",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray combo].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ALIENS",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ALIENS",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY ALIENS",
+    "status": "HELD"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 58,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3011175",
+  "title": "The Matrix",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD MATRIX",
+  "description": "In an anti-utopian future, the \"real\" world as we know it is nothing more than a computer construct, created by an all-powerful artificial intelligence. A small group of humans has found a way out of the construct, and are now fighting for the future of the human race.",
+  "authors": [],
+  "publicationDate": "1999",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780790742618/SC.GIF&client=wccls&type=xw12&oclc=ocm42415882&upc=085391773726",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780790742618/MC.GIF&client=wccls&type=xw12&oclc=ocm42415882&upc=085391773726",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780790742618/LC.JPG&client=wccls&type=xw12&oclc=ocm42415882&upc=085391773726",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "DVD MATRIX",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "DVD MATRIX",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 59,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3017329",
+  "title": "The Matrix",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU MATRIX",
+  "description": "A computer hacker discovers that reality is nothing more than an elaborate facade called the Matrix, created by super-intelligent robots that have enslaved mankind and are using their bodies as a power source.The reality is that the world is a hoax, an elaborate deception spun to control humans.",
+  "authors": [],
+  "publicationDate": "2010",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781419885709/SC.GIF&client=wccls&type=xw12&oclc=ocn506020110&upc=883929085163",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781419885709/MC.GIF&client=wccls&type=xw12&oclc=ocn506020110&upc=883929085163",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781419885709/LC.JPG&client=wccls&type=xw12&oclc=ocn506020110&upc=883929085163",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MATRIX",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MATRIX",
+    "status": "CHECKED_OUT",
+    "dueDays": 10
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "BLU MATRIX",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 60,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4200563",
+  "title": "The Matrix",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY MATRIX",
+  "description": "A computer hacker discovers that reality is nothing more than an elaborate facade called the Matrix, created by super-intelligent robots that have enslaved mankind and are using their bodies as a power source. The reality is that the world is a hoax, an elaborate deception spun to control humans.",
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1242944672&upc=883929593958",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1242944672&upc=883929593958",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1242944672&upc=883929593958",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray combo].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY MATRIX",
+    "status": "HELD"
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 61,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4235376",
+  "title": "Ghostbusters",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K BLU-RAY GHOSTBUSTERS",
+  "description": "The paratroopers of the paranormal face their greatest challenge when a woman discovers that her refrigerator leads directly to the gates of hell! With the whole world watching, it's up to the Ghostbusters to keep Manhattan from becoming a madhouse!",
+  "authors": [],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1028641830&upc=043396474390",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1028641830&upc=043396474390",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1028641830&upc=043396474390",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray].",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K BLU-RAY GHOSTBUSTERS",
+    "status": "IN_TRANSIT"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 62,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3594329",
+  "title": "Ghostbusters",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "DVD GHOSTBUSTERS",
+  "description": "When ghosts go on a rampage, only three men can save the world. Soon every spook in the city is loose and our heroes face the supreme challenge If you want your spirits raised, who you gonna call? Ghostbusters!",
+  "authors": [],
+  "publicationDate": "1999",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780800141721/SC.GIF&client=wccls&type=xw12&oclc=41636389&upc=043396041394",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780800141721/MC.GIF&client=wccls&type=xw12&oclc=41636389&upc=043396041394",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780800141721/LC.JPG&client=wccls&type=xw12&oclc=41636389&upc=043396041394",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "DVD GHOSTBUSTERS",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "DVD GHOSTBUSTERS",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "DVD GHOSTBUSTERS",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "DVD GHOSTBUSTERS",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   }
+  ],
+  "held": 10,
+  "onOrder": 0,
+  "order": 63,
+  "new": false
+ },
+ {
+  "metadataId": "S143C1418921",
+  "title": "Ghostbusters",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "BLU-RAY GHOSTBUSTERS",
+  "description": "\"Suit up for classic comedy!  When kooky, spooky college profs Peter Venkman, Ray Stantz and Egon Spengler lose their University jobs, they decide to go freelance, de-haunting houses in a new ghost removal service.\"--Container.",
+  "authors": [],
+  "publicationDate": "2009",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781435905009/SC.GIF&client=wccls&type=xw12&oclc=ocn384685282&upc=043396249462",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781435905009/MC.GIF&client=wccls&type=xw12&oclc=ocn384685282&upc=043396249462",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781435905009/LC.JPG&client=wccls&type=xw12&oclc=ocn384685282&upc=043396249462",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY GHOSTBUSTERS",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Blu-ray",
+    "call": "BLU-RAY GHOSTBUSTERS",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 64,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3333094",
+  "title": "Coco",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "J COCO",
+  "description": "Despite his family's generations-old ban on music, Miguel dreams of becoming an accomplished musician like his idol, Ernesto de la Cruz. Desperate to prove his talent, Miguel finds himself in the stunning and colorful Land of the Dead following a mysterious chain of events. Along the way, he meets charming trickster Hector, and together, they set off on an extraordinary journey to unlock the real story behind Miguel's family history.",
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9786317129689/SC.GIF&client=wccls&type=xw12&oclc=1020074281&upc=786936856279",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9786317129689/MC.GIF&client=wccls&type=xw12&oclc=1020074281&upc=786936856279",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9786317129689/LC.JPG&client=wccls&type=xw12&oclc=1020074281&upc=786936856279",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "J COCO",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "J COCO",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "J COCO",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 65,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4235383",
+  "title": "Coco",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "J BLU COCO",
+  "description": "Despite his family's baffling generations-old ban on music, Miguel dreams of becoming an accomplished musician like his idol, Ernesto de la Cruz. Desperate to prove his talent, Miguel finds himself in the stunning and colorful Land of the Dead following a mysterious chain of events. Along the way, he meets charming trickster Hector, and together, they set off on an extraordinary journey to unlock the real story behind Miguel's family history.",
+  "authors": [],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1030754633&upc=786936856811",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1030754633&upc=786936856811",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1030754633&upc=786936856811",
+   "local_url": null
+  },
+  "edition": "Ultimate collector's edition, 4K Ultra HD Blu-ray + Blu-ray.",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "J BLU COCO",
+    "status": "HELD"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult 4K Blu-ray",
+    "call": "J BLU COCO",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 66,
+  "new": true
+ },
+ {
+  "metadataId": "S143C1234441",
+  "title": "WALL-E",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "J BLU WALL-E",
+  "description": "After hundreds of lonely years, a waste management robot finds a new purpose in life. With only a cockroach for a friend, he finds true love in another robot sent on a mission to Earth to see if it is safe for human life.",
+  "authors": [],
+  "publicationDate": "2008",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780788889707/SC.GIF&client=wccls&type=xw12&oclc=ocn244206881&upc=786936769364",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780788889707/MC.GIF&client=wccls&type=xw12&oclc=ocn244206881&upc=786936769364",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780788889707/LC.JPG&client=wccls&type=xw12&oclc=ocn244206881&upc=786936769364",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "J BLU WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "J BLU WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Blu-ray",
+    "call": "J BLU WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "J BLU WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   }
+  ],
+  "held": 5,
+  "onOrder": 0,
+  "order": 67,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4224398",
+  "title": "WALL-E",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K J BLU-RAY WALL-E",
+  "description": "After hundreds of lonely years, a waste management robot finds a new purpose in life. With only a cockroach for a friend, he finds true love in another robot sent on a mission to Earth to see if it is safe for human life.",
+  "authors": [],
+  "publicationDate": "2022",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1362410960&upc=715515279413",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1362410960&upc=715515279413",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1362410960&upc=715515279413",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray special edition]",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 19
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY WALL-E",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 12
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 68,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3970023",
+  "title": "WALL-E",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "J DVD WALL-E",
+  "description": "After hundreds of lonely years, a waste management robot finds a new purpose in life. With only a cockroach for a friend, he finds true love in another robot sent on a mission to Earth to see if it is safe for human life.",
+  "authors": [],
+  "publicationDate": "2008",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780788876936/SC.GIF&client=wccls&type=xw12&oclc=244206651&upc=786936772852",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780788876936/MC.GIF&client=wccls&type=xw12&oclc=244206651&upc=786936772852",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780788876936/LC.JPG&client=wccls&type=xw12&oclc=244206651&upc=786936772852",
+   "local_url": "https://cor-liv-cdn-static.bibliocommons.com/image_proxy?url=http://midwesttapes.com/images/movies/dis05436111d.gif"
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "J DVD WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 10
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "J DVD WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult DVD",
+    "call": "J DVD WALL-E",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "J DVD WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult DVD",
+    "call": "J DVD WALL-E",
+    "status": "CHECKED_OUT",
+    "dueDays": 2
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "J DVD WALL-E",
+    "status": "HELD"
+   }
+  ],
+  "held": 7,
+  "onOrder": 0,
+  "order": 69,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4724888",
+  "title": "Moana",
+  "subtitle": "",
+  "format": "DVD",
+  "callNumber": "J",
+  "description": "In Disney's live-action reimagining of the beloved Oscar-nominated animated adventure, Moana answers the Ocean's call and, for the first time, voyages beyond the reef of her island of Motunui with the infamous demigod Maui on an unforgettable journey to restore prosperity to her people.",
+  "authors": [],
+  "publicationDate": "2026",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=1614871806&upc=043396650404",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=1614871806&upc=043396650404",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=1614871806&upc=043396650404",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult DVD",
+    "call": "J",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "J",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult DVD",
+    "call": "J",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult DVD",
+    "call": "J",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult DVD",
+    "call": "J",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   }
+  ],
+  "held": 11,
+  "onOrder": 0,
+  "order": 70,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4217942",
+  "title": "Moana",
+  "subtitle": "",
+  "format": "BLURAY",
+  "callNumber": "4K J BLU-RAY MOANA",
+  "description": "A mythic adventure set around 2,000 years ago across a series of islands in the South Pacific. The film follows the journey of a spirited teenager named Moana as she meets the once-mighty demi-god Maui, and together they traverse the open ocean, encountering enormous fiery creatures and impossible odds.",
+  "authors": [],
+  "publicationDate": "2019",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=/SC.GIF&client=wccls&type=xw12&oclc=on1245504349&upc=786936866797",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=/MC.GIF&client=wccls&type=xw12&oclc=on1245504349&upc=786936866797",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=/LC.JPG&client=wccls&type=xw12&oclc=on1245504349&upc=786936866797",
+   "local_url": null
+  },
+  "edition": "[4K Ultra HD Blu-ray + Blu-ray]",
+  "kind": "video",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult 4K Blu-ray",
+    "call": "4K J BLU-RAY MOANA",
+    "status": "IN_TRANSIT"
+   }
+  ],
+  "held": 6,
+  "onOrder": 0,
+  "order": 71,
+  "new": false
+ },
+ {
+  "metadataId": "S900C0010",
+  "title": "The Rise and Fall of Sanctuary Moon",
+  "subtitle": "Original Series Soundtrack",
+  "format": "MUSIC_CD",
+  "callNumber": "CD TV SANC",
+  "description": "Music from all seven seasons, including the theme that plays over a very long fall.",
+  "authors": [
+   "Various artists"
+  ],
+  "publicationDate": "2024",
+  "edition": "Original soundtrack",
+  "kind": "extra",
+  "collection": "Adult Music CD",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "CD TV SANC",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Blu-ray",
+    "call": "CD TV SANC",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Blu-ray",
+    "call": "CD TV SANC",
+    "status": "HELD"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 72,
+  "new": false
+ }
+]

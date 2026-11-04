@@ -1,0 +1,170 @@
+{
+ "holds": [
+  {
+   "bib": "S900C0002",
+   "pickup": "Milu Station",
+   "status": "READY_FOR_PICKUP",
+   "pickupByDays": 4,
+   "position": 0
+  },
+  {
+   "bib": "S143C4010003",
+   "pickup": "Haven Landing",
+   "status": "READY_FOR_PICKUP",
+   "pickupByDays": 6,
+   "position": 0
+  },
+  {
+   "bib": "S143C3440372",
+   "pickup": "Port FreeCommerce",
+   "status": "IN_TRANSIT",
+   "position": 1
+  },
+  {
+   "bib": "S143C4294964",
+   "pickup": "Milu Station",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 3
+  },
+  {
+   "bib": "S143C4379862",
+   "pickup": "Milu Station",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 7
+  },
+  {
+   "bib": "S143C4202147",
+   "pickup": "Mihira Branch",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 12
+  },
+  {
+   "bib": "S143C3333094",
+   "pickup": "Haven Landing",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 2
+  },
+  {
+   "bib": "S143C3723997",
+   "pickup": "Port FreeCommerce",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 5
+  },
+  {
+   "bib": "S900C0003",
+   "pickup": "Preservation Central",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 9
+  }
+ ],
+ "checkouts": [
+  {
+   "bib": "S143C3441257",
+   "dueDays": -2,
+   "outDays": 23,
+   "renewed": 0
+  },
+  {
+   "bib": "S143C3017011",
+   "dueDays": 2,
+   "outDays": 19,
+   "renewed": 1
+  },
+  {
+   "bib": "S143C2460704",
+   "dueDays": 5,
+   "outDays": 16,
+   "renewed": 2
+  },
+  {
+   "bib": "S143C3329408",
+   "dueDays": 9,
+   "outDays": 12,
+   "renewed": 0
+  },
+  {
+   "bib": "S143C2063458",
+   "dueDays": 14,
+   "outDays": 7,
+   "renewed": 1
+  },
+  {
+   "bib": "S143C2461462",
+   "dueDays": 19,
+   "outDays": 2,
+   "renewed": 2
+  }
+ ],
+ "history": [
+  {
+   "bib": "S143C2938768",
+   "outDays": 40,
+   "returnedDays": 28
+  },
+  {
+   "bib": "S143C4056596",
+   "outDays": 49,
+   "returnedDays": 37
+  },
+  {
+   "bib": "S143C4268106",
+   "outDays": 58,
+   "returnedDays": 46
+  },
+  {
+   "bib": "S143C4086532",
+   "outDays": 67,
+   "returnedDays": 55
+  },
+  {
+   "bib": "S143C3436665",
+   "outDays": 76,
+   "returnedDays": 64
+  },
+  {
+   "bib": "S143C2113865",
+   "outDays": 85,
+   "returnedDays": 73
+  },
+  {
+   "bib": "S143C4329774",
+   "outDays": 94,
+   "returnedDays": 82
+  },
+  {
+   "bib": "S143C4182297",
+   "outDays": 103,
+   "returnedDays": 91
+  },
+  {
+   "bib": "S143C2575510",
+   "outDays": 112,
+   "returnedDays": 100
+  },
+  {
+   "bib": "S143C2569657",
+   "outDays": 121,
+   "returnedDays": 109
+  },
+  {
+   "bib": "S143C3011175",
+   "outDays": 130,
+   "returnedDays": 118
+  },
+  {
+   "bib": "S143C4235376",
+   "outDays": 139,
+   "returnedDays": 127
+  },
+  {
+   "bib": "S143C1234441",
+   "outDays": 148,
+   "returnedDays": 136
+  },
+  {
+   "bib": "S143C4724888",
+   "outDays": 157,
+   "returnedDays": 145
+  }
+ ]
+}

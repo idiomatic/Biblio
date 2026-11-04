@@ -1,0 +1,63 @@
+{
+ "subdomain": "firstlanding",
+ "name": "FirstLanding Public Library",
+ "shortName": "FirstLanding",
+ "website": "https://firstlanding.example",
+ "region": "Anywhere",
+ "color": "#2f5d9e",
+ "languages": [
+  "en-US",
+  "es"
+ ],
+ "labels": {
+  "FORMAT.BK": "Book",
+  "FORMAT.DVD": "DVD",
+  "FORMAT.BLURAY": "Blu-ray",
+  "FORMAT.AB": "Audiobook",
+  "sort.relevancy": "Relevancy",
+  "sort.newly_acquired": "Newly acquired",
+  "sort.title": "Title",
+  "sort.author": "Author",
+  "sort.status": "Status",
+  "sort.due_date": "Due date",
+  "FORMAT.BOOK_CD": "Audiobook CD",
+  "FORMAT.LPRINT": "Large print",
+  "FORMAT.MUSIC_CD": "Music CD"
+ },
+ "branches": [
+  {
+   "id": "PRE",
+   "name": "Preservation Central"
+  },
+  {
+   "id": "PFC",
+   "name": "Port FreeCommerce"
+  },
+  {
+   "id": "MIL",
+   "name": "Milu Station"
+  },
+  {
+   "id": "GAN",
+   "name": "Ganaka Pit"
+  },
+  {
+   "id": "MIH",
+   "name": "Mihira Branch"
+  },
+  {
+   "id": "HAV",
+   "name": "Haven Landing"
+  }
+ ],
+ "patron": {
+  "userId": 4042,
+  "accountId": 7081,
+  "name": "Perihelion",
+  "email": "perihelion@example.com",
+  "barcode": "21168012345678",
+  "pickup": "PRE",
+  "language": "en-US",
+  "history": true
+ }
+}

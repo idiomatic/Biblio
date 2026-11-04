@@ -1,0 +1,1215 @@
+[
+ {
+  "metadataId": "S143C2874666",
+  "title": "All Systems Red",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "WELLS, M. [SCI-FI]",
+  "description": "A murderous android discovers itself in \"All Systems Red\", a tense science fiction adventure by Martha Wells that interrogates the roots of consciousness through Artificial intelligence. In a corporate-dominated spacefaring future, planetary missions must be approved and supplied by the Company. Exploratory teams are accompanied by Company-supplied security androids, for their own safety. But in a society where contracts are awarded to the lowest bidder, safety isn't a primary concern. On a distant planet, a team of scientists are conducting surface tests, shadowed by their Company-supplied 'droid -- a self-aware SecUnit that has hacked its own governor module, and refers to itself (though never out loud) as \"Murderbot.\" Scornful of humans, all it really wants is to be left alone long enough to figure out who it is. But when a neighboring mission goes dark, it's up to the scientists and their Murderbot to get to the truth.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780765397539/SC.GIF&client=wccls&type=xw12&oclc=984130324",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780765397539/MC.GIF&client=wccls&type=xw12&oclc=984130324",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780765397539/LC.JPG&client=wccls&type=xw12&oclc=984130324",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "WELLS, M. [SCI-FI]",
+    "status": "HELD"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 0,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3316341",
+  "title": "Artificial Condition",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "WELLS, MARTHA MURDERBOT #2",
+  "description": "It has a dark past - one in which a number of humans were killed. A past that caused it to christen itself Murderbot. But it has only vague memories of the massacre that spawned that title, and it wants to know more. Teaming up with a research transport vessal named ART (you don't want to know what the A stands for), Murderbot heads to the mining facility where it went rogue. What it discovers will forever change the way it thinks...",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250186928/SC.GIF&client=wccls&type=xw12&oclc=1033693095",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250186928/MC.GIF&client=wccls&type=xw12&oclc=1033693095",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250186928/LC.JPG&client=wccls&type=xw12&oclc=1033693095",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "WELLS, MARTHA MURDERBOT #2",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "WELLS, MARTHA MURDERBOT #2",
+    "status": "HELD"
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "WELLS, MARTHA MURDERBOT #2",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 1,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3380837",
+  "title": "Rogue Protocol",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF WELLS Martha",
+  "description": "\"Sci-Fi's favorite antisocial AI is back on a mission.  The case against the too-big-to-fail GrayChris Corporation is floundering, and more importantly, authorities are beginning to ask more questions about where Dr. Mensah's SecUnit is.  And Murderbot would rather those questions went away.  For good.\"--  Dust jacket.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250191786/SC.GIF&client=wccls&type=xw12&oclc=1033582632",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250191786/MC.GIF&client=wccls&type=xw12&oclc=1033582632",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250191786/LC.JPG&client=wccls&type=xw12&oclc=1033582632",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS Martha",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS Martha",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS Martha",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   }
+  ],
+  "held": 6,
+  "onOrder": 0,
+  "order": 2,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3401875",
+  "title": "Exit Strategy",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF WELLS, M.",
+  "description": "\"Martha Wells's Hugo, Nebula, Alex, and Locus Award-winning, New York Times and USA Today bestselling series, The Murderbot Diaries, comes to a thrilling conclusion in Exit Strategy. Murderbot wasn't programmed to care. So, its decision to help the only human who ever showed it respect must be a system glitch, right? Having traveled the width of the galaxy to unearth details of its own murderous transgressions, as well as those of the GrayCris Corporation, Murderbot is heading home to help Dr. Mensah--its former owner (protector? friend?)--submit evidence that could prevent GrayCris from destroying more colonists in its never-ending quest for profit. But who's going to believe a SecUnit gone rogue? And what will become of it when it's caught?\"--Provided by publisher.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250191854/SC.GIF&client=wccls&type=xw12&oclc=1052905153",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250191854/MC.GIF&client=wccls&type=xw12&oclc=1052905153",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250191854/LC.JPG&client=wccls&type=xw12&oclc=1052905153",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, M.",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   }
+  ],
+  "held": 3,
+  "onOrder": 0,
+  "order": 3,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3681104",
+  "title": "Network Effect",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "Fic Wells M.",
+  "description": "\"You know that feeling when you're at work, and you've had enough of people, and then the boss walks in with yet another job that needs to be done right this second or the world will end, but all you want to do is go home and binge your favorite shows? And you're a sentient murder machine programmed for destruction? Congratulations, you're Murderbot. Come for the pew-pew space battles, stay for the most relatable A.I. you'll read this century. I'm usually alone in my head, and that's where 90 plus percent of my problems are. When Murderbot's human associates (not friends, never friends) are captured and another not-friend from its past requires urgent assistance, Murderbot must choose between inertia and drastic action. Drastic action it is, then\"--Amazon.com.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2020",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250229861/SC.GIF&client=wccls&type=xw12&oclc=1152527909",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250229861/MC.GIF&client=wccls&type=xw12&oclc=1152527909",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250229861/LC.JPG&client=wccls&type=xw12&oclc=1152527909",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "Fic Wells M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "Fic Wells M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "Fic Wells M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 4,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3817532",
+  "title": "Fugitive Telemetry",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "Wells, Martha",
+  "description": "\"The New York Times bestselling security droid with a heart (though it wouldn't admit it!) is back in Fugitive Telemetry!  When Murderbot discovers a dead body on Preservation Station, it knows it is going to have to assist station security to determine who the body is (was), how they were killed (that should be relatively straightforward, at least), and why (because apparently that matters to a lot of people-who knew?) Yes, the unthinkable is about to happen: Murderbot must voluntarily speak to humans! Again! A new standalone adventure in the New York Times-bestselling, Hugo and Nebula Award winning series.\"-- Provided by publisher.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2021",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250765376/SC.GIF&client=wccls&type=xw12&oclc=1240264968",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250765376/MC.GIF&client=wccls&type=xw12&oclc=1240264968",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250765376/LC.JPG&client=wccls&type=xw12&oclc=1240264968",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "Wells, Martha",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "Wells, Martha",
+    "status": "CHECKED_OUT",
+    "dueDays": 6
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "Wells, Martha",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 5,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4295533",
+  "title": "System Collapse",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF WELLS Martha",
+  "description": "\"Everyone's favorite lethal SecUnit is back. Am I making it worse? I think I'm making it worse. Following the events in Network Effect, the Barish-Estranza corporation has sent rescue ships to a newly-colonized planet in peril, as well as additional SecUnits. But if there's an ethical corporation out there, Murderbot has yet to find it, and if Barish-Estranza can't have the planet, they're sure as hell not leaving without something. If that something just happens to be an entire colony of humans, well, a free workforce is a decent runner-up prize. But there's something wrong with Murderbot; it isn't running within normal operational parameters. ART's crew and the humans from Preservation are doing everything they can to protect the colonists, but with Barish-Estranza's SecUnit-heavy persuasion teams, they're going to have to hope Murderbot figures out what's wrong with itself, and fast! Yeah, this plan is... not going to work. The Murderbot Diaries All Systems Red Artificial Condition Rogue Protocol Exit Strategy Network Effect Fugitive Telemetry System Collapse\"-- Provided by publisher.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250826978/SC.GIF&client=wccls&type=xw12&oclc=1401629969",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250826978/MC.GIF&client=wccls&type=xw12&oclc=1401629969",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250826978/LC.JPG&client=wccls&type=xw12&oclc=1401629969",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS Martha",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS Martha",
+    "status": "CHECKED_OUT",
+    "dueDays": 3
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS Martha",
+    "status": "CHECKED_OUT",
+    "dueDays": 12
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 6,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3689271",
+  "title": "The Cloud Roads",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF WELLS, MARTHA",
+  "description": "\"Moon has spent his life hiding what he is--a shape-shifter able to transform himself into a winged creature of flight. An orphan with only vague memories of his own kind, Moon tries to fit in among the tribes of his river valley, with mixed success. Just as Moon's true nature is once again discovered and he is cast out by his adopted tribe, he encounters a shape-shifter like himself ... someone who seems to know exactly what Moon is, who promises that Moon will be welcomed into his community. What this stranger doesn't tell Moon is that his presence will tip the balance of power ... that his extraordinary lineage is crucial to the colony's survival ... and that his people face extinction at the hands of the dreaded Fell. Moon must overcome a lifetime of conditioning in order to save himself ... and his newfound kin.\"--Page 4 of cover.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2011",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781597802161/SC.GIF&client=wccls&type=xw12&oclc=681493539",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781597802161/MC.GIF&client=wccls&type=xw12&oclc=681493539",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781597802161/LC.JPG&client=wccls&type=xw12&oclc=681493539",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, MARTHA",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, MARTHA",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, MARTHA",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, MARTHA",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "FSF WELLS, MARTHA",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 8,
+  "onOrder": 0,
+  "order": 7,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4218856",
+  "title": "Witch King",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "WELLS, M.",
+  "description": "\"After being murdered, his consciousness dormant and unaware of the passing of time while confined in an elaborate water trap, Kai wakes to find a lesser mage attempting to harness Kai's magic to his own advantage. That was never going to go well. But why was Kai imprisoned in the first place? What has changed in the world since his assassination? And why does the Rising World Coalition appear to be growing in influence? Kai will need to pull his allies close and draw on all his pain magic if he is to answer even the least of these questions. He's not going to like the answers\"-- Provided by publisher.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250826794/SC.GIF&client=wccls&type=xw12&oclc=1371468297",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250826794/MC.GIF&client=wccls&type=xw12&oclc=1371468297",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250826794/LC.JPG&client=wccls&type=xw12&oclc=1371468297",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [],
+  "held": 17,
+  "onOrder": 5,
+  "order": 8,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3549281",
+  "title": "A Memory Called Empire",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF MARTINE Arkady",
+  "description": "\"During a time of political instability in the highest echelons of the imperial court, Ambassador Mahit Dzmare arrives in the center of the multi-system Teixcalaanli Empire only to discover that her predecessor, the previous ambassador from their small but fiercely independent mining Station, has died. But no one will admit that his death wasn't an accident--or that Mahit might be next to die. Now Mahit must discover who is behind the murder, rescue herself, and save her Station from Teixcalaan's unceasing expansion--all while navigating an alien culture that is all too seductive, engaging in intrigues of her own, and hiding a deadly technological secret--one that might spell the end of her Station and her way of life--or rescue it from annihilation\"--From publisher.",
+  "authors": [
+   "Martine, Arkady"
+  ],
+  "publicationDate": "2019",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781250186430/SC.GIF&client=wccls&type=xw12&oclc=1031915717",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781250186430/MC.GIF&client=wccls&type=xw12&oclc=1031915717",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781250186430/LC.JPG&client=wccls&type=xw12&oclc=1031915717",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF MARTINE Arkady",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "FSF MARTINE Arkady",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF MARTINE Arkady",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 9,
+  "new": false
+ },
+ {
+  "metadataId": "S143C1998906",
+  "title": "Ancillary Justice",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF LECKIE, ANN",
+  "description": "Now isolated in a single frail human body, Breq, an artificial intelligence that used to control of a massive starship and its crew of soldiers, tries to adjust to her new humanity while seeking vengeance and answers to her questions.",
+  "authors": [
+   "Leckie, Ann"
+  ],
+  "publicationDate": "2013",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780316246620/SC.GIF&client=wccls&type=xw12&oclc=828142663",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780316246620/MC.GIF&client=wccls&type=xw12&oclc=828142663",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780316246620/LC.JPG&client=wccls&type=xw12&oclc=828142663",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF LECKIE, ANN",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF LECKIE, ANN",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "FSF LECKIE, ANN",
+    "status": "HELD"
+   }
+  ],
+  "held": 5,
+  "onOrder": 0,
+  "order": 10,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3590568",
+  "title": "Children of Time",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF TCHAIKOVSKY Adrian",
+  "description": "\"The last remnants of the human race left a dying Earth, desperate to find a new home among the stars. Following in the footsteps of their ancestors, they discover the greatest treasure of the past age--a world terraformed and prepared for human life. But all is not right in this new Eden. In the long years since the planet was abandoned, the work of its architects has borne disastrous fruit. The planet is not waiting for them, pristine and unoccupied. New masters have turned it from a refuge into mankind's worst nightmare. Now two civilizations are on a collision course, both testing the boundaries of what they will do to survive. As the fate of humanity hangs in the balance, who are the true heirs of this new Earth?\" -- (Source of summary not specified).",
+  "authors": [
+   "Tchaikovsky, Adrian"
+  ],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780316452502/SC.GIF&client=wccls&type=xw12&oclc=1076544632",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780316452502/MC.GIF&client=wccls&type=xw12&oclc=1076544632",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780316452502/LC.JPG&client=wccls&type=xw12&oclc=1076544632",
+   "local_url": null
+  },
+  "edition": "First U.S. trade paperback edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF TCHAIKOVSKY Adrian",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "FSF TCHAIKOVSKY Adrian",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 11,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3886243",
+  "title": "Project Hail Mary",
+  "subtitle": "A Novel",
+  "format": "BK",
+  "callNumber": "WEIR, A. [SCI-FI]",
+  "description": "The sole survivor on a desperate, last-chance mission to save both humanity and the earth, Ryland Grace is hurtled into the depths of space when he must conquer an extinction-level threat to our species.",
+  "authors": [
+   "Weir, Andy"
+  ],
+  "publicationDate": "2021",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780593135204/SC.GIF&client=wccls&type=xw12&oclc=1149223512",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780593135204/MC.GIF&client=wccls&type=xw12&oclc=1149223512",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780593135204/LC.JPG&client=wccls&type=xw12&oclc=1149223512",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "WEIR, A. [SCI-FI]",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 12,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2293185",
+  "title": "Station Eleven",
+  "subtitle": "A Novel",
+  "format": "BK",
+  "callNumber": "FSF MANDEL Emily St. John",
+  "description": "\"An audacious, darkly glittering novel about art, fame, and ambition set in the eerie days of civilization's collapse, from the author of three highly acclaimed previous novels. One snowy night a famous Hollywood actor slumps over and dies onstage during a production of King Lear. Hours later, the world as we know it begins to dissolve. Moving back and forth in time-from the actor's early days as a film star to fifteen years in the future, when a theater troupe known as the Traveling Symphony roams the wasteland of what remains-this suspenseful, elegiac, spellbinding novel charts the strange twists of fate that connect five people: the actor, the man who tried to save him, the actor's first wife, his oldest friend, and a young actress with the Traveling Symphony, caught in the crosshairs of a dangerous self-proclaimed prophet. Sometimes terrifying, sometimes tender, Station Eleven tells a story about the relationships that sustain us, the ephemeral nature of fame, and the beauty of the world as we know it\"-- Provided by publisher.",
+  "authors": [
+   "Mandel, Emily St. John"
+  ],
+  "publicationDate": "2014",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780385353304/SC.GIF&client=wccls&type=xw12&oclc=866615101",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780385353304/MC.GIF&client=wccls&type=xw12&oclc=866615101",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780385353304/LC.JPG&client=wccls&type=xw12&oclc=866615101",
+   "local_url": null
+  },
+  "edition": "First Edition.",
+  "kind": "books",
+  "copies": [],
+  "held": 20,
+  "onOrder": 6,
+  "order": 13,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3093380",
+  "title": "The Long Way to A Small, Angry Planet",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF CHAMBERS, B.",
+  "description": "\"When Rosemary Harper joins the crew of the Wayfarer, she isn't expecting much. The patched-up ship has seen better days, but it offers her everything she could possible want: a spot to call home, a chance to explore the far-off corners of the galaxy and some distance from her past. And nothing could be further from what she's known than the crew of the Wayfarer.\"--Page [4] of cover.",
+  "authors": [
+   "Chambers, Becky"
+  ],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780062444134/SC.GIF&client=wccls&type=xw12&oclc=928131469",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780062444134/MC.GIF&client=wccls&type=xw12&oclc=928131469",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780062444134/LC.JPG&client=wccls&type=xw12&oclc=928131469",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "FSF CHAMBERS, B.",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "FSF CHAMBERS, B.",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "FSF CHAMBERS, B.",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 14,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2817856",
+  "title": "Binti",
+  "subtitle": "Home",
+  "format": "BK",
+  "callNumber": "FSF OKORAFOR, NNEDI",
+  "description": "It's been a year since Binti and Okwu enrolled at Oomza University. A year since Binti was declared a hero for uniting two warring planets. A year since she found friendship in the unlikeliest of places. And now she must return home to her people, with her friend Okwu by her side, to face her family and face her elders. But Okwu will be the first of his race to set foot on Earth in over a hundred years, and the first ever to come in peace. After generations of conflict can human and Meduse ever learn to truly live in harmony?",
+  "authors": [
+   "Okorafor, Nnedi"
+  ],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780765393111/SC.GIF&client=wccls&type=xw12&oclc=969437770",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780765393111/MC.GIF&client=wccls&type=xw12&oclc=969437770",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780765393111/LC.JPG&client=wccls&type=xw12&oclc=969437770",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [],
+  "held": 0,
+  "onOrder": 3,
+  "order": 15,
+  "new": true
+ },
+ {
+  "metadataId": "S143C2233714",
+  "title": "The Martian",
+  "subtitle": "A Novel",
+  "format": "BK",
+  "callNumber": "FSF WEIR Andy",
+  "description": "\"Six days ago, astronaut Mark Watney became one of the first people to walk on Mars. Now, he's sure he'll be the first person to die there. After a dust storm nearly kills him and forces his crew to evacuate while thinking him dead, Mark finds himself stranded and completely alone with no way to even signal Earth that he's alive--and even if he could get word out, his supplies would be gone long before a rescue could arrive. Chances are, though, he won't have time to starve to death. The damaged machinery, unforgiving environment, or plain-old 'human error' are much more likely to kill him first. But Mark isn't ready to give up yet. Drawing on his ingenuity, his engineering skills--and a relentless, dogged refusal to quit--he steadfastly confronts one seemingly insurmountable obstacle after the next. Will his resourcefulness be enough to overcome the impossible odds against him?\" -- from publisher's web site.",
+  "authors": [
+   "Weir, Andy"
+  ],
+  "publicationDate": "2014",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780804139021/SC.GIF&client=wccls&type=xw12&oclc=846889319",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780804139021/MC.GIF&client=wccls&type=xw12&oclc=846889319",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780804139021/LC.JPG&client=wccls&type=xw12&oclc=846889319",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "FSF WEIR Andy",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "FSF WEIR Andy",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "FSF WEIR Andy",
+    "status": "AVAILABLE"
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 16,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4007192",
+  "title": "Leviathan Wakes",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF COREY, J.",
+  "description": "When Captain Jim Holden's ice miner stumbles across the derelict, abandoned ship the Scopuli, he uncovers a secret that threatens to throw the entire system into war. Attacked by a stealth ship belonging to the Mars fleet, Holden must find a way to uncover the motives behind the attack, stop a war and find the truth behind a vast conspiracy that threatens the entire human race. Detective Miller is looking for a girl. One girl in a system of billions, but her parents have money and money talks. When the trail leads him to the Scopuli and rebel sympathizer Holden, he realizes this girl may be the key to everything. Includes a new preface by the authors.",
+  "authors": [
+   "Corey, James S. A."
+  ],
+  "publicationDate": "2021",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780316333429/SC.GIF&client=wccls&type=xw12&oclc=1259540286",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780316333429/MC.GIF&client=wccls&type=xw12&oclc=1259540286",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780316333429/LC.JPG&client=wccls&type=xw12&oclc=1259540286",
+   "local_url": null
+  },
+  "edition": "10th anniversary edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "FSF COREY, J.",
+    "status": "CHECKED_OUT",
+    "dueDays": 14
+   },
+   {
+    "branch": "Milu Station",
+    "collection": "Adult Fiction",
+    "call": "FSF COREY, J.",
+    "status": "CHECKED_OUT",
+    "dueDays": 9
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "FSF COREY, J.",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "FSF COREY, J.",
+    "status": "CHECKED_OUT",
+    "dueDays": 2
+   }
+  ],
+  "held": 6,
+  "onOrder": 0,
+  "order": 17,
+  "new": true
+ },
+ {
+  "metadataId": "S143C2493124",
+  "title": "Red Rising",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "Brown, Pierce",
+  "description": "Darrow is a Red, a member of the lowest caste in the color-coded society of the future. Like his fellow Reds, he works all day, believing that he and his people are making the surface of Mars livable for future generations. Yet he spends his life willingly, knowing that his blood and sweat will one day result in a better world for his children. But Darrow and his kind have been betrayed. Soon he discovers that humanity reached the surface generations ago. Vast cities and sprawling parks spread across the planet. Darrow and Reds like him, are nothing more than slaves to a decadent ruling class. Inspired by a longing for justice, and driven by the memory of lost love, Darrow sacrifices everything to infiltrate the legendary Institute, a proving ground for the dominant Gold caste, where the next generation of humanity's overlords struggle for power. He will be forced to compete for his life and the very future of civilization against the best and most brutal of Society's ruling class. There, he will stop at nothing to bring down his enemies . . . even if it means he has to become one of them to do so.",
+  "authors": [
+   "Brown, Pierce"
+  ],
+  "publicationDate": "2014",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780345539786/SC.GIF&client=wccls&type=xw12&oclc=846544610",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780345539786/MC.GIF&client=wccls&type=xw12&oclc=846544610",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780345539786/LC.JPG&client=wccls&type=xw12&oclc=846544610",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "Brown, Pierce",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "Brown, Pierce",
+    "status": "IN_TRANSIT"
+   }
+  ],
+  "held": 1,
+  "onOrder": 0,
+  "order": 18,
+  "new": false
+ },
+ {
+  "metadataId": "S143C2797100",
+  "title": "Neuromancer",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "FSF GIBSON William",
+  "description": "Henry Dorsett Case was the sharpest data-thief in the Matrix, until an ex-employer crippled his nervous system. Now a new employer has recruited him for a last-chance run against an unthinkably powerful artificial intelligence. With a mirror-eyed girl street-samurai riding shotgun, he's ready for the silicon-quick, bleakly prophetic adventure that upped the ante on an entire genre of fiction.",
+  "authors": [
+   "Gibson, William"
+  ],
+  "publicationDate": "2016",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780143111603/SC.GIF&client=wccls&type=xw12&oclc=946058579",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780143111603/MC.GIF&client=wccls&type=xw12&oclc=946058579",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780143111603/LC.JPG&client=wccls&type=xw12&oclc=946058579",
+   "local_url": null
+  },
+  "edition": null,
+  "kind": "books",
+  "copies": [],
+  "held": 26,
+  "onOrder": 3,
+  "order": 19,
+  "new": true
+ },
+ {
+  "metadataId": "S143C1942175",
+  "title": "Hyperion",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "SIMMONS, DAN",
+  "description": "On the world called Hyperion, beyond the law of the Hegemony of Man, there waits the creature called the Shrike. There are those who worship it. There are those who fear it. And there are those who have vowed to destroy it. In the Valley of the Time Tombs, where huge, brooding structures move backward through time, the Shrike waits for them all. On the eve of Armageddon, with the entire galaxy at war, seven pilgrims set forth on a final voyage to Hyperion seeking the answers to the unsolved riddles of their lives. Each carries a desperate hope - and a terrible secret. And one may hold the fate of humanity in his hands.",
+  "authors": [
+   "Simmons, Dan"
+  ],
+  "publicationDate": "1989",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780385249492/SC.GIF&client=wccls&type=xw12&oclc=ocm18816973",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780385249492/MC.GIF&client=wccls&type=xw12&oclc=ocm18816973",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780385249492/LC.JPG&client=wccls&type=xw12&oclc=ocm18816973",
+   "local_url": null
+  },
+  "edition": "1st ed.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "SIMMONS, DAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 20
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "SIMMONS, DAN",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 20,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3855282",
+  "title": "Klara and the Sun",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "ISHIGURO, KAZUO",
+  "description": "\"From her place in the store that sells artificial friends, Klara--an artificial friend with outstanding observational qualities--watches carefully the behavior of those who come in to browse, and of those who pass in the street outside. She remains hopeful a customer will soon choose her, but when the possibility emerges that her circumstances may change forever, Klara is warned not to invest too much in the promises of humans. In this luminous tale, Klara and the Sun, Nobel Prize winner Kazuo Ishiguro looks at our rapidly changing modern world through the eyes of an unforgettable narrator to explore a fundamental question: what does it mean to love?\"-- Provided by publisher.",
+  "authors": [
+   "Ishiguro, Kazuo"
+  ],
+  "publicationDate": "2021",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780593318171/SC.GIF&client=wccls&type=xw12&oclc=1149197073",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780593318171/MC.GIF&client=wccls&type=xw12&oclc=1149197073",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780593318171/LC.JPG&client=wccls&type=xw12&oclc=1149197073",
+   "local_url": null
+  },
+  "edition": "First edition.",
+  "kind": "books",
+  "copies": [],
+  "held": 13,
+  "onOrder": 6,
+  "order": 21,
+  "new": true
+ },
+ {
+  "metadataId": "S143C3239421",
+  "title": "The Dispossessed",
+  "subtitle": "A Novel",
+  "format": "BK",
+  "callNumber": "F LE GUIN URSULA HAINISH 01",
+  "description": "Shevek, a brilliant physicist from the anarchist moon Anarres, risks his life by traveling to the mother planet of Urras in the hope of offering wisdom to its inhabitants and to reunite the two long-alienated worlds.",
+  "authors": [
+   "Le Guin, Ursula K."
+  ],
+  "publicationDate": "2003",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780060512750/SC.GIF&client=wccls&type=xw12&oclc=51978024",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780060512750/MC.GIF&client=wccls&type=xw12&oclc=51978024",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780060512750/LC.JPG&client=wccls&type=xw12&oclc=51978024",
+   "local_url": null
+  },
+  "edition": "1st Perennial Classics ed.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "F LE GUIN URSULA HAINISH 01",
+    "status": "CHECKED_OUT",
+    "dueDays": 12
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 22,
+  "new": false
+ },
+ {
+  "metadataId": "S143C3240444",
+  "title": "Ender's Game",
+  "subtitle": "",
+  "format": "BK",
+  "callNumber": "YA CARD, ORS E #1",
+  "description": "Child-hero Ender Wiggin must fight a desperate battle against a deadly alien race if mankind is to survive.",
+  "authors": [
+   "Card, Orson Scott"
+  ],
+  "publicationDate": "1991",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9780312932084/SC.GIF&client=wccls&type=xw12&oclc=23355613",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9780312932084/MC.GIF&client=wccls&type=xw12&oclc=23355613",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9780312932084/LC.JPG&client=wccls&type=xw12&oclc=23355613",
+   "local_url": null
+  },
+  "edition": "Revised edition.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "YA CARD, ORS E #1",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "YA CARD, ORS E #1",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "YA CARD, ORS E #1",
+    "status": "CHECKED_OUT",
+    "dueDays": 12
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 23,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4079080",
+  "title": "All Systems Red",
+  "subtitle": "",
+  "format": "BOOK_CD",
+  "callNumber": "Y WELLS",
+  "description": "In a corporate-dominated spacefaring future, planetary missions must be approved and supplied by the Company. Exploratory teams are accompanied by Company-supplied security androids, for their own safety. But in a society where contracts are awarded to the lowest bidder, safety isn't a primary concern. On a distant planet, a team of scientists are conducting surface tests, shadowed by their Company-supplied 'droid -- a self-aware SecUnit that has hacked its own governor module, and refers to itself (though never out loud) as \"Murderbot.\" Scornful of humans, all it really wants is to be left alone long enough to figure out who it is. But when a neighboring mission goes dark, it's up to the scientists and their Murderbot to get to the truth.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2017",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781664574670/SC.GIF&client=wccls&type=xw12&oclc=1251926693",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781664574670/MC.GIF&client=wccls&type=xw12&oclc=1251926693",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781664574670/LC.JPG&client=wccls&type=xw12&oclc=1251926693",
+   "local_url": null
+  },
+  "edition": "Unabridged.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "Y WELLS",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "Y WELLS",
+    "status": "CHECKED_OUT",
+    "dueDays": 8
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "Y WELLS",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "Y WELLS",
+    "status": "AVAILABLE"
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "Y WELLS",
+    "status": "CHECKED_OUT",
+    "dueDays": 16
+   }
+  ],
+  "held": 7,
+  "onOrder": 0,
+  "order": 24,
+  "new": true
+ },
+ {
+  "metadataId": "S143C4385829",
+  "title": "Artificial Condition",
+  "subtitle": "",
+  "format": "BOOK_CD",
+  "callNumber": "WELLS, M.",
+  "description": "Artificial Condition continues The Murderbot Diaries, a science fiction series that tackles questions of the ethics of sentient robotics. It appeals to fans of Westworld, Ex Machina, Ann Leckie's Imperial Raadch series, or Iain M. Banks' Culture novels. The main character is a deadly security droid that has bucked its restrictive programming and is balanced between contemplative self-discovery and an idle instinct to kill all humans. \"As a heartless killing machine, I was a complete failure.\" It has a dark past-one in which a number of humans were killed. A past that caused it to christen itself \"Murderbot.\" But it has only vague memories of the massacre that spawned that title, and it wants to know more. Teaming up with a Research Transport vessel named ART (you don't want to know what the \"A\" stands for), Murderbot heads to the mining facility where it went rogue. What it discovers will forever change the way it thinks",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781501977008/SC.GIF&client=wccls&type=xw12&oclc=1033668631",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781501977008/MC.GIF&client=wccls&type=xw12&oclc=1033668631",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781501977008/LC.JPG&client=wccls&type=xw12&oclc=1033668631",
+   "local_url": null
+  },
+  "edition": "Unabridged.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 13
+   },
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "WELLS, M.",
+    "status": "IN_TRANSIT"
+   },
+   {
+    "branch": "Haven Landing",
+    "collection": "Adult Fiction",
+    "call": "WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 11
+   }
+  ],
+  "held": 4,
+  "onOrder": 0,
+  "order": 25,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4428099",
+  "title": "Rogue Protocol",
+  "subtitle": "",
+  "format": "BOOK_CD",
+  "callNumber": "WELLS, M.",
+  "description": "The case against the too-big-to-fail GrayCris Corporation is floundering, and more importantly, authorities are beginning to ask more questions about where Dr. Mensah's SecUnit is. And Murderbot would rather those questions went away. For good.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2018",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781501976995/SC.GIF&client=wccls&type=xw12&oclc=1048244109",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781501976995/MC.GIF&client=wccls&type=xw12&oclc=1048244109",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781501976995/LC.JPG&client=wccls&type=xw12&oclc=1048244109",
+   "local_url": null
+  },
+  "edition": "Unabridged.",
+  "kind": "books",
+  "copies": [
+   {
+    "branch": "Port FreeCommerce",
+    "collection": "Adult Fiction",
+    "call": "WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 12
+   },
+   {
+    "branch": "Mihira Branch",
+    "collection": "Adult Fiction",
+    "call": "WELLS, M.",
+    "status": "CHECKED_OUT",
+    "dueDays": 15
+   }
+  ],
+  "held": 0,
+  "onOrder": 0,
+  "order": 26,
+  "new": false
+ },
+ {
+  "metadataId": "S143C4294197",
+  "title": "System Collapse",
+  "subtitle": "",
+  "format": "BOOK_CD",
+  "callNumber": "ABCD WELLS, MAR",
+  "description": "When Murderbot stops running within normal operational parameters, ART's crew must protect a group of colonists from the Barish-Estranza corporation.",
+  "authors": [
+   "Wells, Martha"
+  ],
+  "publicationDate": "2023",
+  "jacket": {
+   "type": "SYNDETICS",
+   "small": "https://secure.syndetics.com/index.aspx?isbn=9781705040928/SC.GIF&client=wccls&type=xw12&oclc=1404467487",
+   "medium": "https://secure.syndetics.com/index.aspx?isbn=9781705040928/MC.GIF&client=wccls&type=xw12&oclc=1404467487",
+   "large": "https://secure.syndetics.com/index.aspx?isbn=9781705040928/LC.JPG&client=wccls&type=xw12&oclc=1404467487",
+   "local_url": null
+  },
+  "edition": "Unabridged.",
+  "kind": "books",
+  "copies": [],
+  "held": 19,
+  "onOrder": 5,
+  "order": 27,
+  "new": true
+ },
+ {
+  "metadataId": "S900C0011",
+  "title": "The Rise and Fall of Sanctuary Moon",
+  "subtitle": "Original Series Soundtrack",
+  "format": "MUSIC_CD",
+  "callNumber": "CD TV SANC",
+  "description": "Music from all seven seasons, including the theme that plays over a very long fall.",
+  "authors": [
+   "Various artists"
+  ],
+  "publicationDate": "2024",
+  "edition": "Original soundtrack",
+  "kind": "extra",
+  "collection": "Adult Music CD",
+  "copies": [
+   {
+    "branch": "Ganaka Pit",
+    "collection": "Adult Fiction",
+    "call": "CD TV SANC",
+    "status": "CHECKED_OUT",
+    "dueDays": 18
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "CD TV SANC",
+    "status": "HELD"
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "CD TV SANC",
+    "status": "CHECKED_OUT",
+    "dueDays": 10
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "CD TV SANC",
+    "status": "CHECKED_OUT",
+    "dueDays": 7
+   },
+   {
+    "branch": "Preservation Central",
+    "collection": "Adult Fiction",
+    "call": "CD TV SANC",
+    "status": "CHECKED_OUT",
+    "dueDays": 17
+   }
+  ],
+  "held": 10,
+  "onOrder": 0,
+  "order": 28,
+  "new": false
+ }
+]

@@ -691,6 +691,8 @@ Zig 0.17's `std.Io.Threaded` doesn't compile.
     in `$BIBLIO_PASSWORD`
 
   Keep live testing light, and don't change real accounts without meaning to.
+- **A mock library.** `BIBLIO_MOCK=core/mock/video` (or `books`) serves a fictional library
+  from fixtures, for the CLI and every app; see [mock/README.md](mock/README.md).
 
 When a library's responses change shape, capture a trimmed example as a new fixture before
 changing the parser.

@@ -1,0 +1,123 @@
+{
+ "holds": [
+  {
+   "bib": "S143C3681104",
+   "pickup": "Port FreeCommerce",
+   "status": "READY_FOR_PICKUP",
+   "pickupByDays": 4,
+   "position": 0
+  },
+  {
+   "bib": "S143C3817532",
+   "pickup": "Haven Landing",
+   "status": "READY_FOR_PICKUP",
+   "pickupByDays": 6,
+   "position": 0
+  },
+  {
+   "bib": "S143C3380837",
+   "pickup": "Milu Station",
+   "status": "IN_TRANSIT",
+   "position": 1
+  },
+  {
+   "bib": "S143C3401875",
+   "pickup": "Port FreeCommerce",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 3
+  },
+  {
+   "bib": "S143C3549281",
+   "pickup": "Haven Landing",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 7
+  },
+  {
+   "bib": "S143C3886243",
+   "pickup": "Milu Station",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 12
+  },
+  {
+   "bib": "S143C4218856",
+   "pickup": "Preservation Central",
+   "status": "NOT_YET_AVAILABLE",
+   "position": 9
+  }
+ ],
+ "checkouts": [
+  {
+   "bib": "S143C2874666",
+   "dueDays": -2,
+   "outDays": 23,
+   "renewed": 0
+  },
+  {
+   "bib": "S143C3316341",
+   "dueDays": 2,
+   "outDays": 19,
+   "renewed": 1
+  },
+  {
+   "bib": "S143C4295533",
+   "dueDays": 5,
+   "outDays": 16,
+   "renewed": 2
+  },
+  {
+   "bib": "S143C3689271",
+   "dueDays": 9,
+   "outDays": 12,
+   "renewed": 0
+  },
+  {
+   "bib": "S143C1998906",
+   "dueDays": 14,
+   "outDays": 7,
+   "renewed": 1
+  },
+  {
+   "bib": "S143C3590568",
+   "dueDays": 19,
+   "outDays": 2,
+   "renewed": 2
+  }
+ ],
+ "history": [
+  {
+   "bib": "S143C3093380",
+   "outDays": 40,
+   "returnedDays": 28
+  },
+  {
+   "bib": "S143C2233714",
+   "outDays": 49,
+   "returnedDays": 37
+  },
+  {
+   "bib": "S143C4007192",
+   "outDays": 58,
+   "returnedDays": 46
+  },
+  {
+   "bib": "S143C2493124",
+   "outDays": 67,
+   "returnedDays": 55
+  },
+  {
+   "bib": "S143C1942175",
+   "outDays": 76,
+   "returnedDays": 64
+  },
+  {
+   "bib": "S143C3239421",
+   "outDays": 85,
+   "returnedDays": 73
+  },
+  {
+   "bib": "S143C3240444",
+   "outDays": 94,
+   "returnedDays": 82
+  }
+ ]
+}

@@ -11,6 +11,7 @@ pub const models = @import("models.zig");
 /// Library lookup and display helpers (`subdomainFrom`, `formatName`, …).
 pub const library = @import("library.zig");
 const client_mod = @import("client.zig");
+const mock = @import("mock.zig");
 pub const Client = client_mod.Client;
 pub const Failure = client_mod.Failure;
 
@@ -37,6 +38,7 @@ test {
     _ = library;
     _ = icon;
     _ = client_mod;
+    _ = mock;
     _ = @import("fixtures_test.zig");
     _ = capi;
 }
@@ -76,8 +78,11 @@ fn builtInTransport() ?http.Transport {
 
 /// The host's transport if it set one, else the built-in one (none on iOS).
 fn transport() http.Transport {
-    if (host_transport) |*t| return .{ .ctx = t, .sendFn = HostTransport.send };
-    return builtInTransport() orelse .{ .ctx = null, .sendFn = noTransport };
+    const real: http.Transport = if (host_transport) |*t|
+        .{ .ctx = t, .sendFn = HostTransport.send }
+    else
+        builtInTransport() orelse .{ .ctx = null, .sendFn = noTransport };
+    return mock.wrap(real) orelse real;
 }
 
 fn noTransport(_: ?*anyopaque, _: Allocator, _: http.Request) anyerror!http.Response {
