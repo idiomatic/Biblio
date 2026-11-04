@@ -159,28 +159,11 @@ struct ItemListView<Header: View>: View {
     @ViewBuilder
     private var rows: some View {
         header()
+        // One concrete row type: a `switch` here makes the rows heterogeneous, and SwiftUI then
+        // collects the IDs of thousands of rows on a slow path at every section change.
         ForEach(model.rows) { row in
-            switch row {
-            case .item(let entry):
-                ItemRow(entry: entry, library: session.library)
-                    .tag(entry.id)
-                    // Tint by this account's status; selected rows keep the system highlight.
-                    .listRowBackground(selection.contains(entry.id) ? nil
-                                       : entry.accountStatus.map { StatusColors.account($0).opacity(0.08) })
-                    .onAppear { model.itemAppeared(entry) }
-                    #if os(iOS)
-                    .swipeActions {
-                        if case .hold(let h) = entry.kind, h.canCancel {
-                            Button("Cancel Hold", systemImage: "xmark", role: .destructive) { confirmCancel = [h] }
-                        }
-                    }
-                    #endif
-            case .placeholder(let position):
-                PlaceholderRow()
-                    .selectionDisabled()
-                    .onAppear { model.placeholderAppeared(position) }
-                    .onDisappear { model.placeholderDisappeared(position) }
-            }
+            ListRow(row: row, model: model, library: session.library,
+                    isSelected: selection.contains(row.id)) { confirmCancel = [$0] }
         }
         footer
     }
@@ -273,6 +256,53 @@ struct ItemListView<Header: View>: View {
 extension ItemListView where Header == EmptyView {
     init(session: WindowSession, model: ItemListModel, emptyTitle: String, emptySystemImage: String) {
         self.init(session: session, model: model, emptyTitle: emptyTitle, emptySystemImage: emptySystemImage) { EmptyView() }
+    }
+}
+
+/// A list row: a fetched item, or the placeholder for one not fetched yet.
+private struct ListRow: View {
+    var row: ItemListModel.Row
+    var model: ItemListModel
+    var library: LibraryInfo
+    var isSelected: Bool
+    var confirmCancel: (Hold) -> Void
+
+    // Every row has the same shape and modifiers (items and placeholders alike), so SwiftUI
+    // can identify the rows of a long list cheaply.
+    var body: some View {
+        ZStack {
+            switch row {
+            case .item(let entry): ItemRow(entry: entry, library: library)
+            case .placeholder: PlaceholderRow()
+            }
+        }
+        .tag(row.id)
+        .selectionDisabled(row.entry == nil)
+        // Tint by this account's status; selected rows keep the system highlight.
+        .listRowBackground(isSelected ? nil : row.entry?.accountStatus.map { StatusColors.account($0).opacity(0.08) })
+        .onAppear {
+            switch row {
+            case .item(let entry): model.itemAppeared(entry)
+            case .placeholder(let position): model.placeholderAppeared(position)
+            }
+        }
+        .onDisappear {
+            if case .placeholder(let position) = row { model.placeholderDisappeared(position) }
+        }
+        #if os(iOS)
+        .swipeActions {
+            if case .hold(let h)? = row.entry?.kind, h.canCancel {
+                Button("Cancel Hold", systemImage: "xmark", role: .destructive) { confirmCancel(h) }
+            }
+        }
+        #endif
+    }
+}
+
+extension ItemListModel.Row {
+    /// The fetched entry, if this row is one.
+    fileprivate var entry: ListEntry? {
+        if case .item(let entry) = self { entry } else { nil }
     }
 }
 
