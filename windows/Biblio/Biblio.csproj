@@ -11,6 +11,8 @@
     <UseWinUI>true</UseWinUI>
     <!-- Unpackaged for now; MSIX packaging (Store, winget) needs icons and a signing certificate. -->
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Resource tasks that run under `dotnet build`; the default ones ship only with Visual Studio. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
