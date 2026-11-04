@@ -12,6 +12,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * Added libraries and their usernames (in shared preferences), with each user's password
@@ -56,7 +57,7 @@ class LibraryStore(context: Context) {
     }
 
     private fun save() {
-        prefs.edit().putString("libraries.v1", Core.json.encodeToString(libraries.toList())).apply()
+        prefs.edit().putString("libraries.v1", Core.json.encodeToString(ListSerializer(LibraryInfo.serializer()), libraries.toList())).apply()
     }
 
     // Passwords: AES-GCM with a Keystore key; stored as base64(iv || ciphertext).

@@ -8,22 +8,24 @@ using Microsoft.UI.Xaml.Shapes;
 namespace Biblio.Views;
 
 /// <summary>Library card, email, password, pickup location, language and borrowing history, as Fluent settings cards.</summary>
-public sealed class AccountPage : ScrollViewer
+public sealed class AccountPage : UserControl
 {
     private readonly AccountWindow _window;
+    // ScrollViewer is sealed, so the page wraps one.
+    private readonly ScrollViewer _scroll = new() { Padding = new Thickness(24, 12, 24, 24) };
     private bool _filling;
 
     public AccountPage(AccountWindow window)
     {
         _window = window;
-        Padding = new Thickness(24, 12, 24, 24);
+        Content = _scroll;
     }
 
     public void Refresh()
     {
         var patron = _window.Patron;
         var stack = new StackPanel { Spacing = 4, MaxWidth = 900 };
-        Content = stack;
+        _scroll.Content = stack;
         stack.Children.Add(new TextBlock { Text = "Account", Style = (Style)Application.Current.Resources["TitleTextBlockStyle"], Margin = new Thickness(0, 0, 0, 12) });
         if (patron is null)
         {
