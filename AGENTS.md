@@ -55,7 +55,7 @@
 * [NOTES-API.md](NOTES-API.md): the BiblioCommons gateway endpoints the app uses.
 * [CHANGELOG.md](CHANGELOG.md): user-facing changes per version, tagged `vX.Y` at each version bump.
 * [docs/specifications/](docs/specifications/README.md): external specifications.
-* [docs/screenshots/](docs/screenshots): the README's screenshots; blur private details with [tools/blur.swift](tools/blur.swift) (`swift tools/blur.swift IN OUT POINT_WIDTH x,y,w,h…`); never capture the host Mac's screen.
+* [docs/screenshots/](docs/screenshots): the README's screenshots, one patron's visit from first launch to returns, captured against the fictional mock library (`BIBLIO_MOCK`, [core/mock/](core/mock/README.md)); draw placeholders for apps not yet captured with [tools/coming-soon.swift](tools/coming-soon.swift); blur any private details with [tools/blur.swift](tools/blur.swift) (`swift tools/blur.swift IN OUT POINT_WIDTH x,y,w,h…`); never capture the host Mac's screen.
 ## cross-platform builds and testing
 * root [build.zig](build.zig): `zig build cross`.
 * CI: [.github/workflows/ci.yml](.github/workflows/ci.yml); the Windows app builds and gets screenshots only there.

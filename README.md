@@ -17,85 +17,95 @@ core, libbiblio, written in Zig ([developer guide](core/README.md)), and each ha
 
 ## Screenshots
 
-From the Apple app.
+One patron's visit, from first launch to checking on returns, in the Apple apps. The library, account, and card are made up; the titles and covers come from a real catalog.
 
-Copy status by location, color-coded: available, on order or in process, out, held, or in transit.
+### Get started
 
 <table>
 <tr>
-<td width="55%"><img src="docs/screenshots/mac-hollow.png" alt="Search on macOS with The Hollow's copies by location in the inspector"></td>
-<td><img src="docs/screenshots/ipad-new-titles.png" alt="New Titles on iPad sorted by people waiting, with Dungeon Crawler Carl's copies by location in the inspector"></td>
+<td><img src="docs/screenshots/iphone-01-welcome.png" alt="Adding a library by name, with FirstLanding Public Library suggested" width="300"></td>
+<td><img src="docs/screenshots/iphone-02-sign-in.png" alt="Signing in with a library card number and PIN" width="300"></td>
 </tr>
 <tr>
-<td align="center">macOS</td>
-<td align="center">iPadOS: New Titles sorted by people waiting</td>
+<td align="center">Add your library</td>
+<td align="center">Sign in</td>
+</tr>
+</table>
+
+### Find and hold
+
+<table>
+<tr>
+<td><img src="docs/screenshots/iphone-03-search.png" alt="Search results for a Sanctuary Moon box set, with the format filter open and its counts" width="220"></td>
+<td><img src="docs/screenshots/iphone-04-detail.png" alt="The Rise and Fall of Sanctuary Moon on DVD, with its copies by location and a Hold button" width="220"></td>
+<td><img src="docs/screenshots/iphone-05-hold.png" alt="The hold placed, with a Cancel Hold button" width="220"></td>
+<td>
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/android-coming-soon-dark.png">
+<img src="docs/screenshots/android-coming-soon.png" alt="Sketch of the Android app, coming soon" width="220">
+</picture>
+</td>
+</tr>
+<tr>
+<td align="center">Search with filters</td>
+<td align="center">Copies by location</td>
+<td align="center">Hold placed</td>
+<td align="center">Android</td>
 </tr>
 </table>
 
 <table>
 <tr>
-<td width="70%"><img src="docs/screenshots/mac-search.png" alt="Search on macOS filtered to books, with Dune in the inspector"></td>
-<td><img src="docs/screenshots/iphone-detail.png" alt="Dune's copies by location on iPhone"></td>
+<td width="60%"><img src="docs/screenshots/ipad-04-detail.png" alt="Search results for Martha Wells on iPad, with Rogue Protocol and its copies by location in the inspector"></td>
+<td>
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/windows-coming-soon-dark.png">
+<img src="docs/screenshots/windows-coming-soon.png" alt="Sketch of the Windows app, coming soon">
+</picture>
+</td>
+<td>
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/gnome-coming-soon-dark.png">
+<img src="docs/screenshots/gnome-coming-soon.png" alt="Sketch of the GNOME app, coming soon">
+</picture>
+</td>
 </tr>
 <tr>
-<td align="center">Search with filters on macOS</td>
-<td align="center">The same item on iPhone</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td><img src="docs/screenshots/iphone-search.png" alt="Search results filtered to books"></td>
-<td><img src="docs/screenshots/iphone-facets.png" alt="Format filter with counts"></td>
-<td><img src="docs/screenshots/iphone-new-titles.png" alt="New titles with on-order copies"></td>
-<td><img src="docs/screenshots/iphone-add-library.png" alt="Adding a library with suggestions"></td>
-</tr>
-<tr>
-<td align="center">Search</td>
-<td align="center">Filters</td>
-<td align="center">New titles</td>
-<td align="center">Add a library</td>
+<td align="center">iPadOS: details in the inspector</td>
+<td align="center">Windows</td>
+<td align="center">GNOME</td>
 </tr>
 </table>
 
+### Pick up
+
 <table>
 <tr>
-<td width="58%"><img src="docs/screenshots/ipad-holds.png" alt="Holds on iPad, filtered by Ready, Not Ready, and On Order"></td>
-<td><img src="docs/screenshots/iphone-holds.png" alt="Holds on iPhone, tinted by status"></td>
-<td><img src="docs/screenshots/iphone-account.png" alt="Account with the library card barcode"></td>
+<td><img src="docs/screenshots/iphone-06-holds.png" alt="Holds, with the ones ready for pickup first" width="220"></td>
+<td><img src="docs/screenshots/iphone-07-card.png" alt="The library card as a scannable barcode" width="220"></td>
+<td width="58%"><img src="docs/screenshots/ipad-06-holds.png" alt="Holds on iPad, with a ready Murderbot book in the inspector"></td>
 </tr>
 <tr>
-<td align="center">Holds with filters and badges</td>
-<td align="center">Ready for pickup</td>
+<td align="center">Holds, ready first</td>
 <td align="center">Library card</td>
+<td align="center">iPadOS</td>
 </tr>
 </table>
+
+### Keep track
 
 <table>
 <tr>
-<td width="56%"><img src="docs/screenshots/mac-holds.png" alt="Holds on macOS with a hold in the inspector"></td>
-<td><img src="docs/screenshots/mac-settings.png" alt="Account settings on macOS with the library card"></td>
-<td><img src="docs/screenshots/mac-settings-more.png" alt="Pickup location, language, and borrowing history settings on macOS"></td>
+<td><img src="docs/screenshots/iphone-08-checked-out.png" alt="Checked out films by due date, one overdue" width="220"></td>
+<td><img src="docs/screenshots/iphone-09-history.png" alt="Borrowing history" width="220"></td>
+<td width="58%"><img src="docs/screenshots/ipad-08-checked-out.png" alt="Checked out books on iPad, with an overdue All Systems Red in the inspector"></td>
 </tr>
 <tr>
-<td align="center">Holds on macOS</td>
-<td align="center">Library card and email</td>
-<td align="center">Pickup, language, history</td>
+<td align="center">Checked out</td>
+<td align="center">Borrowing history</td>
+<td align="center">iPadOS</td>
 </tr>
 </table>
-
-<table>
-<tr>
-<td width="50%"><img src="docs/screenshots/mac-windows.png" alt="Two windows signed in to different accounts"></td>
-<td><img src="docs/screenshots/mac-add-library.png" alt="Adding a library on macOS with suggestions"></td>
-</tr>
-<tr>
-<td align="center">One window per account</td>
-<td align="center">Add a library</td>
-</tr>
-</table>
-
-<sub>Hold titles and usernames are blurred; the card number and email are samples.</sub>
 
 ## Features
 
@@ -182,7 +192,7 @@ PIN, or choose **Browse as Guest**.
 | `windows` | The WinUI 3 app, in C# |
 | `tui` | The terminal app, in Zig |
 | `docs` | Screenshots and external specifications |
-| `tools` | Developer tools, such as `blur.swift` for blurring private details in screenshots |
+| `tools` | Developer tools: `blur.swift` blurs private details in screenshots, and `coming-soon.swift` draws the placeholder sketches |
 
 Inside the Apple app:
 
