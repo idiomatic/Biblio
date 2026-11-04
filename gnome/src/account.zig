@@ -73,7 +73,7 @@ pub const Account = struct {
 
         if (core.str(patron.barcode)) |barcode| {
             const card = group("Library Card", "Show this at the library’s self-checkout or desk.");
-            acc.barcode = core.codabar(acc.a(), barcode);
+            acc.barcode = core.barcode(acc.a(), barcode, .codabar);
             const box = gtk.box(true, 6);
             c.gtk_widget_add_css_class(box, "barcode");
             if (acc.barcode.len > 0) {

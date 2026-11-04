@@ -29,7 +29,7 @@ struct ItemListView<Header: View>: View {
         #endif
     }
 
-    /// Only lists with actions for several items at once (holding search results, cancelling
+    /// Only lists with actions for several items at once (holding search results, canceling
     /// holds) select more than one; guests and checked-out items and history select one at a time.
     private var selectsMultiple: Bool {
         guard !session.isGuest else { return false }
@@ -90,7 +90,7 @@ struct ItemListView<Header: View>: View {
                 }
             }
             let selected = entries(selection)
-            if selectingInPlace && !(selected.holdable.isEmpty && selected.cancellableHolds.isEmpty) {
+            if selectingInPlace && !(selected.holdable.isEmpty && selected.cancelableHolds.isEmpty) {
                 ToolbarItem(placement: .bottomBar) { selectionActions(selected) }
             }
             #endif
@@ -106,7 +106,7 @@ struct ItemListView<Header: View>: View {
     /// what's selected.
     private func selectionActions(_ selected: [ListEntry]) -> some View {
         let holdable = selected.holdable
-        let cancellable = selected.cancellableHolds
+        let cancelable = selected.cancelableHolds
         return HStack {
             if !holdable.isEmpty {
                 Button(holdable.count == 1 ? "Hold 1 Item" : "Hold \(holdable.count) Items") {
@@ -115,14 +115,14 @@ struct ItemListView<Header: View>: View {
                 }
             }
             Spacer()
-            if !cancellable.isEmpty {
-                Button(cancellable.count == 1 ? "Cancel 1 Hold" : "Cancel \(cancellable.count) Holds", role: .destructive) {
+            if !cancelable.isEmpty {
+                Button(cancelable.count == 1 ? "Cancel 1 Hold" : "Cancel \(cancelable.count) Holds", role: .destructive) {
                     confirmBarCancel = true
                 }
                 .tint(.red)
-                .confirmationDialog(cancellable.count == 1 ? "Cancel this hold?" : "Cancel \(cancellable.count) holds?",
+                .confirmationDialog(cancelable.count == 1 ? "Cancel this hold?" : "Cancel \(cancelable.count) holds?",
                                     isPresented: $confirmBarCancel) {
-                    cancelActions(cancellable)
+                    cancelActions(cancelable)
                 }
             }
         }
@@ -229,7 +229,7 @@ struct ItemListView<Header: View>: View {
     @ViewBuilder
     private func menu(for selected: [ListEntry]) -> some View {
         let holdable = selected.filter { $0.kind == .catalog && $0.bib.holdable && $0.accountStatus == nil }
-        let cancellable = selected.compactMap(\.hold).filter(\.canCancel)
+        let cancelable = selected.compactMap(\.hold).filter(\.canCancel)
         if selected.count == 1, let entry = selected.first {
             Button("Show Details", systemImage: "info.circle") { session.select(entry.bib) }
         }
@@ -238,9 +238,9 @@ struct ItemListView<Header: View>: View {
                 Task { await session.placeHolds(holdable.map(\.bib)) }
             }
         }
-        if !cancellable.isEmpty {
-            Button(cancellable.count == 1 ? "Cancel Hold…" : "Cancel \(cancellable.count) Holds…",
-                   systemImage: "xmark.circle", role: .destructive) { confirmCancel = cancellable }
+        if !cancelable.isEmpty {
+            Button(cancelable.count == 1 ? "Cancel Hold…" : "Cancel \(cancelable.count) Holds…",
+                   systemImage: "xmark.circle", role: .destructive) { confirmCancel = cancelable }
         }
         if selected.count == 1, let entry = selected.first {
             Button("Search for This Title", systemImage: "magnifyingglass") {

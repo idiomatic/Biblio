@@ -360,7 +360,7 @@ pub const List = struct {
         try l.rebuild();
     }
 
-    /// Removes the items with these ids (after cancelling holds); returns how many.
+    /// Removes the items with these ids (after canceling holds); returns how many.
     pub fn remove(l: *List, ids: []const []const u8) Allocator.Error!usize {
         var kept: usize = 0;
         for (l.slots.items) |slot| {
@@ -466,31 +466,71 @@ pub const List = struct {
     }
 };
 
-/// Orders titles as people expect: ignoring case, with runs of digits compared as numbers
-/// ("Book 2" before "Book 10"). Non-ASCII bytes compare by value.
+/// Orders titles as people expect: ignoring case and accents, with runs of digits compared as
+/// numbers ("Book 2" before "Book 10", "Émile" before "Zoolander"). Other characters compare by
+/// code point.
 pub fn naturalOrder(a: []const u8, b: []const u8) std.math.Order {
-    var i: usize = 0;
-    var j: usize = 0;
-    while (i < a.len and j < b.len) {
-        if (std.ascii.isDigit(a[i]) and std.ascii.isDigit(b[j])) {
-            const si = i;
-            const sj = j;
-            while (i < a.len and std.ascii.isDigit(a[i])) i += 1;
-            while (j < b.len and std.ascii.isDigit(b[j])) j += 1;
-            const x = std.mem.trimStart(u8, a[si..i], "0");
-            const y = std.mem.trimStart(u8, b[sj..j], "0");
-            if (x.len != y.len) return std.math.order(x.len, y.len);
-            const o = std.mem.order(u8, x, y);
-            if (o != .eq) return o;
+    var x: Folded = .{ .s = a };
+    var y: Folded = .{ .s = b };
+    while (!x.done() and !y.done()) {
+        if (x.atDigit() and y.atDigit()) {
+            const dx = std.mem.trimStart(u8, x.digits(), "0");
+            const dy = std.mem.trimStart(u8, y.digits(), "0");
+            if (dx.len != dy.len) return std.math.order(dx.len, dy.len);
+            const od = std.mem.order(u8, dx, dy);
+            if (od != .eq) return od;
             continue;
         }
-        const o = std.math.order(std.ascii.toLower(a[i]), std.ascii.toLower(b[j]));
+        const o = std.math.order(x.next(), y.next());
         if (o != .eq) return o;
-        i += 1;
-        j += 1;
     }
-    return std.math.order(a.len - i, b.len - j);
+    return std.math.order(@intFromBool(!x.done()), @intFromBool(!y.done()));
 }
+
+/// A title read one character at a time: lowercase ASCII, Latin letters without their accents,
+/// and ligatures spelled out ("Æ" reads "ae").
+const Folded = struct {
+    s: []const u8,
+    i: usize = 0,
+    /// The second letter of a spelled-out ligature.
+    pending: u8 = 0,
+
+    /// Base letters for U+00C0–U+017F, and second letters for ligatures; a space keeps the
+    /// character as it is.
+    const first = "aaaaaaaceeeeiiiidnooooo ouuuuytsaaaaaaaceeeeiiiidnooooo ouuuuytyaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiiiiijjkkkllllllllllnnnnnnnnnoooooooorrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzzs";
+    const second = "      e                       hs      e                       h                                                   jj                              ee                                            ";
+
+    fn done(f: Folded) bool {
+        return f.pending == 0 and f.i >= f.s.len;
+    }
+
+    fn atDigit(f: Folded) bool {
+        return f.pending == 0 and f.i < f.s.len and std.ascii.isDigit(f.s[f.i]);
+    }
+
+    fn digits(f: *Folded) []const u8 {
+        const start = f.i;
+        while (f.i < f.s.len and std.ascii.isDigit(f.s[f.i])) f.i += 1;
+        return f.s[start..f.i];
+    }
+
+    fn next(f: *Folded) u21 {
+        if (f.pending != 0) {
+            defer f.pending = 0;
+            return f.pending;
+        }
+        // Invalid UTF-8 reads a byte at a time.
+        const byte = f.s[f.i];
+        const len = std.unicode.utf8ByteSequenceLength(byte) catch 1;
+        const decoded: ?u21 = if (len > 1 and f.i + len <= f.s.len) std.unicode.utf8Decode(f.s[f.i..][0..len]) catch null else null;
+        f.i += if (decoded != null) len else 1;
+        const cp = decoded orelse byte;
+        if (cp < 0x80) return std.ascii.toLower(@intCast(cp));
+        if (cp < 0xC0 or cp >= 0x180 or first[cp - 0xC0] == ' ') return cp;
+        if (second[cp - 0xC0] != ' ') f.pending = second[cp - 0xC0];
+        return first[cp - 0xC0];
+    }
+};
 
 // MARK: Tests
 
@@ -677,4 +717,10 @@ test "natural order" {
     try testing.expectEqual(std.math.Order.gt, naturalOrder("b", "A"));
     try testing.expectEqual(std.math.Order.lt, naturalOrder("Dune", "Dune Messiah"));
     try testing.expectEqual(std.math.Order.eq, naturalOrder("x07", "X7"));
+    try testing.expectEqual(std.math.Order.lt, naturalOrder("Émile", "Zoolander"));
+    try testing.expectEqual(std.math.Order.eq, naturalOrder("Café 2", "cafe 02"));
+    try testing.expectEqual(std.math.Order.lt, naturalOrder("Ærø", "Aes"));
+    try testing.expectEqual(std.math.Order.gt, naturalOrder("Straße", "Strass"));
+    try testing.expectEqual(std.math.Order.gt, naturalOrder("日本", "Zoo"));
+    try testing.expectEqual(std.math.Order.lt, naturalOrder("a\xff", "a\xffb"));
 }

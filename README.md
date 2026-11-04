@@ -2,8 +2,8 @@
 
 <img src="icon.png" alt="Biblio app icon" width="128" align="right">
 
-Native apps for macOS, iOS and iPadOS, GNOME, Android, Windows and the terminal that work as a patron front
-end to any public library catalog hosted on
+Native apps for macOS, iOS, iPadOS, GNOME, Android, Windows, and the terminal that work as a
+patron front end to any public library catalog hosted on
 [BiblioCommons](https://www.bibliocommons.com/libraries-we-work-with)
 (`https://LIBRARY.bibliocommons.com/`).
 
@@ -19,7 +19,7 @@ core, libbiblio, written in Zig ([developer guide](core/README.md)), and each ha
 
 From the Apple app.
 
-Copy status by location, color-coded: available, on order or in process, out, held, in transit.
+Copy status by location, color-coded: available, on order or in process, out, held, or in transit.
 
 <table>
 <tr>
@@ -60,7 +60,7 @@ Copy status by location, color-coded: available, on order or in process, out, he
 
 <table>
 <tr>
-<td width="58%"><img src="docs/screenshots/ipad-holds.png" alt="Holds on iPad, filtered by Ready, Not Ready and On Order"></td>
+<td width="58%"><img src="docs/screenshots/ipad-holds.png" alt="Holds on iPad, filtered by Ready, Not Ready, and On Order"></td>
 <td><img src="docs/screenshots/iphone-holds.png" alt="Holds on iPhone, tinted by status"></td>
 <td><img src="docs/screenshots/iphone-account.png" alt="Account with the library card barcode"></td>
 </tr>
@@ -75,7 +75,7 @@ Copy status by location, color-coded: available, on order or in process, out, he
 <tr>
 <td width="56%"><img src="docs/screenshots/mac-holds.png" alt="Holds on macOS with a hold in the inspector"></td>
 <td><img src="docs/screenshots/mac-settings.png" alt="Account settings on macOS with the library card"></td>
-<td><img src="docs/screenshots/mac-settings-more.png" alt="Pickup location, language and borrowing history settings on macOS"></td>
+<td><img src="docs/screenshots/mac-settings-more.png" alt="Pickup location, language, and borrowing history settings on macOS"></td>
 </tr>
 <tr>
 <td align="center">Holds on macOS</td>
@@ -101,23 +101,24 @@ Copy status by location, color-coded: available, on order or in process, out, he
 
 **Catalog**
 - Search and advanced search (keyword, title, author, subject, …), with filters for format,
-  availability location, audience, content, language, publication date and date added.
+  availability location, audience, content, language, publication date, and date added.
   - The terminal app has neither advanced search nor facets yet.
 - Explore New Titles: Just Arrived and On Order, with the library's "Filter by" options.
 - Infinite scrolling. The scroll bar starts at the full list length, and only the pages you
   actually scroll to are fetched.
-- Sort orders, including by number of people waiting.
+- Sort orders, including by number of people waiting, and by title, ignoring case and accents
+  and putting "Book 2" before "Book 10".
 - An inspector with item details and copy availability by location, loaded in the background.
 
 **Your account**
-- Holds: place, cancel and filter by Ready, Not Ready and On Order, with count badges.
+- Holds: place, cancel, and filter by Ready, Not Ready, and On Order, with count badges.
 - Checked out items and borrowing history, with counts in the sidebar.
 - Select several items in a list to place or cancel holds on all of them at once.
 - List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
-  checked out or overdue.
+  checked out, or overdue.
 - Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away, or on iPhone from a
   Lock Screen or Control Center control. Swipe between your logins' cards.
-- Settings for email, password, pickup location, language and borrowing history. On macOS they
+- Settings for email, password, pickup location, language, and borrowing history. On macOS they
   live in the Settings window.
   - The terminal app only shows them.
 
@@ -159,11 +160,11 @@ The core's tests: `cd core && zig build test`. Then, per platform:
 |---|---|
 | Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, set your signing team, and build. Run `apple/build-core.sh` once after a fresh clone, so Xcode finds the core's xcframework. |
 | GNOME | `cd gnome && zig build run` |
-| Android | `cd android && ./gradlew installDebug` (run `gradle wrapper` once) |
+| Android | `cd android && gradle installDebug` |
 | Windows | `cd windows/Biblio && dotnet build -p:Platform=x64` |
 | Terminal | `cd tui && zig build run` |
 
-`zig build cross` at the root cross-compiles the core for Linux, Windows and Android, and
+`zig build cross` at the root cross-compiles the core for Linux, Windows, and Android, plus
 the GNOME app for Linux. The GNOME app builds against Debian sysroots that
 `gnome/debian-sysroot.sh` downloads, so it also targets 64-bit Raspberry Pi OS.
 
@@ -175,12 +176,13 @@ PIN, or choose **Browse as Guest**.
 | Folder | Contents |
 |---|---|
 | `core` | libbiblio, the shared Zig core, its C header, and its [developer guide](core/README.md) |
-| `apple` | The SwiftUI app for macOS, iOS and iPadOS |
+| `apple` | The SwiftUI app for macOS, iOS, and iPadOS |
 | `gnome` | The GTK 4 and libadwaita app, in Zig |
 | `android` | The Jetpack Compose app, and its Zig JNI shim |
 | `windows` | The WinUI 3 app, in C# |
 | `tui` | The terminal app, in Zig |
 | `docs` | Screenshots and external specifications |
+| `tools` | Developer tools, such as `blur.swift` for blurring private details in screenshots |
 
 Inside the Apple app:
 

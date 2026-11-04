@@ -10,8 +10,8 @@ struct MultiSelectionView: View {
     @State private var confirmCancel = false
 
     private var holdable: [ListEntry] { entries.holdable }
-    private var cancellable: [Hold] { entries.cancellableHolds }
-    private var uncancellable: Int { entries.uncancellableHoldCount }
+    private var cancelable: [Hold] { entries.cancelableHolds }
+    private var uncancelable: Int { entries.uncancelableHoldCount }
 
     var body: some View {
         ScrollView {
@@ -33,19 +33,19 @@ struct MultiSelectionView: View {
                         }
                         .buttonStyle(.borderedProminent)
                     }
-                    if !cancellable.isEmpty {
+                    if !cancelable.isEmpty {
                         Button(role: .destructive) {
                             confirmCancel = true
                         } label: {
-                            Label(cancellable.count == 1 ? "Cancel Hold" : "Cancel \(cancellable.count) Holds",
+                            Label(cancelable.count == 1 ? "Cancel Hold" : "Cancel \(cancelable.count) Holds",
                                   systemImage: "xmark.circle")
                         }
                         .buttonStyle(.bordered)
                         .tint(.red)
                     }
-                    if uncancellable > 0 {
-                        Label(uncancellable == 1 ? "1 selected hold can’t be cancelled online."
-                                                 : "\(uncancellable) selected holds can’t be cancelled online.",
+                    if uncancelable > 0 {
+                        Label(uncancelable == 1 ? "1 selected hold can’t be canceled online."
+                                                 : "\(uncancelable) selected holds can’t be canceled online.",
                               systemImage: "info.circle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -56,7 +56,7 @@ struct MultiSelectionView: View {
                             session.requestSignIn()
                         }
                         .buttonStyle(.bordered)
-                    } else if holdable.isEmpty && cancellable.isEmpty {
+                    } else if holdable.isEmpty && cancelable.isEmpty {
                         Text("No actions apply to these items.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -93,12 +93,12 @@ struct MultiSelectionView: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .confirmationDialog(cancellable.count == 1 ? "Cancel this hold?" : "Cancel \(cancellable.count) holds?",
+        .confirmationDialog(cancelable.count == 1 ? "Cancel this hold?" : "Cancel \(cancelable.count) holds?",
                             isPresented: $confirmCancel) {
-            Button(cancellable.count == 1 ? "Cancel Hold" : "Cancel \(cancellable.count) Holds", role: .destructive) {
+            Button(cancelable.count == 1 ? "Cancel Hold" : "Cancel \(cancelable.count) Holds", role: .destructive) {
                 working = true
                 Task {
-                    await session.cancel(cancellable)
+                    await session.cancel(cancelable)
                     working = false
                 }
             }
@@ -113,12 +113,12 @@ extension [ListEntry] {
         filter { $0.kind == .catalog && $0.bib.holdable && $0.accountStatus == nil }
     }
 
-    var cancellableHolds: [Hold] {
+    var cancelableHolds: [Hold] {
         compactMap(\.hold).filter(\.canCancel)
     }
 
     /// Holds the library won't let the patron cancel (e.g. ready for pickup).
-    var uncancellableHoldCount: Int {
+    var uncancelableHoldCount: Int {
         compactMap(\.hold).filter { !$0.canCancel }.count
     }
 }

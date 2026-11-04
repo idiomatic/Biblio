@@ -1,4 +1,4 @@
-* write "Biblio", a native SwiftUI app for macOS, iOS, and iPadOS (version 1.6): a patron front-end to https://LIBRARY.bibliocommons.com/.
+* write "Biblio" (version 1.6), a patron front-end to https://LIBRARY.bibliocommons.com/: a native SwiftUI app for macOS, iOS, and iPadOS, which this spec describes, plus GNOME, Android, Windows, and terminal apps on the same Zig core, each following its platform's design guidelines.
 ## views
 * holds: view, add, and remove; when the library refuses a removal, say why, including partial refusals.
 * checked out items, borrowing history, search, and advanced search.
@@ -6,8 +6,8 @@
 * filter lists by format, searches by facets, and holds by "Ready", "Not Ready", and "On Order", with count badges.
 * sidebar badges show hold and checked out counts, fetched at launch; lists have no item-count footer.
 * lists scroll infinitely, with placeholder rows sizing the scroll bar and only viewed pages fetched; refetch a list shown again over 15 minutes after fetching.
-* sort lists, including by people waiting; client-side sorts may fetch remaining pages in the background and animate reordering.
-* list paging, sorting, and filtering live in the shared core (`biblio_list_*`).
+* sort lists, including by people waiting, and by title ignoring case and accents, with numbers by value; client-side sorts may fetch remaining pages in the background and animate reordering.
+* list paging, sorting, and filtering live in the shared core (`biblio_list_*`), as does display logic (format and sort names, brand tints, barcodes, and editions); apps don't reimplement it.
 * multiple selection places or cancels holds on many items.
 * refresh by pull-down (iOS/iPadOS) or menu item (macOS): account lists start a fresh session; stale rows stay, dimmed, until the first page replaces them; the open item's details reload.
 * list items show format, year, edition, and availability, including "on order" copies (box symbol).

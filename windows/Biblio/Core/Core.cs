@@ -167,6 +167,6 @@ public static class Core
     public static string FormatName(string code, IReadOnlyDictionary<string, string>? labels) => Interop.FormatName(code, labels) ?? code;
     public static string SortName(string id, IReadOnlyDictionary<string, string>? labels) => Interop.SortName(id, labels) ?? id;
 
-    /// <summary>Codabar bar and space widths in narrow units, bar first; empty if the value can't be encoded.</summary>
-    public static double[] Codabar(string value) => Interop.Codabar(value);
+    /// <summary>Codabar, or Code 128, bar and space widths in narrow units, bar first; empty if the value can't be encoded.</summary>
+    public static double[] Barcode(string value, bool code128 = false) => Interop.Barcode(value, code128);
 }

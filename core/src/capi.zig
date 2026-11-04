@@ -444,11 +444,17 @@ pub export fn biblio_readable_tint(hex: Str, dark: bool) ?[*:0]u8 {
     return root.hostString(library.readableTint(std.mem.span(hex), dark, &buf) orelse return null);
 }
 
+/// The format codes with built-in names, for format pickers. Static; don't free.
+pub export fn biblio_format_codes(count: *usize) [*]const [*:0]const u8 {
+    count.* = library.format_codes.len;
+    return &library.format_codes;
+}
+
 /// Bar and space widths in narrow units, bar first, or NULL. Free with biblio_free.
-pub export fn biblio_codabar(value_: Str, count: *usize) ?[*]f64 {
+pub export fn biblio_barcode(value_: Str, symbology: models.Symbology, count: *usize) ?[*]f64 {
     var w = Work.init();
     defer w.deinit();
-    const widths = models.codabar(w.a(), std.mem.span(value_)) orelse return null;
+    const widths = models.barcode(w.a(), symbology, std.mem.span(value_)) orelse return null;
     const mem = root.biblio_alloc(@max(1, widths.len) * @sizeOf(f64)) orelse return null;
     const out: [*]f64 = @ptrCast(@alignCast(mem));
     @memcpy(out[0..widths.len], widths);
@@ -949,10 +955,14 @@ test "library helpers" {
     defer root.biblio_free(name);
     try std.testing.expectEqualStrings("Libro", std.mem.span(name));
     var count: usize = 0;
-    const widths = biblio_codabar("1", &count).?;
+    const widths = biblio_barcode("1", .codabar, &count).?;
     defer root.biblio_free(widths);
     try std.testing.expectEqual(@as(usize, 23), count);
     try std.testing.expectEqual(@as(f64, 2.5), widths[2]);
+    try std.testing.expect(biblio_barcode("1", @enumFromInt(7), &count) == null);
+    const codes = biblio_format_codes(&count);
+    try std.testing.expect(count > 30);
+    try std.testing.expectEqualStrings("BK", std.mem.span(codes[0]));
     var err: Error = .{};
     try std.testing.expectEqual(Result.bad_request, biblio_holds(null, 1, null, null, &err));
     defer biblio_error_clear(&err);

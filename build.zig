@@ -1,6 +1,6 @@
 const std = @import("std");
 
-/// zig build cross          cross-compile the core for Linux, Windows and Android, and the GNOME app for Linux
+/// zig build cross          cross-compile the core for Linux, Windows, and Android, plus the GNOME app for Linux
 /// -Dsysroots=DIR           where cross builds keep Debian sysroots, relative to here (default .zig-cache/sysroots)
 pub fn build(b: *std.Build) void {
     const sysroots = b.option([]const u8, "sysroots", "Directory for Debian sysroots") orelse ".zig-cache/sysroots";

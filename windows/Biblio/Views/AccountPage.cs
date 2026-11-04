@@ -170,7 +170,7 @@ public sealed class AccountPage : UserControl
     /// <summary>The library card as a scannable Codabar barcode, black on white in either theme.</summary>
     private static UIElement LibraryCard(string barcode)
     {
-        var elements = Core.Core.Codabar(barcode);
+        var elements = Core.Core.Barcode(barcode);
         var canvas = new Canvas { Height = 64, Width = 360 };
         const double quiet = 10;
         var unit = canvas.Width / (elements.Sum() + 2 * quiet);

@@ -1,3 +1,4 @@
+import BiblioCore
 import Foundation
 import Observation
 import SwiftUI
@@ -24,34 +25,54 @@ nonisolated struct LibraryInfo: Identifiable, Hashable, Codable, Sendable {
     func label(_ key: String) -> String? { labels[key] }
 
     func formatName(_ code: String) -> String {
-        if code == "UK" { return "4K Ultra HD Blu-ray" }
-        return labels["FORMAT.\(code.lowercased())"] ?? Self.fallbackFormatNames[code] ?? code.prettified
+        DisplayNames.shared.name("FORMAT \(code)", in: self) { biblio_format_name(code, $0, $1) } ?? code.prettified
     }
 
     func sortName(_ id: String) -> String {
-        labels["sort.\(id.lowercased())"] ?? id.prettified
+        DisplayNames.shared.name("sort \(id)", in: self) { biblio_sort_name(id, $0, $1) } ?? id.prettified
     }
 
-    static let fallbackFormatNames: [String: String] = [
-        "BK": "Book", "EBOOK": "eBook", "AB": "Downloadable Audiobook", "VIDEO_ONLINE": "Streaming Video",
-        "GRAPHIC_NOVEL": "Graphic Novel", "GRAPHIC_NOVEL_DOWNLOAD": "Downloadable Graphic Novel",
-        "PICTURE_BOOK": "Picture Book", "ONLINE_LEARNING": "Online Learning", "DVD": "DVD",
-        "LPRINT": "Large Print", "MAG_ONLINE": "Online Magazine", "BOARD_BK": "Board Book",
-        "BLURAY": "Blu-ray Disc", "MUSIC_CD": "Music CD", "BOOK_CD": "Audiobook CD", "BOARD_GAME": "Board Game",
-        "BOOK_PAUDIO": "Book plus Audio", "EASY_READER": "Early Readers", "PLAYAWAY_AUDIOBOOK": "Preloaded Audiobook",
-        "VIDEO_GAME": "Video Game", "THREE_D_OBJECT": "3D Object", "BOOK_CLUB_KIT": "Book Club Kit",
-        "DVD_PBLURAY": "DVD plus Blu-ray", "KIT": "Kit", "BOOK_PCD": "Book plus CD", "ATLAS": "Atlas",
-        "BR": "Braille", "MAG": "Magazine", "BOOK_PDVD": "Book plus DVD", "MN": "Printed Music",
-        "NEWSPAPER": "Newspaper",
-    ]
+    /// The format codes with built-in names, for format pickers.
+    static let formatCodes: [String] = {
+        var count = 0
+        guard let codes = biblio_format_codes(&count) else { return [] }
+        return (0..<count).compactMap { codes[$0].map { String(cString: $0) } }
+    }()
 
     /// The library's brand color, adjusted per appearance so tinted controls stay legible:
     /// lightened in dark mode and darkened in light mode until it reaches 4.5:1 contrast
     /// with the bar backgrounds.
     var tint: Color {
-        guard let brand = primaryColor.flatMap(BrandRGB.init(hex:)) else { return .accentColor }
-        return Color.dynamic(light: brand.readable(against: .lightBar, lighten: false),
-                             dark: brand.readable(against: .darkBar, lighten: true))
+        guard let hex = primaryColor,
+              let light = Core.take(biblio_readable_tint(hex, false)),
+              let dark = Core.take(biblio_readable_tint(hex, true)) else { return .accentColor }
+        return Color.dynamic(light: light, dark: dark) ?? .accentColor
+    }
+}
+
+/// The core's display names for a library's codes. Rows ask on every render, so names are
+/// cached per library until its labels change.
+private nonisolated final class DisplayNames: @unchecked Sendable {
+    static let shared = DisplayNames()
+    private let lock = NSLock()
+    private typealias Entry = (labels: [String: String], names: [String: String])
+    private var cache: [String: Entry] = [:]
+
+    func name(_ key: String, in library: LibraryInfo,
+              _ call: (UnsafePointer<biblio_pair>?, Int) -> UnsafeMutablePointer<CChar>?) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        var entry: Entry = cache[library.subdomain].flatMap { $0.labels == library.labels ? $0 : nil }
+            ?? (library.labels, [:])
+        if let name = entry.names[key] { return name }
+        let labels = library.labels.sorted { $0.key < $1.key }
+        let name = Core.withCStrings(labels.flatMap { [$0.key, $0.value] }) { c in
+            let pairs = stride(from: 0, to: c.count, by: 2).map { biblio_pair(key: c[$0], value: c[$0 + 1]) }
+            return pairs.withUnsafeBufferPointer { Core.take(call($0.baseAddress, $0.count)) }
+        }
+        entry.names[key] = name
+        cache[library.subdomain] = entry
+        return name
     }
 }
 
@@ -185,100 +206,21 @@ extension String {
 }
 
 extension Color {
-    nonisolated init?(hex: String) {
-        var s = hex.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("#") { s.removeFirst() }
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        self.init(red: Double((v >> 16) & 0xFF) / 255,
-                  green: Double((v >> 8) & 0xFF) / 255,
-                  blue: Double(v & 0xFF) / 255)
-    }
-}
-
-/// sRGB color math for keeping brand colors readable (WCAG relative luminance and contrast).
-nonisolated struct BrandRGB: Sendable {
-    var r, g, b: Double
-
-    static let white = BrandRGB(r: 1, g: 1, b: 1)
-    static let black = BrandRGB(r: 0, g: 0, b: 0)
-    /// Approximate toolbar/sidebar backgrounds in each appearance.
-    static let lightBar = BrandRGB(r: 0.96, g: 0.96, b: 0.97)
-    static let darkBar = BrandRGB(r: 0.17, g: 0.17, b: 0.18)
-
-    init(r: Double, g: Double, b: Double) { self.r = r; self.g = g; self.b = b }
-
-    init?(hex: String) {
-        var s = hex.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("#") { s.removeFirst() }
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        self.init(r: Double((v >> 16) & 0xFF) / 255, g: Double((v >> 8) & 0xFF) / 255, b: Double(v & 0xFF) / 255)
-    }
-
-    var luminance: Double {
-        func lin(_ c: Double) -> Double { c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
-        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-    }
-
-    func contrast(with other: BrandRGB) -> Double {
-        let (a, b) = (luminance, other.luminance)
-        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
-    }
-
-    /// The smallest change in HSL lightness (keeping hue and saturation, so the brand stays
-    /// recognizable) that reaches `minimum` contrast with `background`.
-    func readable(against background: BrandRGB, lighten: Bool, minimum: Double = 4.5) -> BrandRGB {
-        var (h, s, l) = hsl
-        var c = self
-        while c.contrast(with: background) < minimum, lighten ? l < 1 : l > 0 {
-            l = lighten ? min(1, l + 0.02) : max(0, l - 0.02)
-            c = BrandRGB(h: h, s: s, l: l)
+    /// A color that resolves differently in light and dark appearance, from "#RRGGBB" strings.
+    nonisolated static func dynamic(light: String, dark: String) -> Color? {
+        func rgb(_ hex: String) -> (r: Double, g: Double, b: Double)? {
+            guard hex.hasPrefix("#"), let v = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+            return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
         }
-        return c
-    }
-
-    var hsl: (h: Double, s: Double, l: Double) {
-        let mx = max(r, g, b), mn = min(r, g, b), l = (mx + mn) / 2
-        guard mx != mn else { return (0, 0, l) }
-        let d = mx - mn
-        let s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn)
-        let h: Double = switch mx {
-        case r: ((g - b) / d + (g < b ? 6 : 0)) / 6
-        case g: ((b - r) / d + 2) / 6
-        default: ((r - g) / d + 4) / 6
-        }
-        return (h, s, l)
-    }
-
-    init(h: Double, s: Double, l: Double) {
-        guard s > 0 else { self.init(r: l, g: l, b: l); return }
-        func hue(_ p: Double, _ q: Double, _ t: Double) -> Double {
-            var t = t
-            if t < 0 { t += 1 }
-            if t > 1 { t -= 1 }
-            if t < 1 / 6 { return p + (q - p) * 6 * t }
-            if t < 1 / 2 { return q }
-            if t < 2 / 3 { return p + (q - p) * (2 / 3 - t) * 6 }
-            return p
-        }
-        let q = l < 0.5 ? l * (1 + s) : l + s - l * s
-        let p = 2 * l - q
-        self.init(r: hue(p, q, h + 1 / 3), g: hue(p, q, h), b: hue(p, q, h - 1 / 3))
-    }
-
-    var color: Color { Color(red: r, green: g, blue: b) }
-}
-
-extension Color {
-    /// A color that resolves differently in light and dark appearance.
-    nonisolated static func dynamic(light: BrandRGB, dark: BrandRGB) -> Color {
+        guard let light = rgb(light), let dark = rgb(dark) else { return nil }
         #if os(macOS)
-        Color(nsColor: NSColor(name: nil) { appearance in
+        return Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             let c = isDark ? dark : light
             return NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1)
         })
         #else
-        Color(uiColor: UIColor { traits in
+        return Color(uiColor: UIColor { traits in
             let c = traits.userInterfaceStyle == .dark ? dark : light
             return UIColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
         })

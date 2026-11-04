@@ -104,7 +104,7 @@ const Fake = struct {
         if (std.mem.endsWith(u8, path, "/availability")) return ok(availability_json);
         if (std.mem.endsWith(u8, path, "/holds") and std.mem.eql(u8, req.method, "GET")) return ok(holds_json);
         if (std.mem.endsWith(u8, path, "/holds") and std.mem.eql(u8, req.method, "DELETE")) {
-            return ok("{\"failures\":[{\"id\":\"H1\",\"message\":\"Ready holds can't be cancelled.\"}]}");
+            return ok("{\"failures\":[{\"id\":\"H1\",\"message\":\"Ready holds can't be canceled.\"}]}");
         }
         if (std.mem.endsWith(u8, path, "/holds") and std.mem.eql(u8, req.method, "POST")) {
             return ok("{\"failures\":[{\"message\":\"You have reached the maximum number of holds.\"}]}");

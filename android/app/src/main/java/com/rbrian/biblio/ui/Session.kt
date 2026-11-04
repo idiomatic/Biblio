@@ -88,7 +88,7 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
     fun cancel(hold: Hold) = scope.launch {
         try {
             val refused = client.cancelHolds(listOf(hold))
-            message = refused.firstOrNull()?.reason ?: "Hold cancelled."
+            message = refused.firstOrNull()?.reason ?: "Hold canceled."
             if (refused.isEmpty()) {
                 holds.reload()
                 search.reloadIfLoaded()

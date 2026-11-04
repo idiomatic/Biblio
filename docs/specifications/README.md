@@ -23,5 +23,5 @@ goes in this directory when one is saved.
 | Fluent / WinUI 3 | <https://learn.microsoft.com/windows/apps/winui/winui3/> | Windows app design and UI |
 | P/Invoke | <https://learn.microsoft.com/dotnet/standard/native-interop/pinvoke> | The Windows core binding |
 | Debian package archive | <https://deb.debian.org/debian/> | Sysroots for cross-building GNOME |
-| Zig language reference | <https://ziglang.org/documentation/master/> | The core, GNOME, and terminal apps |
+| Zig language reference | <https://ziglang.org/documentation/0.17.0/> | The core, GNOME, and terminal apps |
 | GitHub Actions workflow syntax | <https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax> | [CI](../../.github/workflows/ci.yml) |

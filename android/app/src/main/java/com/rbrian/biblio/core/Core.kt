@@ -30,7 +30,7 @@ object Core {
     @JvmStatic private external fun nativeSubdomainFrom(input: String): String?
     @JvmStatic private external fun nativeFormatName(code: String, labels: Array<String>): String?
     @JvmStatic private external fun nativeSortName(id: String, labels: Array<String>): String?
-    @JvmStatic private external fun nativeCodabar(value: String): DoubleArray?
+    @JvmStatic private external fun nativeBarcode(value: String, code128: Boolean): DoubleArray?
     @JvmStatic private external fun nativeLibraryIcon(website: String?, subdomain: String?, logo: String?): ByteArray?
     @JvmStatic private external fun nativeLogoBounds(pixels: ByteArray, width: Int, height: Int, stride: Int, channels: Int): IntArray?
 
@@ -145,6 +145,6 @@ object Core {
 
     fun sortName(id: String, labels: Map<String, String>): String = nativeSortName(id, labels.flattened()) ?: id
 
-    /** Codabar bar and space widths in narrow units, bar first; null if [value] can't be encoded. */
-    fun codabar(value: String): DoubleArray? = nativeCodabar(value)
+    /** Codabar, or Code 128, bar and space widths in narrow units, bar first; null if [value] can't be encoded. */
+    fun barcode(value: String, code128: Boolean = false): DoubleArray? = nativeBarcode(value, code128)
 }

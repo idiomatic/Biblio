@@ -207,7 +207,7 @@ final class WindowSession {
             for list in [searchList, newTitlesList] {
                 list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
             }
-            // Load the whole (short) holds list so the new hold can be found and cancelled.
+            // Load the whole (short) holds list so the new hold can be found and canceled.
             Task { await holdsList.reloadAll() }
         } catch {
             show(error.localizedDescription, isError: true)
@@ -265,9 +265,9 @@ final class WindowSession {
             let refusedIDs = Set(refused.map(\.hold.id))
             let holds = requested.filter { !refusedIDs.contains($0.id) }
             if let reason = refused.first?.reason {
-                show(holds.isEmpty ? reason : "Cancelled \(holds.count) of \(requested.count) holds. \(reason)", isError: true)
+                show(holds.isEmpty ? reason : "Canceled \(holds.count) of \(requested.count) holds. \(reason)", isError: true)
             } else {
-                show(holds.count == 1 ? "Hold cancelled." : "\(holds.count) holds cancelled.")
+                show(holds.count == 1 ? "Hold canceled." : "\(holds.count) holds canceled.")
             }
             for hold in holds {
                 for list in [searchList, newTitlesList] { list.setAccountStatus(nil, for: hold.metadataId) }

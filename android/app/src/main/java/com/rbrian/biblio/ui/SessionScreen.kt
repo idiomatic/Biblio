@@ -194,7 +194,7 @@ private fun ItemListPane(session: Session, list: ItemList, onSwitch: () -> Unit,
             list.entries.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
                     list.error ?: when (list.section) {
-                        Section.Search -> if (list.query.isBlank()) "Find books, movies, music and more." else "No results."
+                        Section.Search -> if (list.query.isBlank()) "Find books, movies, music, and more." else "No results."
                         Section.Holds -> "Items you place on hold appear here."
                         Section.Checkouts -> "Nothing checked out."
                         Section.History -> "If borrowing history is on in Account, items you return appear here."

@@ -1,6 +1,6 @@
 //! Biblio in the terminal: the libraries you've added, then one account's catalog search, new
 //! titles, holds, checkouts, borrowing history and account details, with item details,
-//! availability by location, and placing and cancelling holds. Runs in any xterm-256color
+//! availability by location, and placing and canceling holds. Runs in any xterm-256color
 //! terminal; needs nothing beyond libbiblio and libc.
 //!
 //! Core calls block, so each is preceded by a "Loading…" frame. Keep requests few: each
@@ -771,7 +771,7 @@ const Session = struct {
         var arena = std.heap.ArenaAllocator.init(gpa);
         defer arena.deinit();
         var failure: biblio.Failure = undefined;
-        s.app.busy("Cancelling hold…");
+        s.app.busy("Canceling hold…");
         const refused = s.client().cancelHolds(arena.allocator(), &.{.{ .id = hold.id, .metadataId = hold.metadataId }}, &failure) catch
             return s.app.fail("{s}", .{failure.message});
         if (refused.len > 0) return s.app.fail("{s}", .{refused[0].reason});
@@ -783,7 +783,7 @@ const Session = struct {
         };
         s.closeDetail();
         s.reload(.holds);
-        s.app.say("Hold cancelled.", .{});
+        s.app.say("Hold canceled.", .{});
     }
 
     // Drawing

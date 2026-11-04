@@ -490,7 +490,7 @@ pub const Client = struct {
     pub const Refusal = struct { holdId: []const u8, reason: []const u8 };
 
     /// Cancels holds and returns the ones the library refused, with its reason
-    /// (some libraries don't allow cancelling holds that are ready for pickup).
+    /// (some libraries don't allow canceling holds that are ready for pickup).
     pub fn cancelHolds(c: *Client, a: Allocator, holds: []const HoldRef, failure: *Failure) Error![]const Refusal {
         const p = try c.login(a, false, failure);
         var hold_ids: std.ArrayList([]const u8) = .empty;

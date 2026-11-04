@@ -204,7 +204,7 @@ private fun LibraryCard(barcode: String) {
         onDispose { window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = previous ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } } }
     }
     val elements = remember(barcode) {
-        runCatching { Core.codabar(barcode)?.toList() }.getOrNull() ?: emptyList()
+        runCatching { Core.barcode(barcode)?.toList() }.getOrNull() ?: emptyList()
     }
     Column(
         Modifier.fillMaxWidth().widthIn(max = 420.dp).background(Color.White, RoundedCornerShape(8.dp)).padding(12.dp)

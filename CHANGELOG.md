@@ -55,7 +55,7 @@ the core and are not yet released.
 - On iPhone, multiple selection uses a bottom bar with only the actions that apply, and item
   details show as a sheet.
 - Checked Out and Borrowing History select one item at a time.
-- The core now handles list paging, sorting and filtering for every app (`biblio_list_*`).
+- The core now handles list paging, sorting, and filtering for every app (`biblio_list_*`).
 
 ### Fixed
 - After a restored launch on iPhone, the sidebar no longer sits under its title.
@@ -66,11 +66,11 @@ the core and are not yet released.
 
 ### Added
 - libbiblio, a shared core in Zig with a typed C interface, which the Apple app now runs on.
-- Apps for GNOME (GTK 4 and libadwaita), Android (Jetpack Compose), Windows (WinUI 3) and the
+- Apps for GNOME (GTK 4 and libadwaita), Android (Jetpack Compose), Windows (WinUI 3), and the
   terminal, built on the core. Only the Apple app has been run so far.
-- Raspberry Pi builds of the core, the terminal app and the GNOME app.
+- Raspberry Pi builds of the core, the terminal app, and the GNOME app.
 - Library icons on every graphical platform, found by the core.
-- README screenshots for macOS, iPadOS and iOS.
+- README screenshots for macOS, iPadOS, and iOS.
 
 ### Changed
 - Guests sign in from a toolbar button, and guest lists select one item at a time.
@@ -95,9 +95,9 @@ the core and are not yet released.
 ## 1.0 — 2026-10-25
 
 ### Added
-- Biblio for macOS, iOS and iPadOS: a patron app for any BiblioCommons library.
-- Holds, checked out items and borrowing history.
-- Search, advanced search and new titles.
+- Biblio for macOS, iOS, and iPadOS: a patron app for any BiblioCommons library.
+- Holds, checked out items, and borrowing history.
+- Search, advanced search, and new titles.
 - An inspector with item details and availability by location.
 - Multiple windows with separate sessions, credentials in the Keychain, and guest browsing.
 - Account settings.

@@ -287,10 +287,26 @@ pub fn copyKind(a: Allocator, c: CopyAvailability) []const u8 {
 /// narrow gap between characters. Null if `value` has characters Codabar can't encode.
 pub fn codabar(a: Allocator, value: []const u8) ?[]const f64 {
     const patterns = std.StaticStringMap([]const u8).initComptime(.{
-        .{ "0", "0000011" }, .{ "1", "0000110" }, .{ "2", "0001001" }, .{ "3", "1100000" }, .{ "4", "0010010" },
-        .{ "5", "1000010" }, .{ "6", "0100001" }, .{ "7", "0100100" }, .{ "8", "0110000" }, .{ "9", "1001000" },
-        .{ "-", "0001100" }, .{ "$", "0011000" }, .{ ":", "1000101" }, .{ "/", "1010001" }, .{ ".", "1010100" },
-        .{ "+", "0010101" }, .{ "A", "0011010" }, .{ "B", "0101001" }, .{ "C", "0001011" }, .{ "D", "0001110" },
+        .{ "0", "0000011" },
+        .{ "1", "0000110" },
+        .{ "2", "0001001" },
+        .{ "3", "1100000" },
+        .{ "4", "0010010" },
+        .{ "5", "1000010" },
+        .{ "6", "0100001" },
+        .{ "7", "0100100" },
+        .{ "8", "0110000" },
+        .{ "9", "1001000" },
+        .{ "-", "0001100" },
+        .{ "$", "0011000" },
+        .{ ":", "1000101" },
+        .{ "/", "1010001" },
+        .{ ".", "1010100" },
+        .{ "+", "0010101" },
+        .{ "A", "0011010" },
+        .{ "B", "0101001" },
+        .{ "C", "0001011" },
+        .{ "D", "0001110" },
     });
     const body = std.ascii.allocUpperString(a, value) catch return null;
     const guard = struct {
@@ -309,7 +325,68 @@ pub fn codabar(a: Allocator, value: []const u8) ?[]const f64 {
     return out.items;
 }
 
-/// A labelled detail field from the full catalog record.
+/// Code 128, which scanners that skip Codabar still read: element widths in narrow units, bar
+/// first. All-digit values use subset C (digit pairs, with an odd leading digit in subset B);
+/// anything else uses subset B. Null if `value` is empty or has characters subset B can't encode.
+pub fn code128(a: Allocator, value: []const u8) ?[]const f64 {
+    // Bar and space widths per symbol value, 6 elements each; the last is the 7-element stop.
+    const patterns = [_][]const u8{
+        "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+        "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+        "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+        "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+        "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+        "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+        "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+        "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+        "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+        "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+        "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
+    };
+    const start_b = 104;
+    const start_c = 105;
+    const code_c = 99;
+    const stop = 106;
+    if (value.len == 0) return null;
+    for (value) |ch| if (ch < 32 or ch >= 127) return null;
+    const all_digits = for (value) |ch| {
+        if (!std.ascii.isDigit(ch)) break false;
+    } else true;
+    var symbols: std.ArrayList(usize) = .empty;
+    if (value.len >= 2 and all_digits) {
+        var i: usize = 0;
+        if (value.len % 2 == 1) {
+            symbols.appendSlice(a, &.{ start_b, value[0] - 32, code_c }) catch return null;
+            i = 1;
+        } else symbols.append(a, start_c) catch return null;
+        while (i < value.len) : (i += 2) symbols.append(a, (value[i] - '0') * 10 + (value[i + 1] - '0')) catch return null;
+    } else {
+        symbols.append(a, start_b) catch return null;
+        for (value) |ch| symbols.append(a, ch - 32) catch return null;
+    }
+    var checksum: usize = symbols.items[0];
+    for (symbols.items[1..], 1..) |s, i| checksum += s * i;
+    symbols.appendSlice(a, &.{ checksum % 103, stop }) catch return null;
+    var out: std.ArrayList(f64) = .empty;
+    for (symbols.items) |s| {
+        for (patterns[s]) |e| out.append(a, @floatFromInt(e - '0')) catch return null;
+    }
+    return out.items;
+}
+
+/// Barcode symbologies for library cards.
+pub const Symbology = enum(c_int) { codabar = 0, code128, _ };
+
+/// Element widths in narrow units, bar first, or null if `value` can't be encoded.
+pub fn barcode(a: Allocator, symbology: Symbology, value: []const u8) ?[]const f64 {
+    return switch (symbology) {
+        .codabar => codabar(a, value),
+        .code128 => code128(a, value),
+        _ => null,
+    };
+}
+
+/// A labeled detail field from the full catalog record.
 pub const DetailField = struct { label: []const u8, values: []const []const u8 };
 
 pub const Location = struct { id: []const u8, name: []const u8 };
@@ -683,6 +760,24 @@ test "copy kinds and codabar" {
     const e = codabar(a, "12").?;
     try std.testing.expectEqual(@as(usize, 4 * 7 + 3), e.len);
     try std.testing.expect(codabar(a, "12#") == null);
+}
+
+test "code 128" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Start C, 12, checksum (105 + 12) % 103 = 14, stop.
+    const even = code128(a, "12").?;
+    try std.testing.expectEqual(@as(usize, 3 * 6 + 7), even.len);
+    try std.testing.expectEqualSlices(f64, &.{ 2, 1, 1, 2, 3, 2 }, even[0..6]);
+    try std.testing.expectEqualSlices(f64, &.{ 1, 1, 2, 2, 3, 2 }, even[6..12]);
+    try std.testing.expectEqualSlices(f64, &.{ 1, 2, 2, 2, 3, 1 }, even[12..18]);
+    // An odd digit count starts in subset B, then switches to C.
+    try std.testing.expectEqual(@as(usize, 5 * 6 + 7), code128(a, "123").?.len);
+    try std.testing.expectEqual(@as(usize, 3 * 6 + 7), barcode(a, .code128, "A").?.len);
+    try std.testing.expect(code128(a, "") == null);
+    try std.testing.expect(code128(a, "é") == null);
+    for (code128(a, "21234000123456").?) |e| try std.testing.expect(e >= 1 and e <= 4);
 }
 
 test "on order wording" {

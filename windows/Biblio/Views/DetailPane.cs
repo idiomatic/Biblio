@@ -162,7 +162,7 @@ public sealed class DetailPane : StackPanel
                     if (refused.Count > 0) _window.ShowMessage(refused[0].Reason, error: true);
                     else
                     {
-                        _window.ShowMessage("Hold cancelled.");
+                        _window.ShowMessage("Hold canceled.");
                         Closed?.Invoke();
                         _window.HoldsChanged();
                     }

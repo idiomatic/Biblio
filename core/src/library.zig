@@ -41,7 +41,7 @@ pub const Lookup = struct {
         return res.status == 200;
     }
 
-    /// Name, brand colour, languages and catalog labels from the library's public search page.
+    /// Name, brand color, languages, and catalog labels from the library's public search page.
     pub fn info(l: Lookup, a: Allocator, subdomain: []const u8, failure: *[]const u8) !models.LibraryInfo {
         const url = try std.fmt.allocPrint(a, "https://{s}.bibliocommons.com/v2/search?query=library&searchType=keyword", .{subdomain});
         const res = l.get(a, url) catch {
@@ -140,19 +140,49 @@ pub fn subdomainCandidates(a: Allocator, name: []const u8, website: ?[]const u8)
 
 // MARK: Display helpers
 
-pub const fallback_format_names = std.StaticStringMap([]const u8).initComptime(.{
-    .{ "BK", "Book" },                                   .{ "EBOOK", "eBook" },                    .{ "AB", "Downloadable Audiobook" },
-    .{ "VIDEO_ONLINE", "Streaming Video" },              .{ "GRAPHIC_NOVEL", "Graphic Novel" },    .{ "GRAPHIC_NOVEL_DOWNLOAD", "Downloadable Graphic Novel" },
-    .{ "PICTURE_BOOK", "Picture Book" },                 .{ "ONLINE_LEARNING", "Online Learning" }, .{ "DVD", "DVD" },
-    .{ "LPRINT", "Large Print" },                        .{ "MAG_ONLINE", "Online Magazine" },     .{ "BOARD_BK", "Board Book" },
-    .{ "BLURAY", "Blu-ray Disc" },                       .{ "MUSIC_CD", "Music CD" },              .{ "BOOK_CD", "Audiobook CD" },
-    .{ "BOARD_GAME", "Board Game" },                     .{ "BOOK_PAUDIO", "Book plus Audio" },    .{ "EASY_READER", "Early Readers" },
-    .{ "PLAYAWAY_AUDIOBOOK", "Preloaded Audiobook" },    .{ "VIDEO_GAME", "Video Game" },          .{ "THREE_D_OBJECT", "3D Object" },
-    .{ "BOOK_CLUB_KIT", "Book Club Kit" },               .{ "DVD_PBLURAY", "DVD plus Blu-ray" },   .{ "KIT", "Kit" },
-    .{ "BOOK_PCD", "Book plus CD" },                     .{ "ATLAS", "Atlas" },                    .{ "BR", "Braille" },
-    .{ "MAG", "Magazine" },                              .{ "BOOK_PDVD", "Book plus DVD" },        .{ "MN", "Printed Music" },
-    .{ "NEWSPAPER", "Newspaper" },                       .{ "UK", "4K Ultra HD Blu-ray" },
-});
+const format_table = .{
+    .{ "BK", "Book" },
+    .{ "EBOOK", "eBook" },
+    .{ "AB", "Downloadable Audiobook" },
+    .{ "VIDEO_ONLINE", "Streaming Video" },
+    .{ "GRAPHIC_NOVEL", "Graphic Novel" },
+    .{ "GRAPHIC_NOVEL_DOWNLOAD", "Downloadable Graphic Novel" },
+    .{ "PICTURE_BOOK", "Picture Book" },
+    .{ "ONLINE_LEARNING", "Online Learning" },
+    .{ "DVD", "DVD" },
+    .{ "LPRINT", "Large Print" },
+    .{ "MAG_ONLINE", "Online Magazine" },
+    .{ "BOARD_BK", "Board Book" },
+    .{ "BLURAY", "Blu-ray Disc" },
+    .{ "MUSIC_CD", "Music CD" },
+    .{ "BOOK_CD", "Audiobook CD" },
+    .{ "BOARD_GAME", "Board Game" },
+    .{ "BOOK_PAUDIO", "Book plus Audio" },
+    .{ "EASY_READER", "Early Readers" },
+    .{ "PLAYAWAY_AUDIOBOOK", "Preloaded Audiobook" },
+    .{ "VIDEO_GAME", "Video Game" },
+    .{ "THREE_D_OBJECT", "3D Object" },
+    .{ "BOOK_CLUB_KIT", "Book Club Kit" },
+    .{ "DVD_PBLURAY", "DVD plus Blu-ray" },
+    .{ "KIT", "Kit" },
+    .{ "BOOK_PCD", "Book plus CD" },
+    .{ "ATLAS", "Atlas" },
+    .{ "BR", "Braille" },
+    .{ "MAG", "Magazine" },
+    .{ "BOOK_PDVD", "Book plus DVD" },
+    .{ "MN", "Printed Music" },
+    .{ "NEWSPAPER", "Newspaper" },
+    .{ "UK", "4K Ultra HD Blu-ray" },
+};
+
+pub const fallback_format_names = std.StaticStringMap([]const u8).initComptime(format_table);
+
+/// The codes in `fallback_format_names`, in table order, as C strings.
+pub const format_codes = blk: {
+    var codes: [format_table.len][*:0]const u8 = undefined;
+    for (format_table, 0..) |entry, i| codes[i] = entry[0];
+    break :blk codes;
+};
 
 /// The library's own name for a format code, else a built-in English one, else the code prettified.
 pub fn formatName(a: Allocator, labels: J, code: []const u8) []const u8 {

@@ -126,7 +126,7 @@ pub const ItemList = struct {
                 c.adw_status_page_set_icon_name(s, "system-search-symbolic");
                 const t = std.fmt.allocPrint(l.a(), "Search {s}", .{@import("store.zig").shortName(l.window.library)}) catch "Search";
                 c.adw_status_page_set_title(s, gtk.z(l.a(), t));
-                c.adw_status_page_set_description(s, if (l.query.len == 0) "Find books, movies, music and more." else "No results.");
+                c.adw_status_page_set_description(s, if (l.query.len == 0) "Find books, movies, music, and more." else "No results.");
             },
             .holds => {
                 c.adw_status_page_set_icon_name(s, Section.holds.icon());

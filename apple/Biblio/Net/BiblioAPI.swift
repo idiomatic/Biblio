@@ -76,7 +76,7 @@ extension BiblioClient {
     }
 
     /// Cancels holds and returns the ones the library refused, with its reason
-    /// (some libraries don't allow cancelling holds that are ready for pickup).
+    /// (some libraries don't allow canceling holds that are ready for pickup).
     @discardableResult
     func cancelHolds(_ holds: [Hold]) async throws -> [(hold: Hold, reason: String)] {
         let refused = try await fetch({ client, out, err in

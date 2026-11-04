@@ -416,7 +416,7 @@ final class ItemListModel {
         reload()
     }
 
-    /// Updates the account status shown on catalog rows for an item (after placing or cancelling a hold).
+    /// Updates the account status shown on catalog rows for an item (after placing or canceling a hold).
     func setAccountStatus(_ status: AccountStatus?, hold: Hold? = nil, for metadataId: String) {
         var changed = false
         for (id, entry) in entriesByID where entry.bib.id == metadataId && entry.kind == .catalog {

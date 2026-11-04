@@ -13,7 +13,7 @@ nonisolated enum LibraryLookup {
         (try? await Core.run { biblio_library_exists(subdomain) }) ?? false
     }
 
-    /// Fetches name, brand colour, languages and catalog labels from the library's public search page.
+    /// Fetches name, brand color, languages, and catalog labels from the library's public search page.
     static func info(for subdomain: String) async throws -> LibraryInfo {
         let info = try await Core.run {
             try Core.fetch({ biblio_library_info(subdomain, $0, $1) }, free: biblio_library_info_free, LibraryInfo.init)

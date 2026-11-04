@@ -164,7 +164,7 @@ public sealed class AccountWindow : Window
         try { Patron = await Client.PatronAsync() ?? Patron; } catch (CoreException) { }
     }
 
-    /// <summary>After placing or cancelling a hold.</summary>
+    /// <summary>After placing or canceling a hold.</summary>
     public void HoldsChanged()
     {
         if (_lists.TryGetValue(Section.Holds, out var holds)) holds.Reload();

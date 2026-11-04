@@ -1,16 +1,17 @@
 # libbiblio developer guide
 
 libbiblio is the BiblioCommons client shared by every Biblio app: Apple (Swift), GNOME (Zig),
-Android (Kotlin), Windows (C#) and the terminal (Zig). It is written in Zig and lives in [`core/`](.). The
+Android (Kotlin), Windows (C#), and the terminal (Zig). It is written in Zig and lives in [`core/`](.). The
 apps use it for everything that talks to a library:
 
 - signing in, and signing in again when a session expires
 - the BiblioCommons gateway API, and the library website's account-settings forms
 - library lookup, and the BiblioCommons partner directory
-- request pacing, cookies and redirects
-- paged item lists: which pages to fetch, placeholder rows, client sorts and local filters
-- shared display logic: copy-status grouping, format and sort names, Codabar barcodes,
-  readable brand colors
+- request pacing, cookies, and redirects
+- paged item lists: which pages to fetch, placeholder rows, client sorts (titles ignore case
+  and accents, and compare numbers by value), and local filters
+- shared display logic: copy-status grouping, format and sort names, Codabar and Code 128
+  barcodes, and readable brand colors
 
 Every operation is a C function that takes C arguments and returns C structs, declared in
 [`core/include/biblio.h`](include/biblio.h). Each app binds them its own way: Apple's Swift
@@ -22,7 +23,7 @@ Windows uses C# P/Invoke ([`windows/Biblio/Core/Interop.cs`](../windows/Biblio/C
 
 1. [Building and linking](#building-and-linking)
 2. [Concepts](#concepts)
-3. [Clients, memory and transport](#clients-memory-and-transport)
+3. [Clients, memory, and transport](#clients-memory-and-transport)
 4. [Calling conventions](#calling-conventions)
 5. [Operations](#operations)
 6. [Result types](#result-types)
@@ -42,8 +43,8 @@ The core needs Zig 0.17. From `core/`:
 |---|---|
 | `zig build` | `zig-out/lib/libbiblio.a`, the shared library (`.dylib`, `.so` or `.dll`), `zig-out/include/biblio.h`, and the `biblio` CLI |
 | `zig build test` | Runs the unit and fixture tests |
-| `zig build -Dtarget=<triple> -Doptimize=safe` | The library for another platform, such as `x86_64-windows-gnu`, `aarch64-linux-android` or `aarch64-linux-gnu` (Raspberry Pi) |
-| `zig build apple` | Static libraries for macOS, iOS and the iOS simulator under `zig-out/apple/` |
+| `zig build -Dtarget=<triple> -Doptimize=safe` | The library for another platform, such as `x86_64-windows-gnu`, `aarch64-linux-android`, or `aarch64-linux-gnu` (Raspberry Pi) |
+| `zig build apple` | Static libraries for macOS, iOS, and the iOS simulator under `zig-out/apple/` |
 
 Each app builds the core in its own way:
 
@@ -154,12 +155,12 @@ freed with `biblio_free`, whichever side frees it:
 - The app returns passwords and transport responses this way, and **the core frees them**.
 
 Result structs are the exception. Each one is a single allocation that owns all of its
-strings, arrays and nested structs, and is freed with its own function, such as
+strings, arrays, and nested structs, and is freed with its own function, such as
 `biblio_list_page_free`. Error messages are released with `biblio_error_clear`.
 
 ---
 
-## Clients, memory and transport
+## Clients, memory, and transport
 
 ```c
 void *biblio_alloc(size_t len);
@@ -214,7 +215,7 @@ transport they were created with. See [Writing a transport](#writing-a-transport
   result arrives through an out-parameter such as `biblio_list_page_t **out`. Pass NULL to
   discard it.
 - **Errors.** Pass a `biblio_error` to get the failure's kind, its HTTP status (for
-  `BIBLIO_HTTP`) and a message written for people, which can be shown as is. Release the
+  `BIBLIO_HTTP`), and a message written for people, which can be shown as is. Release the
   message with `biblio_error_clear`. You may pass NULL if the return code is enough.
 - **Freeing.** Each result struct has its own free function, such as
   `biblio_list_page_free(page)`. The struct owns everything it points to, so one call frees it
@@ -297,7 +298,8 @@ these columns:
 | `biblio_format_name` | `code`, `labels` (may be NULL) | String | No |
 | `biblio_sort_name` | `id`, `labels` (may be NULL) | String | No |
 | `biblio_readable_tint` | `hex`, `dark` | `"#RRGGBB"` or NULL | No |
-| `biblio_codabar` | `value`, `*count` | `double` array, or NULL | No |
+| `biblio_format_codes` | `*count` | Static string array | No |
+| `biblio_barcode` | `value`, `symbology`, `*count` | `double` array, or NULL | No |
 | `biblio_fetch_image` | `url` | Image bytes and their length | Yes |
 | `biblio_library_icon` | `website`, `subdomain`, `logo`, `*bytes`, `*len` | `biblio_icon_kind`, and image bytes unless `NONE` | Yes |
 | `biblio_logo_bounds` | `pixels`, `width`, `height`, `stride`, `channels`, `bounds[4]` | `true` and the content rectangle, or `false` | No |
@@ -332,10 +334,16 @@ built-in English names, and then to the code made readable (`SOME_THING` becomes
 light bar background (when `dark` is false) or a dark one, changing only lightness. It returns
 NULL for a color it can't parse.
 
-**`biblio_codabar`** encodes a library card number as Codabar bar and space widths, in narrow
-units, starting with a bar. A wide element is 2.5. The number gets `A…A` start and stop
-characters unless it already has its own. Draw it with a quiet zone of 10 units on each side.
-It returns NULL if the number has characters Codabar can't encode.
+**`biblio_format_codes`** lists the format codes that have built-in names, for format pickers
+such as advanced search's. The array and its strings are static; don't free them.
+
+**`biblio_barcode`** encodes a library card number as bar and space widths, in narrow units,
+starting with a bar. Draw it with a quiet zone of 10 units on each side. It returns NULL if
+the number has characters the symbology can't encode.
+- `BIBLIO_CODABAR`, which most North American library cards use: a wide element is 2.5, and
+  the number gets `A…A` start and stop characters unless it already has its own.
+- `BIBLIO_CODE128`, for scanners that don't read Codabar: widths are 1 to 4, all-digit
+  numbers use subset C, and anything else uses subset B.
 
 **`biblio_fetch_image`** fetches an image, such as a book jacket, through the shared throttle.
 It is for apps without an image loader of their own (GNOME). Apps that have one should use it
@@ -346,7 +354,7 @@ the largest square icon on the library's website (an apple-touch-icon or a sized
 `rel="icon"`, checking the first three candidates) once it is at least 64 pixels wide. Next
 comes `logo`, the wide partner logo from the directory (`BIBLIO_ICON_LOGO`), then a smaller
 favicon. With `website` NULL it reads the website from `subdomain`'s catalog. The bytes may
-be PNG, ICO, GIF, BMP or JPEG. Apps cache the result on disk, keyed by the website's host, so
+be PNG, ICO, GIF, BMP, or JPEG. Apps cache the result on disk, keyed by the website's host, so
 each library's site is asked only once.
 
 **`biblio_logo_bounds`** finds the part of a decoded logo that isn't white margin, padded by
@@ -408,7 +416,7 @@ or sets `*out` to NULL if the client hasn't signed in.
 
 Signed-in searches also mark results the account already has on hold or checked out, through
 any of the title's editions. The New Titles list is a search for `nw:[0 TO 180]` with
-`search_type` `"bl"`, the filter `f_on_order` = `false` and the sort `newly_acquired`.
+`search_type` `"bl"`, the filter `f_on_order` = `false`, and the sort `newly_acquired`.
 
 **`biblio_availability`** lists the copies of a title by branch, with available copies first.
 Each copy has a `kind` grouping its status (see `biblio_copy_t`), which the apps use for an
@@ -420,7 +428,7 @@ and summary.
 **`biblio_locations`** returns the library's visible branches, sorted by name, for pickup
 choices.
 
-**`biblio_holds`**, **`biblio_checkouts`** and **`biblio_history`** return the account's lists,
+**`biblio_holds`**, **`biblio_checkouts`**, and **`biblio_history`** return the account's lists,
 one page at a time, in the same `biblio_list_page_t` as search. `page` is 1-based (0 means 1)
 and `sort` may be NULL.
 
@@ -435,10 +443,10 @@ library refused, with its reasons. Some libraries won't cancel holds that are re
 pickup. If the library refuses without saying which hold, every requested hold is reported
 refused.
 
-**`biblio_account_settings`** reads the current email, preferred pickup branch and language
+**`biblio_account_settings`** reads the current email, preferred pickup branch, and language
 from the library website's account forms. It makes three page requests.
 
-**`biblio_set_pickup`**, **`biblio_set_language`** and **`biblio_change_email`** submit the
+**`biblio_set_pickup`**, **`biblio_set_language`**, and **`biblio_change_email`** submit the
 website's account forms. `biblio_set_pickup` also removes the branch from the second and third
 preference slots if it was there. Each updates the cached patron, so the next `biblio_patron`
 call reflects the change.
@@ -458,7 +466,7 @@ password** so the core can sign in again later. Android must also pass it to
 Each type is a struct named `biblio_<type>_t`, matching the Zig structs in
 [`core/src/models.zig`](src/models.zig) with fields in snake_case. Fields marked `?`
 are optional: NULL for strings, or a `has_<name>` flag for numbers and booleans. Lists of
-copies, detail fields, locations and refusals come in a struct with `items` and `items_count`,
+copies, detail fields, locations, and refusals come in a struct with `items` and `items_count`,
 such as `biblio_copy_list_t`. Each app copies these into its own model types:
 
 | App | Where the model types are |
@@ -480,7 +488,7 @@ A catalog record.
 | `subtitle`? | string | |
 | `authors` | string array | Primary author first |
 | `format` | string | A format code; get the display name with `biblio_format_name` |
-| `publication_date`? | string | Shapes vary, such as `"2026"`, `"20261006"` or `"c1999"` |
+| `publication_date`? | string | Shapes vary, such as `"2026"`, `"20261006"`, or `"c1999"` |
 | `edition`? | string | Without matching square brackets or a closing period, except one ending an abbreviation |
 | `call_number`?, `summary`? | string | |
 | `jacket_small`?, `jacket_large`? | string | Image URLs |
@@ -497,7 +505,7 @@ One row of any list.
 |---|---|---|
 | `id` | string | Unique within the list: a metadata ID, or `hold-…`, `co-…`, `bh-…` |
 | `bib` | `biblio_bib_t` | If the library didn't return the record, a placeholder with the title only |
-| `kind` | string | `catalog`, `hold`, `checkout` or `history` |
+| `kind` | string | `catalog`, `hold`, `checkout`, or `history` |
 | `server_index` | int64 | Position in the server's order; use it to keep sorts stable |
 | `hold`? | `biblio_hold_t *` | For holds, and for catalog rows the account has on hold |
 | `checkout`? | `biblio_checkout_t *` | For checkouts |
@@ -525,7 +533,7 @@ One row of any list.
 | `sort_options` | string array | Server sort IDs |
 | `applied_sort`? | string | |
 
-### Holds, checkouts and history
+### Holds, checkouts, and history
 
 | Type | Fields |
 |---|---|
@@ -545,7 +553,7 @@ Dates are passed through as the library sends them.
 | `kind` | string | See below |
 
 `kind` is one of `available`, `onOrder`, `out`, `held`, `transit`, `repair`, `missing`,
-`withdrawn`, `claimsReturned`, `libraryUseOnly` or `other`.
+`withdrawn`, `claimsReturned`, `libraryUseOnly`, or `other`.
 
 ### Other types
 
@@ -565,7 +573,7 @@ Dates are passed through as the library sends them.
 ## Item lists
 
 A `biblio_list` holds one paged list's state ([`list.zig`](src/list.zig)), so every
-app pages, sorts and filters the same way. It makes no requests: it says which pages to fetch,
+app pages, sorts, and filters the same way. It makes no requests: it says which pages to fetch,
 the app fetches them with `biblio_search`, `biblio_holds` and so on, and hands back each result.
 Use a list from one thread (the UI thread).
 
@@ -575,8 +583,8 @@ Use a list from one thread (the UI thread).
 | Apply | `biblio_list_apply_page` (or `biblio_list_apply` with `biblio_list_item`s built from the app's own models), or `biblio_list_fail`. Both return false for a page from before the latest reload. |
 | Scroll | `biblio_list_item_appeared` returns a page to prefetch near the end of the fetched items. Count placeholders with `biblio_list_placeholder_appeared` and `_disappeared`; after about 300 ms, `biblio_list_take_visible_requests` requests the pages still on screen. |
 | Fetch the rest | After page 1 when `biblio_list_wants_all_pages` (client sorts, local filters, holds), or after a sort or filter change when `biblio_list_needs_all_pages`: `biblio_list_begin_background`, then `biblio_list_next_background_page` one page at a time until it returns 0 (at most 40 pages). `biblio_list_end_background` stops after an error. |
-| Show | `biblio_list_rows` (a placeholder's id is NULL), `biblio_list_ids` in server order, `biblio_list_formats`, `biblio_list_hold_count` and `biblio_list_state`. They stay valid until the next call that changes the list. |
-| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally), `biblio_list_remove` (after cancelling holds). |
+| Show | `biblio_list_rows` (a placeholder's id is NULL), `biblio_list_ids` in server order, `biblio_list_formats`, `biblio_list_hold_count`, and `biblio_list_state`. They stay valid until the next call that changes the list. |
+| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally), and `biblio_list_remove` (after canceling holds). |
 
 `biblio_list_is_stale` is true 15 minutes after page 1 arrived; times are milliseconds on any
 monotonic clock. Every call that returns a page to fetch has already marked it in flight.
@@ -616,7 +624,7 @@ thread, and may block. It must follow these rules:
 - **Don't store or send cookies of your own.** Send the request's `Cookie` header unchanged,
   and return every `Set-Cookie` on its own line. Some stacks join them with commas; URLSession
   does, so the Apple transport rebuilds the lines with `HTTPCookie.cookies(withResponseHeaderFields:for:)`.
-- **Send a body with any method that has one.** That includes `DELETE`, which cancelling holds
+- **Send a body with any method that has one.** That includes `DELETE`, which canceling holds
   uses.
 - **Decompress the body** if the stack negotiates compression.
 - **Return 0** with every field filled in, or nonzero if the request couldn't be sent at all.
@@ -652,7 +660,7 @@ C layer and call the client directly, with Zig types: `biblio.Client` (a handle'
 `biblio.lookup()`, with result types from `biblio.models` and helpers such as
 `biblio.library.formatName`, as the CLI and the terminal app do.
 
-The module also exposes `biblio.sync`, which has the core's `Mutex`, `Condition` and
+The module also exposes `biblio.sync`, which has the core's `Mutex`, `Condition`, and
 `allocator`. The Android JNI shim uses them, so it works on every target, including iOS, where
 Zig 0.17's `std.Io.Threaded` doesn't compile.
 
@@ -665,20 +673,20 @@ Zig 0.17's `std.Io.Threaded` doesn't compile.
   client operations against a fake transport that serves canned gateway and website responses. They
   cover:
   - sign-in, and signing in again after a 401
-  - search with account status, filters and the locale
+  - search with account status, filters, and the locale
   - guest restrictions
-  - holds parsing, partial cancel refusals and hold-limit errors
+  - holds parsing, partial cancel refusals, and hold-limit errors
   - availability ordering
   - account-form submission with cookies and redirects
   - the C functions' results and errors
-  - item lists: placeholders, prefetching, reloads, refreshes, client sorts, filters and staleness
+  - item lists: placeholders, prefetching, reloads, refreshes, client sorts, filters, and staleness
 - **The `biblio` CLI** (`zig-out/bin/biblio`) makes live calls and prints the results as JSON.
   Each run is one or two requests:
   - `biblio info SUBDOMAIN`
   - `biblio search SUBDOMAIN TEXT`
   - `biblio availability SUBDOMAIN METADATA_ID`
   - `biblio icon SUBDOMAIN`, which prints the icon's kind and size (up to five requests: the
-    catalog, the library's website and three icons)
+    catalog, the library's website, and three icons)
   - `biblio --user NAME holds SUBDOMAIN` (also `checkouts` and `history`), with the password
     in `$BIBLIO_PASSWORD`
 
@@ -699,7 +707,7 @@ changing the parser.
      error.
 2. Export it from [`capi.zig`](src/capi.zig). A client method is usually one line with `fetch` or `perform`.
    If it returns a new type, add an `extern struct` with the model's fields in snake_case,
-   plus `has_<name>` for optional numbers and booleans and `<name>_count` for arrays.
+   plus `has_<name>` for optional numbers and booleans, and `<name>_count` for arrays.
    `deliver` converts it automatically, and the type's free function goes in the `comptime`
    list at the end of the file.
 3. Declare the function, and any new struct, in [`include/biblio.h`](include/biblio.h). Then check that the C and

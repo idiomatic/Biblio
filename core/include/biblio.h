@@ -364,9 +364,15 @@ char *biblio_format_name(const char *code, const biblio_pair *labels, size_t lab
 char *biblio_sort_name(const char *id, const biblio_pair *labels, size_t label_count);
 /* The brand color adjusted to 4.5:1 contrast with a light or dark bar; NULL if not a color. No network. */
 char *biblio_readable_tint(const char *hex, bool dark);
-/* Codabar bar and space widths in narrow units, bar first (wide = 2.5); NULL if the value
- * can't be encoded. Draw with a 10-unit quiet zone each side. No network. */
-double *biblio_codabar(const char *value, size_t *count);
+/* The format codes with built-in names, for format pickers. Static; don't free. No network. */
+const char *const *biblio_format_codes(size_t *count);
+typedef enum {
+    BIBLIO_CODABAR = 0, /* most North American library cards */
+    BIBLIO_CODE128,     /* for scanners that skip Codabar */
+} biblio_symbology;
+/* Bar and space widths in narrow units, bar first; NULL if the value can't be encoded.
+ * Draw with a 10-unit quiet zone each side. No network. */
+double *biblio_barcode(const char *value, biblio_symbology symbology, size_t *count);
 /* Image bytes through the shared throttle, for apps without an image loader. */
 biblio_result biblio_fetch_image(const char *url, unsigned char **bytes, size_t *len, biblio_error *err);
 

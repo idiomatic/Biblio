@@ -322,12 +322,12 @@ pub const Detail = struct {
         const d: *Detail = @ptrCast(@alignCast(data.?));
         const hold = d.entry.hold orelse return;
         c.gtk_widget_set_sensitive(gtk.widget(button), 0);
-        const j = d.job(&onHoldCancelled) orelse return;
+        const j = d.job(&onHoldCanceled) orelse return;
         const refs = j.new([1]capi.HoldRef{.{ .id = j.z(std.mem.span(hold.id)), .metadata_id = j.z(std.mem.span(hold.metadata_id)) }}) orelse return;
         j.start(capi.biblio_cancel_holds, .{ d.window.client, refs, refs.len });
     }
 
-    fn onHoldCancelled(data: ?*anyopaque, r: *core.Result) void {
+    fn onHoldCanceled(data: ?*anyopaque, r: *core.Result) void {
         const t: *Ticket = @ptrCast(@alignCast(data.?));
         const d = t.detail;
         const w = d.window;
@@ -338,7 +338,7 @@ pub const Detail = struct {
         if (!r.ok) return w.toast(r.message);
         const refused = if (r.get(capi.RefusalList)) |l| core.items(capi.Refusal, l.items, l.items_count) else &.{};
         if (refused.len > 0) return w.toast(std.mem.span(refused[0].reason));
-        w.toast("Hold cancelled.");
+        w.toast("Hold canceled.");
         if (same) w.hideDetail();
         w.holdsChanged();
     }

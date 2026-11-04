@@ -154,7 +154,7 @@ internal static unsafe class Interop
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_resolve_subdomain(byte* name, byte* website);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_format_name(byte* code, Pair* labels, nuint count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_sort_name(byte* id, Pair* labels, nuint count);
-    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern double* biblio_codabar(byte* value, nuint* count);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern double* biblio_barcode(byte* value, int symbology, nuint* count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int biblio_library_icon(byte* website, byte* subdomain, byte* logo, byte** bytes, nuint* len);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte biblio_logo_bounds(byte* pixels, nuint width, nuint height, nuint stride, nuint channels, nuint* bounds);
 
@@ -223,11 +223,11 @@ internal static unsafe class Interop
         fixed (Pair* l = pairs) return Take(biblio_sort_name(s[id], l, (nuint)pairs.Length));
     }
 
-    public static double[] Codabar(string value)
+    public static double[] Barcode(string value, bool code128)
     {
         using var s = new Strings();
         nuint count;
-        var widths = biblio_codabar(s[value], &count);
+        var widths = biblio_barcode(s[value], code128 ? 1 : 0, &count);
         if (widths == null) return [];
         try { return new ReadOnlySpan<double>(widths, (int)count).ToArray(); }
         finally { biblio_free(widths); }

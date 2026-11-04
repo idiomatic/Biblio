@@ -256,11 +256,11 @@ pub fn subdomainFrom(a: std.mem.Allocator, input: []const u8) ?[]const u8 {
     return take(a, capi.biblio_subdomain_from(z.ptr));
 }
 
-/// Codabar bar and space widths, bar first; empty if the value can't be encoded.
-pub fn codabar(a: std.mem.Allocator, value: []const u8) []const f64 {
+/// Bar and space widths, bar first; empty if the value can't be encoded.
+pub fn barcode(a: std.mem.Allocator, value: []const u8, symbology: biblio.models.Symbology) []const f64 {
     const z = a.dupeSentinel(u8, value, 0) catch return &.{};
     var count: usize = 0;
-    const widths = capi.biblio_codabar(z.ptr, &count) orelse return &.{};
+    const widths = capi.biblio_barcode(z.ptr, symbology, &count) orelse return &.{};
     defer biblio.biblio_free(widths);
     return a.dupe(f64, widths[0..count]) catch &.{};
 }

@@ -296,7 +296,7 @@ pub const Window = struct {
         return if (@intFromEnum(s) < w.lists.len) w.lists[@intFromEnum(s)] else null;
     }
 
-    /// After placing or cancelling a hold: refresh the holds list and catalog rows.
+    /// After placing or canceling a hold: refresh the holds list and catalog rows.
     pub fn holdsChanged(w: *Window) void {
         if (w.list(.holds)) |l| l.reload();
         for ([_]Section{ .search, .new_titles }) |s| if (w.list(s)) |l| l.reloadIfLoaded();

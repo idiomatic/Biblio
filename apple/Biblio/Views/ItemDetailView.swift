@@ -11,7 +11,7 @@ struct ItemDetailView: View {
     @State private var fields: [DetailField] = []
     @State private var pickup: String?
     @State private var placing = false
-    @State private var cancelling = false
+    @State private var canceling = false
     @State private var confirmCancel = false
     @State private var showAllCopies = false
 
@@ -110,8 +110,8 @@ struct ItemDetailView: View {
                 AvailabilityBadge(bib: bib)
                 if !hold.canCancel {
                     Label(hold.status == "READY_FOR_PICKUP"
-                          ? "This library doesn’t allow cancelling a hold that’s ready for pickup."
-                          : "This library doesn’t allow cancelling this hold online.",
+                          ? "This library doesn’t allow canceling a hold that’s ready for pickup."
+                          : "This library doesn’t allow canceling this hold online.",
                           systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -119,24 +119,24 @@ struct ItemDetailView: View {
                     Button(role: .destructive) {
                         confirmCancel = true
                     } label: {
-                        if cancelling { ProgressView().controlSize(.small) }
+                        if canceling { ProgressView().controlSize(.small) }
                         else { Label("Cancel Hold", systemImage: "xmark.circle") }
                     }
                     .buttonStyle(.bordered)
                     .tint(.red)
-                    .disabled(cancelling)
+                    .disabled(canceling)
                     .confirmationDialog("Cancel your hold on “\(bib.title)”?", isPresented: $confirmCancel) {
                         Button("Cancel Hold", role: .destructive) {
-                            cancelling = true
+                            canceling = true
                             Task {
                                 await session.cancel([hold])
-                                cancelling = false
+                                canceling = false
                             }
                         }
                         Button("Keep Hold", role: .cancel) {}
                     } message: {
                         if hold.status == "READY_FOR_PICKUP" {
-                            Text("This item is waiting for you. Cancelling releases it to the next person.")
+                            Text("This item is waiting for you. Canceling releases it to the next person.")
                         } else if let p = hold.position {
                             Text("You’ll lose your place (#\(p)) in line.")
                         }

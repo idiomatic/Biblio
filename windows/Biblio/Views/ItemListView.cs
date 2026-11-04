@@ -201,7 +201,7 @@ public sealed class ItemListView : Grid
         _empty.Visibility = _entries.Count == 0 && !_loading ? Visibility.Visible : Visibility.Collapsed;
         _empty.Text = _section switch
         {
-            Section.Search => string.IsNullOrWhiteSpace(_query) ? "Find books, movies, music and more." : "No results.",
+            Section.Search => string.IsNullOrWhiteSpace(_query) ? "Find books, movies, music, and more." : "No results.",
             Section.Holds => "Items you place on hold appear here.",
             Section.Checkouts => "Nothing checked out.",
             Section.History => "If borrowing history is on in Account, items you return appear here.",

@@ -27,7 +27,7 @@ struct SearchView: View {
                 ContentUnavailableView {
                     Label("Search \(session.library.shortName ?? "the Catalog")", systemImage: "magnifyingglass")
                 } description: {
-                    Text("Type in the search field to find books, movies, music and more.")
+                    Text("Type in the search field to find books, movies, music, and more.")
                 } actions: {
                     Button("Advanced Search…") { showAdvanced = true }
                 }
@@ -107,10 +107,9 @@ struct AdvancedSearchView: View {
                 Section("Limit To") {
                     Picker("Format", selection: $format) {
                         Text("Any").tag(String?.none)
-                        ForEach(LibraryInfo.fallbackFormatNames.keys.sorted { library.formatName($0) < library.formatName($1) }, id: \.self) {
+                        ForEach(LibraryInfo.formatCodes.sorted { library.formatName($0) < library.formatName($1) }, id: \.self) {
                             Text(library.formatName($0)).tag(Optional($0))
                         }
-                        Text(library.formatName("UK")).tag(Optional("UK"))
                     }
                     Picker("Audience", selection: $audience) {
                         Text("Any").tag(String?.none)

@@ -195,7 +195,7 @@ nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable {
     var isOnOrder = false
 }
 
-/// A labelled detail field from the full catalog record.
+/// A labeled detail field from the full catalog record.
 nonisolated struct DetailField: Identifiable, Hashable, Sendable {
     var id: String { label + values.joined() }
     var label: String

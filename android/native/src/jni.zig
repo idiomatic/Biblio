@@ -509,12 +509,12 @@ export fn Java_com_rbrian_biblio_core_Core_nativeSortName(env: JNIEnv, _: jclass
     return call.taken(capi.biblio_sort_name(call.str(id), pairs.ptr, pairs.len));
 }
 
-/// Core.nativeCodabar(value: String): DoubleArray?
-export fn Java_com_rbrian_biblio_core_Core_nativeCodabar(env: JNIEnv, _: jclass, value: jstring) jarray {
+/// Core.nativeBarcode(value: String, code128: Boolean): DoubleArray?
+export fn Java_com_rbrian_biblio_core_Core_nativeBarcode(env: JNIEnv, _: jclass, value: jstring, code128: jboolean) jarray {
     var call = Call.init(env);
     defer call.deinit();
     var count: usize = 0;
-    const widths = capi.biblio_codabar(call.str(value), &count) orelse return null;
+    const widths = capi.biblio_barcode(call.str(value), if (code128 != 0) .code128 else .codabar, &count) orelse return null;
     defer biblio.biblio_free(widths);
     return call.doubles(widths[0..count]);
 }
