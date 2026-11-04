@@ -15,7 +15,7 @@ const json = @import("json.zig");
 const J = json.J;
 const Value = std.json.Value;
 
-const available = builtin.os.tag != .windows and builtin.mode != .fast and builtin.mode != .small;
+const available = builtin.os.tag != .windows and !builtin.abi.isAndroid() and builtin.mode != .fast and builtin.mode != .small;
 
 var instance: ?*Mock = null;
 var instance_mutex: sync.Mutex = .{};
