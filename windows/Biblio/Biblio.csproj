@@ -19,7 +19,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationTitle>Biblio</ApplicationTitle>
     <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>1.6</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>1.7</ApplicationDisplayVersion>
   </PropertyGroup>
 
   <ItemGroup>

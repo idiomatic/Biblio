@@ -1,4 +1,4 @@
-* write "Biblio" (version 1.6), a patron front-end to https://LIBRARY.bibliocommons.com/: a native SwiftUI app for macOS, iOS, and iPadOS, which this spec describes, plus GNOME, Android, Windows, and terminal apps on the same Zig core, each following its platform's design guidelines.
+* write "Biblio" (version 1.7), a patron front-end to https://LIBRARY.bibliocommons.com/: a native SwiftUI app for macOS, iOS, and iPadOS, which this spec describes, plus GNOME, Android, Windows, and terminal apps on the same Zig core, each following its platform's design guidelines.
 ## views
 * holds: view, add, and remove; when the library refuses a removal, say why, including partial refusals.
 * checked out items, borrowing history, search, and advanced search.
