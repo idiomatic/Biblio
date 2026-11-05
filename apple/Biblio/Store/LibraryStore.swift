@@ -15,6 +15,8 @@ nonisolated struct LibraryInfo: Identifiable, Hashable, Codable, Sendable {
     var labels: [String: String]
     var languages: [String]
     var users: [String]
+    /// The library card barcode type chosen in the account view; Codabar until then.
+    var cardSymbology: BarcodeSymbology?
 
     var id: String { subdomain }
     var baseURL: URL { URL(string: "https://\(subdomain).bibliocommons.com")! }
@@ -127,6 +129,16 @@ final class LibraryStore {
         if let data = Keychain.cards, let saved = try? JSONDecoder().decode([String: CardInfo].self, from: data) {
             cards = saved
         }
+        // Version 1.5 chose one barcode type for every library.
+        if let old = UserDefaults.standard.string(forKey: "cardSymbology") {
+            if let symbology = BarcodeSymbology(rawValue: old) {
+                for i in libraries.indices where libraries[i].cardSymbology == nil {
+                    libraries[i].cardSymbology = symbology
+                }
+                save()
+            }
+            UserDefaults.standard.removeObject(forKey: "cardSymbology")
+        }
         // Prerelease builds kept the cards in the defaults.
         UserDefaults.standard.removeObject(forKey: "cards.v1")
         if let pair = UserDefaults.standard.stringArray(forKey: lastLoginKey), pair.count == 2 {
@@ -150,10 +162,22 @@ final class LibraryStore {
         libraries.first { $0.subdomain == subdomain }
     }
 
+    /// The barcode type shown for the library's cards.
+    func symbology(for subdomain: String) -> BarcodeSymbology {
+        library(subdomain)?.cardSymbology ?? .codabar
+    }
+
+    func setSymbology(_ symbology: BarcodeSymbology, for subdomain: String) {
+        guard let i = libraries.firstIndex(where: { $0.subdomain == subdomain }) else { return }
+        libraries[i].cardSymbology = symbology
+        save()
+    }
+
     func upsert(_ info: LibraryInfo) {
         if let i = libraries.firstIndex(where: { $0.subdomain == info.subdomain }) {
             var merged = info
             merged.users = libraries[i].users
+            merged.cardSymbology = libraries[i].cardSymbology
             libraries[i] = merged
         } else {
             libraries.append(info)

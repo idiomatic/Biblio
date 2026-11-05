@@ -1,7 +1,7 @@
 import BiblioCore
 import SwiftUI
 
-enum BarcodeSymbology: String, CaseIterable, Identifiable {
+nonisolated enum BarcodeSymbology: String, CaseIterable, Identifiable, Codable, Sendable {
     case codabar, code128
 
     var id: String { rawValue }
@@ -16,25 +16,25 @@ enum BarcodeSymbology: String, CaseIterable, Identifiable {
     }
 }
 
+extension EnvironmentValues {
+    /// Whether the window is short, as on an iPhone in landscape.
+    var isShort: Bool {
+        #if os(iOS)
+        verticalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
+}
+
 /// A scannable library-card barcode: black bars on white (also in dark mode), with
-/// quiet zones and the number printed underneath, and a choice of symbology that sticks
-/// for every card.
+/// quiet zones and the number printed underneath. It grows in short windows.
 struct BarcodeView: View {
     var value: String
-    @AppStorage("cardSymbology") private var symbology = BarcodeSymbology.codabar
+    var symbology: BarcodeSymbology
+    @Environment(\.isShort) private var isShort
 
     var body: some View {
-        VStack(spacing: 10) {
-            bars
-            Picker("Barcode type", selection: $symbology) {
-                ForEach(BarcodeSymbology.allCases) { Text($0.name).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-        }
-    }
-
-    @ViewBuilder private var bars: some View {
         if let elements = symbology.elements(for: value) {
             VStack(spacing: 6) {
                 Canvas { context, size in
@@ -49,13 +49,13 @@ struct BarcodeView: View {
                         x += w * unit
                     }
                 }
-                .frame(height: 64)
+                .frame(height: isShort ? 120 : 64)
                 Text(value)
                     .font(.system(.callout, design: .monospaced))
                     .foregroundStyle(.black)
             }
             .padding(.vertical, 12)
-            .frame(maxWidth: 420)
+            .frame(maxWidth: isShort ? 720 : 420)
             .frame(maxWidth: .infinity)
             .background(.white, in: RoundedRectangle(cornerRadius: 8))
             .environment(\.colorScheme, .light)
@@ -71,10 +71,32 @@ struct BarcodeView: View {
     }
 }
 
+/// A library card barcode with a picker for the library's barcode type, which sticks for
+/// every card of that library.
+struct BarcodeWithPicker: View {
+    var value: String
+    var subdomain: String
+
+    var body: some View {
+        let store = LibraryStore.shared
+        let symbology = Binding(get: { store.symbology(for: subdomain) },
+                                set: { store.setSymbology($0, for: subdomain) })
+        VStack(spacing: 10) {
+            BarcodeView(value: value, symbology: symbology.wrappedValue)
+            Picker("Barcode type", selection: symbology) {
+                ForEach(BarcodeSymbology.allCases) { Text($0.name).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+    }
+}
+
 /// A toolbar button that shows the library card's barcode, for scanning at the library:
 /// a popover on macOS and iPad, a sheet on iPhone.
 struct LibraryCardButton: View {
     @Bindable var session: WindowSession
+    @Environment(\.isShort) private var isShort
 
     var body: some View {
         Button {
@@ -88,7 +110,7 @@ struct LibraryCardButton: View {
             if let card = session.card {
                 LibraryCardPager(current: card)
                     .frame(idealWidth: 380)
-                    .presentationDetents([.height(350)])
+                    .presentationDetents(isShort ? [.large] : [.height(300)])
             } else {
                 ProgressView().padding()
             }
@@ -96,8 +118,8 @@ struct LibraryCardButton: View {
     }
 }
 
-/// The library cards of every login, the one in use first. On iOS and iPadOS, swipe left or
-/// right to rotate between them; macOS shows only the current card.
+/// The library cards of the current card's library, its login first. On iOS and iPadOS, swipe
+/// left or right to rotate between them; macOS shows only the current card.
 struct LibraryCardPager: View {
     var current: CardInfo
     @State private var selection: String
@@ -107,13 +129,13 @@ struct LibraryCardPager: View {
         _selection = State(initialValue: current.id)
     }
 
-    /// The remembered card of every login, the current one first.
+    /// The remembered card of every login at the library, the current one first.
     private var cards: [CardInfo] {
         #if os(iOS)
         let store = LibraryStore.shared
-        let others = store.libraries.flatMap { library in
-            library.users.compactMap { store.cards[CardInfo.id(subdomain: library.subdomain, username: $0)] }
-        }.filter { $0.id != current.id }
+        let others = (store.library(current.subdomain)?.users ?? [])
+            .compactMap { store.cards[CardInfo.id(subdomain: current.subdomain, username: $0)] }
+            .filter { $0.id != current.id }
         return [current] + others
         #else
         [current]
@@ -144,7 +166,7 @@ struct LibraryCardPager: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            BarcodeView(value: card.barcode)
+            BarcodeView(value: card.barcode, symbology: LibraryStore.shared.symbology(for: card.subdomain))
             Text("Show this at the library’s self-checkout or desk.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)

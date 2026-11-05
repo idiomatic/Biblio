@@ -127,7 +127,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 - List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
   checked out, or overdue.
 - Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away, or on iPhone from a
-  Lock Screen or Control Center control. Swipe between your logins' cards.
+  Lock Screen or Control Center control. Choose the barcode type for each library in the account view; swipe between that library's logins' cards.
 - Settings for email, password, pickup location, language, and borrowing history. On macOS they
   live in the Settings window.
   - The terminal app only shows them.
