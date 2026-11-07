@@ -105,6 +105,24 @@ fn endsWithAbbreviation(s: []const u8) bool {
     return false;
 }
 
+test "detail fields tidy every edition statement" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const j = @import("json.zig").parse(a,
+        \\{"entities":{"catalogBibs":{"b1":{"fields":[{"items":[
+        \\{"fieldName":"EDITION","fieldValues":[{"primary":{"values":["Collector's edition.","4K Ultra HD + Blu-ray [edition]."]}}]},
+        \\{"fieldName":"PUBLICATION","fieldValues":[{"primary":{"values":["[Los Angeles] : Universal, [2026]"]}}]}
+        \\]}]}}}}
+    );
+    const fields = detailFields(a, j, "b1");
+    try std.testing.expectEqual(@as(usize, 2), fields.len);
+    try std.testing.expectEqual(@as(usize, 2), fields[0].values.len);
+    try std.testing.expectEqualStrings("Collector's edition", fields[0].values[0]);
+    try std.testing.expectEqualStrings("4K Ultra HD + Blu-ray edition", fields[0].values[1]);
+    try std.testing.expectEqualStrings("[Los Angeles] : Universal, [2026]", fields[1].values[0]);
+}
+
 test "editions read as written" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -698,6 +716,9 @@ pub fn detailFields(a: Allocator, json: J, metadata_id: []const u8) []const Deta
             }
             if (values.items.len == 0) continue;
             const label = prettified(a, name);
+            if (std.mem.eql(u8, name, "EDITION")) {
+                for (values.items) |*v| v.* = tidyEdition(a, v.*);
+            }
             var key: std.ArrayList(u8) = .empty;
             key.appendSlice(a, label) catch {};
             for (values.items) |v| key.appendSlice(a, v) catch {};

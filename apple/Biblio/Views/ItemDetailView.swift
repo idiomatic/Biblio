@@ -77,7 +77,8 @@ struct ItemDetailView: View {
                 if let year = bib.displayDate {
                     Text(year).font(.subheadline).foregroundStyle(.secondary)
                 }
-                if let edition = bib.edition {
+                // The brief record keeps only the first edition statement; the full record has them all.
+                if let edition = fields.first(where: { $0.label == "Edition" })?.values.joined(separator: " · ") ?? bib.edition {
                     Text(edition).font(.caption).foregroundStyle(.secondary)
                 }
             }
