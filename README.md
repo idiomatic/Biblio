@@ -123,6 +123,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
   checked out, or overdue.
 - Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away, or on iPhone from a
   Lock Screen or Control Center control. Choose the barcode type for each library in the account view; swipe between that library's logins' cards.
+- On iPhone and iPad, sign in by scanning the barcode on your physical library card with the camera.
 - Settings for email, password, pickup location, language, and borrowing history. On macOS they
   live in the Settings window.
   - The terminal app only shows them.

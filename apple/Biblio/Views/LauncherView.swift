@@ -385,6 +385,7 @@ struct AddUserView: View {
     @State private var password = ""
     @State private var isWorking = false
     @State private var error: String?
+    @State private var isScanning = false
     @FocusState private var focused: Field?
 
     private enum Field { case username, password }
@@ -393,14 +394,25 @@ struct AddUserView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Username or card number", text: $username)
-                        .focused($focused, equals: .username)
-                        .disabled(isWorking)
-                        .textContentType(.username)
-                        .autocorrectionDisabled()
+                    HStack {
+                        TextField("Username or card number", text: $username)
+                            .focused($focused, equals: .username)
+                            .disabled(isWorking)
+                            .textContentType(.username)
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
                         #if os(iOS)
-                        .textInputAutocapitalization(.never)
+                        if canScanCard {
+                            Button("Scan", systemImage: "barcode.viewfinder") { isScanning = true }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                                .disabled(isWorking)
+                                .accessibilityLabel("Scan library card")
+                        }
                         #endif
+                    }
                     SecureField("PIN or password", text: $password)
                         .focused($focused, equals: .password)
                         .disabled(isWorking)
@@ -415,6 +427,11 @@ struct AddUserView: View {
             }
             .formStyle(.grouped)
             .onAppear { focused = .username }
+            #if os(iOS)
+            .sheet(isPresented: $isScanning) {
+                CardScannerSheet { username = $0; focused = .password }
+            }
+            #endif
             .navigationTitle("Sign In to \(library.shortName ?? library.name)")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

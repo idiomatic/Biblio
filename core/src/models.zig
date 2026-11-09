@@ -404,6 +404,21 @@ pub fn barcode(a: Allocator, symbology: Symbology, value: []const u8) ?[]const f
     };
 }
 
+/// A scanned card number: trimmed, without Codabar A–D start and stop characters. Null if what
+/// remains is empty or has characters other than printable ASCII.
+pub fn normalizeCard(value: []const u8) ?[]const u8 {
+    var s = std.mem.trim(u8, value, " \t\r\n");
+    const guard = struct {
+        fn f(ch: u8) bool {
+            return (ch >= 'A' and ch <= 'D') or (ch >= 'a' and ch <= 'd');
+        }
+    }.f;
+    if (s.len >= 3 and guard(s[0]) and guard(s[s.len - 1])) s = s[1 .. s.len - 1];
+    if (s.len == 0) return null;
+    for (s) |ch| if (ch <= 32 or ch >= 127) return null;
+    return s;
+}
+
 /// A labeled detail field from the full catalog record.
 pub const DetailField = struct { label: []const u8, values: []const []const u8 };
 

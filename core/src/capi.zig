@@ -462,6 +462,12 @@ pub export fn biblio_barcode(value_: Str, symbology: models.Symbology, count: *u
     return out;
 }
 
+/// A scanned card number without Codabar start and stop characters, or NULL if it isn't one.
+/// Free with biblio_free.
+pub export fn biblio_card_normalize(scanned: Str) ?[*:0]u8 {
+    return root.hostString(models.normalizeCard(std.mem.span(scanned)) orelse return null);
+}
+
 /// The image's bytes in `*bytes` (free with biblio_free).
 pub export fn biblio_fetch_image(url: Str, bytes: *?[*]u8, len: *usize, err: ?*Error) Result {
     var w = Work.init();
@@ -960,6 +966,14 @@ test "library helpers" {
     try std.testing.expectEqual(@as(usize, 23), count);
     try std.testing.expectEqual(@as(f64, 2.5), widths[2]);
     try std.testing.expect(biblio_barcode("1", @enumFromInt(7), &count) == null);
+    const card = biblio_card_normalize(" A2900012345B\n").?;
+    defer root.biblio_free(card);
+    try std.testing.expectEqualStrings("2900012345", std.mem.span(card));
+    const plain = biblio_card_normalize("2900012345").?;
+    defer root.biblio_free(plain);
+    try std.testing.expectEqualStrings("2900012345", std.mem.span(plain));
+    try std.testing.expect(biblio_card_normalize("  ") == null);
+    try std.testing.expect(biblio_card_normalize("12 34") == null);
     const codes = biblio_format_codes(&count);
     try std.testing.expect(count > 30);
     try std.testing.expectEqualStrings("BK", std.mem.span(codes[0]));

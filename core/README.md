@@ -300,6 +300,7 @@ these columns:
 | `biblio_readable_tint` | `hex`, `dark` | `"#RRGGBB"` or NULL | No |
 | `biblio_format_codes` | `*count` | Static string array | No |
 | `biblio_barcode` | `value`, `symbology`, `*count` | `double` array, or NULL | No |
+| `biblio_card_normalize` | `scanned` | String or NULL | No |
 | `biblio_fetch_image` | `url` | Image bytes and their length | Yes |
 | `biblio_library_icon` | `website`, `subdomain`, `logo`, `*bytes`, `*len` | `biblio_icon_kind`, and image bytes unless `NONE` | Yes |
 | `biblio_logo_bounds` | `pixels`, `width`, `height`, `stride`, `channels`, `bounds[4]` | `true` and the content rectangle, or `false` | No |
@@ -344,6 +345,10 @@ the number has characters the symbology can't encode.
   the number gets `A…A` start and stop characters unless it already has its own.
 - `BIBLIO_CODE128`, for scanners that don't read Codabar: widths are 1 to 4, all-digit
   numbers use subset C, and anything else uses subset B.
+
+**`biblio_card_normalize`** cleans a card number read from a barcode scanner: it trims
+whitespace and drops Codabar `A…D` start and stop characters. It returns NULL if nothing is
+left or the rest isn't printable ASCII without spaces.
 
 **`biblio_fetch_image`** fetches an image, such as a book jacket, through the shared throttle.
 It is for apps without an image loader of their own (GNOME). Apps that have one should use it

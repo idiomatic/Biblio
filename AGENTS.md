@@ -43,6 +43,7 @@
 * test detecting concurrent sessions with the same login.
 * be gentle with the library website to avoid rate limiting.
 ## design
+* on iOS/iPadOS devices with a camera, the sign-in form's Scan button reads a physical card's Codabar or Code 128 barcode into the card-number field; the core cleans the value (`biblio_card_normalize`).
 * follow the Apple Human Interface Guidelines.
 * panels and sheets fit narrow iPhones; minimum widths only on macOS.
 * confirmation dialogs appear over the control that asked for them.

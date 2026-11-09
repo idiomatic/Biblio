@@ -373,6 +373,8 @@ typedef enum {
 /* Bar and space widths in narrow units, bar first; NULL if the value can't be encoded.
  * Draw with a 10-unit quiet zone each side. No network. */
 double *biblio_barcode(const char *value, biblio_symbology symbology, size_t *count);
+/* A scanned card number without Codabar A-D start and stop characters; NULL if empty or not printable ASCII. */
+char *biblio_card_normalize(const char *scanned);
 /* Image bytes through the shared throttle, for apps without an image loader. */
 biblio_result biblio_fetch_image(const char *url, unsigned char **bytes, size_t *len, biblio_error *err);
 
