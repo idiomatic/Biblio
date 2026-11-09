@@ -9,7 +9,7 @@ namespace Biblio.Core;
 /// </summary>
 internal static unsafe class Interop
 {
-    private const string Lib = "biblio.dll";
+    private const string Lib = "libbiblio.dll";
 
     // MARK: C structs (keep in step with biblio.h)
 

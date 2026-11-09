@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Biblio.Core;
 
 /// <summary>
-/// The bridge to libbiblio (biblio.dll), the Zig core shared with the Apple, Android and GNOME apps.
+/// The bridge to libbiblio (libbiblio.dll), the Zig core shared with the Apple, Android and GNOME apps.
 /// Each operation is a typed C function (see core/include/biblio.h and Interop.cs) returning the
 /// app's records or throwing <see cref="CoreException"/>. Calls block, so they run on the thread pool.
 /// </summary>
@@ -14,16 +14,16 @@ public static partial class Native
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate IntPtr PasswordCallback(IntPtr ctx, IntPtr subdomain, IntPtr username);
 
-    [DllImport("biblio.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("libbiblio.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr biblio_alloc(UIntPtr len);
 
-    [DllImport("biblio.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("libbiblio.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern void biblio_free(IntPtr ptr);
 
-    [DllImport("biblio.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("libbiblio.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr biblio_client_new(byte[] subdomain, byte[] username, PasswordCallback password, IntPtr ctx);
 
-    [DllImport("biblio.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("libbiblio.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern void biblio_client_free(IntPtr client);
 
     /// <summary>NUL-terminated UTF-8.</summary>

@@ -54,7 +54,7 @@ Each app builds the core in its own way:
 | GNOME | [`gnome/build.zig`](../gnome/build.zig) imports `core/src/root.zig` as the Zig module `biblio`. |
 | Terminal | [`tui/build.zig`](../tui/build.zig) does the same. |
 | Android | [`android/native/build.zig`](../android/native/build.zig) builds `libbiblio_jni.so` (the core plus a JNI shim) for each ABI. |
-| Windows | `Biblio.csproj` runs `zig build` for the target platform and copies `biblio.dll` next to the app. |
+| Windows | `Biblio.csproj` runs `zig build` for the target platform and copies it next to the app as `libbiblio.dll`. |
 
 ---
 

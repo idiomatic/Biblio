@@ -28,7 +28,8 @@
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
   </ItemGroup>
 
-  <!-- libbiblio, the shared Zig core, built for this platform and copied next to the app. -->
+  <!-- libbiblio, the shared Zig core, built for this platform and copied next to the app.
+       Windows file names ignore case, so biblio.dll would collide with the app's own Biblio.dll. -->
   <PropertyGroup>
     <ZigTarget Condition="'$(Platform)' == 'ARM64'">aarch64-windows-gnu</ZigTarget>
     <ZigTarget Condition="'$(ZigTarget)' == ''">x86_64-windows-gnu</ZigTarget>
@@ -37,7 +38,7 @@
   <Target Name="BuildCore" BeforeTargets="BeforeBuild">
     <Exec Command="zig build -Dtarget=$(ZigTarget) -Doptimize=safe --prefix &quot;$(CoreOut)&quot;" WorkingDirectory="$(MSBuildProjectDirectory)\..\..\core" />
     <ItemGroup>
-      <Content Include="$(CoreOut)\bin\biblio.dll" Link="biblio.dll" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(CoreOut)\bin\biblio.dll" Link="libbiblio.dll" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 </Project>

@@ -3,7 +3,7 @@
 //! Setting `BIBLIO_MOCK` to a fixtures directory (such as `core/mock/video`) puts this in
 //! front of the real transport: the gateway and website of one fictional library are served
 //! from the fixtures, with holds and settings changing in memory, and every other request
-//! goes to the real transport. Compiled out of release builds (`ReleaseFast` and `ReleaseSmall`).
+//! goes to the real transport. Compiled out of release builds (`ReleaseFast` and `ReleaseSmall`) and Android.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -15,7 +15,7 @@ const json = @import("json.zig");
 const J = json.J;
 const Value = std.json.Value;
 
-const available = builtin.os.tag != .windows and !builtin.abi.isAndroid() and builtin.mode != .fast and builtin.mode != .small;
+const available = !builtin.abi.isAndroid() and builtin.mode != .fast and builtin.mode != .small;
 
 var instance: ?*Mock = null;
 var instance_mutex: sync.Mutex = .{};
@@ -26,10 +26,10 @@ pub fn wrap(real: http.Transport) ?http.Transport {
     instance_mutex.lock();
     defer instance_mutex.unlock();
     if (instance == null) {
-        const dir = std.c.getenv("BIBLIO_MOCK") orelse return null;
-        instance = Mock.load(std.mem.span(dir)) catch {
-            const message = "libbiblio: BIBLIO_MOCK fixtures not loaded\n";
-            _ = std.c.write(2, message.ptr, message.len);
+        var buf: [1024]u8 = undefined;
+        const dir = fixturesDir(&buf) orelse return null;
+        instance = Mock.load(dir) catch {
+            writeStderr("libbiblio: BIBLIO_MOCK fixtures not loaded\n");
             return null;
         };
     }
@@ -142,9 +142,7 @@ const Mock = struct {
         m.language = patron.get("language").str(a) orelse "en-US";
         m.history_enabled = patron.get("history").boolean() orelse true;
 
-        var ts: std.c.timespec = undefined;
-        _ = std.c.clock_gettime(.REALTIME, &ts);
-        m.today = @divFloor(@as(i64, @intCast(ts.sec)), 86400);
+        m.today = @divFloor(unixSeconds(), 86400);
 
         const cat = try readJson(a, dir, "catalog.json");
         var entries: std.ArrayList(Entry) = .empty;
@@ -911,18 +909,81 @@ fn decode(a: Allocator, s: []const u8) []const u8 {
     return out.items;
 }
 
-fn readJson(a: Allocator, dir: []const u8, name: []const u8) !J {
-    const path = try std.fmt.allocPrintSentinel(a, "{s}/{s}", .{ dir, name }, 0);
-    const file = std.c.fopen(path, "rb") orelse return error.FileNotFound;
-    defer _ = std.c.fclose(file);
+// MARK: System access
+// The core links no libc on Windows, so the few system calls the mock needs go to kernel32.
+
+const win = struct {
+    const Handle = ?*anyopaque;
+    const invalid: Handle = @ptrFromInt(std.math.maxInt(usize));
+    const FileTime = extern struct { low: u32, high: u32 };
+    extern "kernel32" fn GetEnvironmentVariableA(name: [*:0]const u8, buf: [*]u8, size: u32) callconv(.winapi) u32;
+    extern "kernel32" fn CreateFileA(path: [*:0]const u8, access: u32, share: u32, security: ?*anyopaque, disposition: u32, flags: u32, template: Handle) callconv(.winapi) Handle;
+    extern "kernel32" fn ReadFile(file: Handle, buf: [*]u8, len: u32, read: *u32, overlapped: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn WriteFile(file: Handle, buf: [*]const u8, len: u32, written: *u32, overlapped: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn CloseHandle(file: Handle) callconv(.winapi) i32;
+    extern "kernel32" fn GetStdHandle(which: u32) callconv(.winapi) Handle;
+    extern "kernel32" fn GetSystemTimeAsFileTime(out: *FileTime) callconv(.winapi) void;
+};
+
+/// The value of `BIBLIO_MOCK`, copied into `buf`.
+fn fixturesDir(buf: []u8) ?[]const u8 {
+    if (builtin.os.tag == .windows) {
+        const n = win.GetEnvironmentVariableA("BIBLIO_MOCK", buf.ptr, @intCast(buf.len));
+        return if (n == 0 or n >= buf.len) null else buf[0..n];
+    }
+    const dir = std.c.getenv("BIBLIO_MOCK") orelse return null;
+    return std.mem.span(dir);
+}
+
+fn writeStderr(message: []const u8) void {
+    if (builtin.os.tag == .windows) {
+        var written: u32 = 0;
+        _ = win.WriteFile(win.GetStdHandle(@bitCast(@as(i32, -12))), message.ptr, @intCast(message.len), &written, null);
+        return;
+    }
+    _ = std.c.write(2, message.ptr, message.len);
+}
+
+fn unixSeconds() i64 {
+    if (builtin.os.tag == .windows) {
+        var ft: win.FileTime = undefined;
+        win.GetSystemTimeAsFileTime(&ft);
+        const ticks = (@as(u64, ft.high) << 32) | ft.low; // 100 ns since 1601
+        return @intCast(ticks / 10_000_000 - 11_644_473_600);
+    }
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @intCast(ts.sec);
+}
+
+fn readFile(a: Allocator, path: [:0]const u8) ![]u8 {
     var data: std.ArrayList(u8) = .empty;
     var buf: [16 * 1024]u8 = undefined;
+    if (builtin.os.tag == .windows) {
+        const file = win.CreateFileA(path, 0x80000000, 1, null, 3, 0, null);
+        if (file == win.invalid) return error.FileNotFound;
+        defer _ = win.CloseHandle(file);
+        while (true) {
+            var n: u32 = 0;
+            if (win.ReadFile(file, &buf, buf.len, &n, null) == 0 or n == 0) break;
+            try data.appendSlice(a, buf[0..n]);
+        }
+        return data.items;
+    }
+    const file = std.c.fopen(path, "rb") orelse return error.FileNotFound;
+    defer _ = std.c.fclose(file);
     while (true) {
         const n = std.c.fread(&buf, 1, buf.len, file);
         if (n == 0) break;
         try data.appendSlice(a, buf[0..n]);
     }
-    const value = try std.json.parseFromSliceLeaky(Value, a, data.items, .{});
+    return data.items;
+}
+
+fn readJson(a: Allocator, dir: []const u8, name: []const u8) !J {
+    const path = try std.fmt.allocPrintSentinel(a, "{s}/{s}", .{ dir, name }, 0);
+    const data = try readFile(a, path);
+    const value = try std.json.parseFromSliceLeaky(Value, a, data, .{});
     return J.of(value);
 }
 
