@@ -58,8 +58,9 @@
 * [docs/screenshots/](docs/screenshots): the README's screenshots, one patron's visit from first launch to returns, captured against the fictional mock library (`BIBLIO_MOCK`, [core/mock/](core/mock/README.md)); draw placeholders for apps not yet captured with [tools/coming-soon.swift](tools/coming-soon.swift); blur any private details with [tools/blur.swift](tools/blur.swift) (`swift tools/blur.swift IN OUT POINT_WIDTH x,y,w,h…`); never capture the host Mac's screen.
 ## cross-platform builds and testing
 * root [build.zig](build.zig): `zig build cross`.
-* CI: [.github/workflows/ci.yml](.github/workflows/ci.yml); the Windows app builds and gets screenshots only there.
+* CI: [.github/workflows/ci.yml](.github/workflows/ci.yml).
 * Apple apps build only on macOS.
-* virtualize aarch64 guests with Tart; avoid emulation and keep retained images small.
+* run Linux and Windows guests with `terrarium`; avoid emulation and keep retained images small; guests are ephemeral, so [windows/README.md](windows/README.md) says how to rebuild the Windows one.
+* test the GNOME, Android, Windows, and terminal apps, and capture their screenshots against `BIBLIO_MOCK`, in a guest.
 ## miscellaneous
 * delete .zig-cache and zig-out when cleaning up the workspace.

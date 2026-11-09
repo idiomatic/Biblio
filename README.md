@@ -57,12 +57,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 <table>
 <tr>
 <td width="60%"><img src="docs/screenshots/ipad-04-detail.png" alt="Search results for Martha Wells on iPad, with Rogue Protocol and its copies by location in the inspector"></td>
-<td>
-<picture>
-<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/windows-coming-soon-dark.png">
-<img src="docs/screenshots/windows-coming-soon.png" alt="Sketch of the Windows app, coming soon">
-</picture>
-</td>
+<td><img src="docs/screenshots/windows-04-detail.png" alt="Search results for Martha Wells in the Windows app, with Rogue Protocol and its copies by location in the detail pane"></td>
 <td>
 <picture>
 <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/gnome-coming-soon-dark.png">
@@ -72,7 +67,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 </tr>
 <tr>
 <td align="center">iPadOS: details in the inspector</td>
-<td align="center">Windows</td>
+<td align="center">Windows: details in the pane</td>
 <td align="center">GNOME</td>
 </tr>
 </table>
