@@ -3,6 +3,13 @@
 Notable changes to Biblio. Versions follow the Apple app's version number; the other apps share
 the core and are not yet released.
 
+## 1.8 — 2026-11-09
+
+### Fixed
+- The item inspector shows every edition statement of the record ("Collector's edition ·
+  4K Ultra HD + Blu-ray edition"), not just the first, and the Details table drops the catalog
+  brackets and closing periods from them too.
+
 ## 1.7 — 2026-11-04
 
 ### Changed
