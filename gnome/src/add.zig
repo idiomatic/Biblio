@@ -23,7 +23,10 @@ pub const AddLibrary = struct {
     directory: std.ArrayList(capi.DirectoryEntry) = .empty,
     /// The pages `directory` points into.
     directory_pages: std.ArrayList(*capi.DirectoryPage) = .empty,
-    busy: bool = false,
+    /// Jobs in flight; `d` is freed after the last one returns once the dialog is closed.
+    pending: u32 = 0,
+    /// A library lookup is under way (not directory pages, which never block Add).
+    working: bool = false,
     closed: bool = false,
 
     pub fn present(l: *Launcher) void {
@@ -81,7 +84,15 @@ pub const AddLibrary = struct {
         const d: *AddLibrary = @ptrCast(@alignCast(data.?));
         d.closed = true;
         // Directory pages still loading call back into `d`, so it is freed when they finish.
-        if (!d.busy) d.free();
+        if (d.pending == 0) d.free();
+    }
+
+    /// Notes that a job returned; true if the dialog was closed meanwhile (and `d` is gone or kept for another job).
+    fn finished(d: *AddLibrary) bool {
+        d.pending -= 1;
+        if (!d.closed) return false;
+        if (d.pending == 0) d.free();
+        return true;
     }
 
     fn free(d: *AddLibrary) void {
@@ -94,14 +105,13 @@ pub const AddLibrary = struct {
 
     fn loadDirectory(d: *AddLibrary, url: ?[]const u8) void {
         const j = core.Job.create(&onDirectoryPage, d) orelse return;
-        d.busy = true;
+        d.pending += 1;
         j.start(capi.biblio_directory_page, .{j.optZ(url)});
     }
 
     fn onDirectoryPage(data: ?*anyopaque, r: *core.Result) void {
         const d: *AddLibrary = @ptrCast(@alignCast(data.?));
-        d.busy = false;
-        if (d.closed) return d.free();
+        if (d.finished()) return;
         if (!r.ok) return;
         const page = r.get(capi.DirectoryPage) orelse return;
         const entries = core.items(capi.DirectoryEntry, page.entries, page.entries_count);
@@ -155,19 +165,17 @@ pub const AddLibrary = struct {
     fn onSuggestion(row: *c.AdwActionRow, data: ?*anyopaque) callconv(.c) void {
         const d: *AddLibrary = @ptrCast(@alignCast(data.?));
         const i = @intFromPtr(c.g_object_get_data(@ptrCast(@alignCast(row)), "index")) - 1;
-        if (i >= d.directory.items.len or d.busy) return;
+        if (i >= d.directory.items.len or d.working) return;
         const entry = d.directory.items[i];
         const j = core.Job.create(&onResolved, d) orelse return;
+        d.pending += 1;
         d.setWorking(true);
         j.start(capi.biblio_resolve_subdomain, .{ j.z(std.mem.span(entry.name)), j.optZ(core.str(entry.website)) });
     }
 
     fn onResolved(data: ?*anyopaque, r: *core.Result) void {
         const d: *AddLibrary = @ptrCast(@alignCast(data.?));
-        if (d.closed) {
-            d.busy = false;
-            return d.free();
-        }
+        if (d.finished()) return;
         if (r.ok) return d.lookUp(r.bytes);
         d.setWorking(false);
         d.showError("Couldn’t find that library’s catalog. Enter its subdomain instead.");
@@ -179,7 +187,7 @@ pub const AddLibrary = struct {
 
     fn onAdd(_: ?*c.GtkButton, data: ?*anyopaque) callconv(.c) void {
         const d: *AddLibrary = @ptrCast(@alignCast(data.?));
-        if (d.busy) return;
+        if (d.working) return;
         var scratch = std.heap.ArenaAllocator.init(core.gpa);
         defer scratch.deinit();
         const sub = core.subdomainFrom(scratch.allocator(), d.text()) orelse return d.showError("Enter a library name or catalog address.");
@@ -188,17 +196,14 @@ pub const AddLibrary = struct {
     }
 
     fn lookUp(d: *AddLibrary, subdomain: []const u8) void {
-        const j = core.Job.create(&onInfo, d) orelse return;
-        d.busy = true;
+        const j = core.Job.create(&onInfo, d) orelse return d.setWorking(false);
+        d.pending += 1;
         j.start(capi.biblio_library_info, .{j.z(subdomain)});
     }
 
     fn onInfo(data: ?*anyopaque, r: *core.Result) void {
         const d: *AddLibrary = @ptrCast(@alignCast(data.?));
-        if (d.closed) {
-            d.busy = false;
-            return d.free();
-        }
+        if (d.finished()) return;
         d.setWorking(false);
         if (!r.ok) return d.showError(r.message);
         store.upsert(r.get(capi.LibraryInfo) orelse return);
@@ -207,7 +212,7 @@ pub const AddLibrary = struct {
     }
 
     fn setWorking(d: *AddLibrary, working: bool) void {
-        d.busy = working;
+        d.working = working;
         c.gtk_widget_set_visible(d.spinner, @intFromBool(working));
         c.gtk_widget_set_sensitive(gtk.widget(d.entry), @intFromBool(!working));
         if (working) c.gtk_widget_set_visible(d.error_label, 0);

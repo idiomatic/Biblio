@@ -20,6 +20,9 @@ pub const Detail = struct {
     pickup: ?*c.GtkDropDown = null,
     pickup_ids: []const []const u8 = &.{},
     hold_button: ?*c.GtkWidget = null,
+    /// "You borrowed this in March 2024", under the hold controls.
+    borrowed_line: ?*c.GtkWidget = null,
+    borrowed_generation: ?u64 = null,
     availability: ?*c.AdwPreferencesGroup = null,
     details: ?*c.AdwPreferencesGroup = null,
 
@@ -66,6 +69,7 @@ pub const Detail = struct {
         d.entry = core.copy(d.a(), entry.*);
         d.pickup = null;
         d.hold_button = null;
+        d.borrowed_line = null;
         d.build();
         const id = std.mem.span(d.entry.bib.id);
         if (d.job(&onAvailability)) |j| j.start(capi.biblio_availability, .{ d.window.client, j.z(id) });
@@ -125,6 +129,16 @@ pub const Detail = struct {
         gtk.append(d.content, top);
 
         d.buildActions();
+        if (w.borrowed != null) {
+            const line = gtk.box(false, 6);
+            gtk.append(line, c.gtk_image_new_from_icon_name("document-open-recent-symbolic"));
+            gtk.append(line, gtk.label("", d.a(), &.{}));
+            c.gtk_widget_add_css_class(line, "dim-label");
+            gtk.append(d.content, line);
+            d.borrowed_line = line;
+            d.borrowed_generation = null;
+            d.borrowedChanged();
+        }
 
         if (core.str(bib.summary)) |summary| {
             const l = gtk.label(summary, d.a(), &.{"body"});
@@ -203,6 +217,22 @@ pub const Detail = struct {
             d.hold_button = place;
         }
         gtk.append(d.content, row);
+    }
+
+    /// Says whether the shown item was borrowed before, following the index.
+    pub fn borrowedChanged(d: *Detail) void {
+        const line = d.borrowed_line orelse return;
+        const b = d.window.borrowed orelse return;
+        const generation = b.generation();
+        if (d.borrowed_generation) |shown| if (shown == generation) return;
+        d.borrowed_generation = generation;
+        const result = b.lookup(d.entry.bib);
+        c.gtk_widget_set_visible(line, @intFromBool(result.match != .none));
+        if (result.match == .none) return;
+        var buf: [1024]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buf);
+        const text = @import("borrowed.zig").detailText(fba.allocator(), result, d.window.labels);
+        c.gtk_label_set_text(@ptrCast(@alignCast(c.gtk_widget_get_last_child(line))), gtk.z(fba.allocator(), text));
     }
 
     // MARK: Results

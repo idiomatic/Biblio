@@ -11,6 +11,7 @@ const main = @import("main.zig");
 const ItemList = @import("list.zig").ItemList;
 const Detail = @import("detail.zig").Detail;
 const Account = @import("account.zig").Account;
+const Borrowed = @import("borrowed.zig").Borrowed;
 
 pub const Section = enum {
     search,
@@ -66,6 +67,8 @@ pub const Window = struct {
     lists: [5]?*ItemList = @splat(null),
     detail: *Detail = undefined,
     account: ?*Account = null,
+    /// What this login borrowed before; null for guests.
+    borrowed: ?*Borrowed = null,
     patron: ?*capi.Patron = null,
     locations: []const capi.Location = &.{},
     /// Calls in flight from this window and its parts; it is freed when it has closed and
@@ -106,6 +109,7 @@ pub const Window = struct {
         };
         if (username.len > 0) open_windows.put(core.gpa, key, w) catch {};
         w.labels = store.labels(w.a(), w.library);
+        if (!w.isGuest()) w.borrowed = Borrowed.create(w);
         w.build();
         c.gtk_window_present(@ptrCast(@alignCast(w.window)));
         w.start();
@@ -256,6 +260,7 @@ pub const Window = struct {
         // Fill the sidebar's hold and checkout counts without waiting for those lists to be opened.
         if (w.lists[@intFromEnum(Section.holds)]) |l| l.loadIfNeeded();
         if (w.lists[@intFromEnum(Section.checkouts)]) |l| l.loadIfNeeded();
+        if (w.borrowed) |b| if (w.patron) |p| b.patronChanged(p);
         if (w.account) |acc| acc.refresh();
     }
 
@@ -302,6 +307,13 @@ pub const Window = struct {
         for ([_]Section{ .search, .new_titles }) |s| if (w.list(s)) |l| l.reloadIfLoaded();
     }
 
+    /// The borrowed-before index changed: marks, filters, and progress follow it.
+    pub fn borrowedChanged(w: *Window) void {
+        for ([_]Section{ .search, .new_titles, .holds }) |s| if (w.list(s)) |l| l.borrowedChanged();
+        w.detail.borrowedChanged();
+        if (w.account) |acc| acc.borrowedChanged();
+    }
+
     fn onSwitch(_: *c.GtkButton, _: ?*anyopaque) callconv(.c) void {
         main.Launcher.open();
     }
@@ -317,6 +329,7 @@ pub const Window = struct {
         for (w.lists) |l| if (l) |item_list| item_list.free();
         w.detail.free();
         if (w.account) |acc| acc.free();
+        if (w.borrowed) |b| b.free();
         for (w.kept.items) |v| core.release(v);
         w.kept.deinit(core.gpa);
         @import("biblio").biblio_client_free(w.client);

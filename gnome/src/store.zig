@@ -109,7 +109,10 @@ pub fn upsert(info: *const capi.LibraryInfo) void {
 /// Removes a library and its saved passwords.
 pub fn remove(sub: []const u8) void {
     const i = find(sub) orelse return;
-    for (users(libraries.items[i])) |u| if (u == .string) clearPassword(sub, u.string);
+    for (users(libraries.items[i])) |u| if (u == .string) {
+        clearPassword(sub, u.string);
+        deleteBorrowed(sub, u.string);
+    };
     _ = libraries.orderedRemove(i);
     save();
 }
@@ -132,7 +135,53 @@ pub fn removeUser(sub: []const u8, username: []const u8) void {
     }
     libraries.items[i].object.put(arena(), "users", .{ .array = list }) catch {};
     clearPassword(sub, username);
+    deleteBorrowed(sub, username);
     save();
+}
+
+pub fn hasUser(sub: []const u8, username: []const u8) bool {
+    const i = find(sub) orelse return false;
+    for (users(libraries.items[i])) |u| if (u == .string and std.mem.eql(u8, u.string, username)) return true;
+    return false;
+}
+
+// MARK: Borrowing history index
+
+/// A login's borrowed-before index, in the user's cache directory (not backed up; the library
+/// can always send it again): private, so readable by the user alone.
+fn borrowedPath(a: std.mem.Allocator, sub: []const u8, username: []const u8) ![:0]const u8 {
+    const dir = std.mem.span(c.g_get_user_cache_dir());
+    const u = gtk.z(a, username);
+    const escaped = c.g_uri_escape_string(u, null, 0) orelse return error.OutOfMemory;
+    defer c.g_free(escaped);
+    return std.fmt.allocPrintSentinel(a, "{s}/biblio/borrowed/{s}/{s}.json", .{ dir, sub, std.mem.span(escaped) }, 0);
+}
+
+/// The saved index's bytes (free with `g_free`), or null.
+pub fn loadBorrowed(sub: []const u8, username: []const u8) ?[]u8 {
+    var a = std.heap.ArenaAllocator.init(gpa);
+    defer a.deinit();
+    const p = borrowedPath(a.allocator(), sub, username) catch return null;
+    var contents: [*c]c.gchar = null;
+    var len: c.gsize = 0;
+    if (c.g_file_get_contents(p.ptr, &contents, &len, null) == 0) return null;
+    return contents[0..len];
+}
+
+pub fn saveBorrowed(sub: []const u8, username: []const u8, bytes: []const u8) void {
+    var a = std.heap.ArenaAllocator.init(gpa);
+    defer a.deinit();
+    const p = borrowedPath(a.allocator(), sub, username) catch return;
+    const dir = std.fs.path.dirname(p) orelse return;
+    _ = c.g_mkdir_with_parents(gtk.z(a.allocator(), dir), 0o700);
+    _ = c.g_file_set_contents_full(p.ptr, bytes.ptr, @intCast(bytes.len), c.G_FILE_SET_CONTENTS_CONSISTENT, 0o600, null);
+}
+
+pub fn deleteBorrowed(sub: []const u8, username: []const u8) void {
+    var a = std.heap.ArenaAllocator.init(gpa);
+    defer a.deinit();
+    const p = borrowedPath(a.allocator(), sub, username) catch return;
+    _ = c.g_remove(p.ptr);
 }
 
 /// The saved form of a library: the core's fields in camelCase, without users.

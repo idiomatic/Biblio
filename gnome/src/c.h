@@ -1,3 +1,4 @@
 #include <gtk/gtk.h>
 #include <adwaita.h>
 #include <libsecret/secret.h>
+#include <glib/gstdio.h>

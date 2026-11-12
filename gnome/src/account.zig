@@ -8,6 +8,7 @@ const core = @import("core.zig");
 const capi = core.capi;
 const store = @import("store.zig");
 const Window = @import("window.zig").Window;
+const borrowed = @import("borrowed.zig");
 
 pub const Account = struct {
     window: *Window,
@@ -23,6 +24,12 @@ pub const Account = struct {
     pickup_ids: []const []const u8 = &.{},
     language_ids: []const []const u8 = &.{},
     history: ?*c.AdwSwitchRow = null,
+    /// Refresh Borrowing History, and its progress while the index syncs.
+    refresh_history: ?*c.GtkWidget = null,
+    progress_row: ?*c.GtkWidget = null,
+    progress_bar: ?*c.GtkProgressBar = null,
+    /// Pulses the progress bar while the history's size is unknown.
+    pulse: c.guint = 0,
     /// Set while rows are filled in, so their change signals don't save anything.
     filling: bool = false,
     pending_password: ?[]u8 = null,
@@ -40,6 +47,7 @@ pub const Account = struct {
     }
 
     pub fn free(acc: *Account) void {
+        if (acc.pulse != 0) _ = c.g_source_remove(acc.pulse);
         if (acc.pending_password) |p| {
             std.crypto.secureZero(u8, p);
             core.gpa.free(p);
@@ -127,7 +135,9 @@ pub const Account = struct {
         acc.pickup_ids = pickup_ids.items;
         const pickup = c.adw_combo_row_new();
         c.adw_preferences_row_set_title(@ptrCast(@alignCast(pickup)), "Pickup location");
-        c.adw_combo_row_set_model(@ptrCast(@alignCast(pickup)), @ptrCast(@alignCast(c.gtk_string_list_new(@ptrCast(pickup_names.items.ptr)))));
+        const pickup_model = c.gtk_string_list_new(@ptrCast(pickup_names.items.ptr));
+        c.adw_combo_row_set_model(@ptrCast(@alignCast(pickup)), @ptrCast(@alignCast(pickup_model)));
+        c.g_object_unref(pickup_model);
         c.adw_combo_row_set_selected(@ptrCast(@alignCast(pickup)), pickup_selected);
         gtk.connect(pickup, "notify::selected", &onPickup, acc);
         c.adw_preferences_group_add(@ptrCast(@alignCast(holds)), pickup);
@@ -149,24 +159,84 @@ pub const Account = struct {
         acc.language_ids = language_ids.items;
         const language = c.adw_combo_row_new();
         c.adw_preferences_row_set_title(@ptrCast(@alignCast(language)), "Language");
-        c.adw_combo_row_set_model(@ptrCast(@alignCast(language)), @ptrCast(@alignCast(c.gtk_string_list_new(@ptrCast(language_names.items.ptr)))));
+        const language_model = c.gtk_string_list_new(@ptrCast(language_names.items.ptr));
+        c.adw_combo_row_set_model(@ptrCast(@alignCast(language)), @ptrCast(@alignCast(language_model)));
+        c.g_object_unref(language_model);
         c.adw_combo_row_set_selected(@ptrCast(@alignCast(language)), language_selected);
         gtk.connect(language, "notify::selected", &onLanguage, acc);
         c.adw_preferences_group_add(@ptrCast(@alignCast(language_group)), language);
         c.adw_preferences_page_add(@ptrCast(@alignCast(page)), language_group);
 
         acc.history = null;
-        if (patron.has_borrowing_history_enabled) {
-            const enabled = patron.borrowing_history_enabled;
+        acc.refresh_history = null;
+        acc.progress_row = null;
+        acc.progress_bar = null;
+        if (patron.has_borrowing_history_enabled or w.borrowed != null) {
             const history_group = group("Borrowing History", "When on, the library keeps a list of the items you check out.");
-            const history: *c.AdwSwitchRow = @ptrCast(@alignCast(c.adw_switch_row_new()));
-            c.adw_preferences_row_set_title(@ptrCast(@alignCast(history)), "Keep borrowing history");
-            c.adw_switch_row_set_active(history, @intFromBool(enabled));
-            gtk.connect(history, "notify::active", &onHistory, acc);
-            c.adw_preferences_group_add(@ptrCast(@alignCast(history_group)), gtk.widget(history));
+            if (patron.has_borrowing_history_enabled) {
+                const history: *c.AdwSwitchRow = @ptrCast(@alignCast(c.adw_switch_row_new()));
+                c.adw_preferences_row_set_title(@ptrCast(@alignCast(history)), "Keep borrowing history");
+                c.adw_switch_row_set_active(history, @intFromBool(patron.borrowing_history_enabled));
+                gtk.connect(history, "notify::active", &onHistory, acc);
+                c.adw_preferences_group_add(@ptrCast(@alignCast(history_group)), gtk.widget(history));
+                acc.history = history;
+            }
+            if (w.borrowed != null) {
+                // "Updating · 340 of 1,200" while the borrowed-before index syncs.
+                const progress = c.adw_action_row_new();
+                const bar: *c.GtkProgressBar = @ptrCast(@alignCast(c.gtk_progress_bar_new()));
+                c.gtk_widget_set_valign(gtk.widget(bar), c.GTK_ALIGN_CENTER);
+                c.gtk_widget_set_size_request(gtk.widget(bar), 120, -1);
+                c.adw_action_row_add_suffix(@ptrCast(@alignCast(progress)), gtk.widget(bar));
+                c.adw_preferences_group_add(@ptrCast(@alignCast(history_group)), progress);
+                acc.progress_row = progress;
+                acc.progress_bar = bar;
+                const refresh_history = c.adw_button_row_new();
+                c.adw_preferences_row_set_title(@ptrCast(@alignCast(refresh_history)), "Refresh Borrowing History");
+                c.adw_button_row_set_start_icon_name(@ptrCast(@alignCast(refresh_history)), "view-refresh-symbolic");
+                gtk.connect(refresh_history, "activated", &onRefreshHistory, acc);
+                c.adw_preferences_group_add(@ptrCast(@alignCast(history_group)), refresh_history);
+                acc.refresh_history = refresh_history;
+            }
             c.adw_preferences_page_add(@ptrCast(@alignCast(page)), history_group);
-            acc.history = history;
         }
+        acc.borrowedChanged();
+    }
+
+    /// Follows the borrowed-before index's sync.
+    pub fn borrowedChanged(acc: *Account) void {
+        const b = acc.window.borrowed orelse return;
+        const row = acc.progress_row orelse return;
+        const p = b.progress();
+        if (acc.refresh_history) |r| c.gtk_widget_set_sensitive(r, @intFromBool(!p.syncing and !b.off and b.started));
+        c.gtk_widget_set_visible(row, @intFromBool(p.syncing));
+        const unknown = p.syncing and p.total <= 0;
+        if (unknown and acc.pulse == 0) acc.pulse = c.g_timeout_add(100, &onPulse, acc);
+        if (!unknown and acc.pulse != 0) {
+            _ = c.g_source_remove(acc.pulse);
+            acc.pulse = 0;
+        }
+        if (!p.syncing) return;
+        var buf: [256]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buf);
+        const fa = fba.allocator();
+        const title = if (unknown) "Updating…" else std.fmt.allocPrint(fa, "Updating · {s} of {s}", .{ borrowed.grouped(fa, p.fetched), borrowed.grouped(fa, p.total) }) catch "Updating…";
+        c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), gtk.z(fa, title));
+        if (acc.progress_bar) |bar| {
+            if (!unknown) c.gtk_progress_bar_set_fraction(bar, @min(1.0, @as(f64, @floatFromInt(p.fetched)) / @as(f64, @floatFromInt(p.total))));
+            c.gtk_accessible_update_property(@ptrCast(@alignCast(bar)), c.GTK_ACCESSIBLE_PROPERTY_LABEL, gtk.z(fa, title), @as(c_int, -1));
+        }
+    }
+
+    fn onPulse(data: ?*anyopaque) callconv(.c) c.gboolean {
+        const acc: *Account = @ptrCast(@alignCast(data.?));
+        if (acc.progress_bar) |bar| c.gtk_progress_bar_pulse(bar);
+        return 1; // G_SOURCE_CONTINUE
+    }
+
+    fn onRefreshHistory(_: *c.AdwButtonRow, data: ?*anyopaque) callconv(.c) void {
+        const acc: *Account = @ptrCast(@alignCast(data.?));
+        if (acc.window.borrowed) |b| b.rebuild();
     }
 
     fn group(title: [*:0]const u8, description: ?[*:0]const u8) *c.AdwPreferencesGroup {
@@ -256,6 +326,8 @@ pub const Account = struct {
         const patron = r.keep(capi.Patron) orelse return;
         w.patron = patron;
         w.keep(patron);
+        // Borrowing history turned on syncs the index; turned off, it is cleared.
+        if (w.borrowed) |b| b.patronChanged(patron);
         acc.refresh();
     }
 
