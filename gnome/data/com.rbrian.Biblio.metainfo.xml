@@ -2,8 +2,11 @@
 <component type="desktop-application">
   <id>com.rbrian.Biblio</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>BSD-3-Clause</project_license>
   <name>Biblio</name>
+  <developer id="com.rbrian">
+    <name>Brian Harrison</name>
+  </developer>
   <summary>Search your library’s catalog and manage holds</summary>
   <description>
     <p>Biblio is an app for libraries that use BiblioCommons. Search the catalog, see which
@@ -11,6 +14,13 @@
     several library cards.</p>
   </description>
   <launchable type="desktop-id">com.rbrian.Biblio.desktop</launchable>
+  <url type="homepage">https://github.com/idiomatic/Biblio</url>
+  <url type="bugtracker">https://github.com/idiomatic/Biblio/issues</url>
+  <url type="vcs-browser">https://github.com/idiomatic/Biblio</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#a8e6f5</color>
+    <color type="primary" scheme_preference="dark">#3e5866</color>
+  </branding>
   <requires>
     <display_length compare="ge">360</display_length>
   </requires>
@@ -20,4 +30,9 @@
     <control>touch</control>
   </supports>
   <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.8" date="2026-11-09">
+      <url type="details">https://github.com/idiomatic/Biblio/blob/v1.8/CHANGELOG.md</url>
+    </release>
+  </releases>
 </component>

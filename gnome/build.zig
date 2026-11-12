@@ -11,8 +11,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const sysroot = b.option([]const u8, "sysroot", "Debian sysroot to build against instead of pkg-config (for cross-compiling)");
-    // Debian's multiarch directory, such as aarch64-linux-gnu.
-    const multiarch = b.fmt("{s}-linux-gnu", .{@tagName(target.result.cpu.arch)});
+    // Debian's multiarch directory, such as aarch64-linux-gnu or arm-linux-gnueabihf.
+    const multiarch = switch (target.result.cpu.arch) {
+        .arm => "arm-linux-gnueabihf",
+        .x86 => "i386-linux-gnu",
+        else => |arch| b.fmt("{s}-linux-gnu", .{@tagName(arch)}),
+    };
 
     const c = b.addTranslateC(.{
         .root_source_file = b.path("src/c.h"),
@@ -68,6 +72,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
     b.installFile("data/com.rbrian.Biblio.desktop", "share/applications/com.rbrian.Biblio.desktop");
     b.installFile("data/com.rbrian.Biblio.metainfo.xml", "share/metainfo/com.rbrian.Biblio.metainfo.xml");
+    b.installFile("../icon.png", "share/icons/hicolor/512x512/apps/com.rbrian.Biblio.png");
 
     const run = b.addRunArtifact(exe);
     b.step("run", "Run Biblio").dependOn(&run.step);

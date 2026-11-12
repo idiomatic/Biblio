@@ -3,7 +3,6 @@
     "runtime": "org.gnome.Platform",
     "runtime-version": "48",
     "sdk": "org.gnome.Sdk",
-    "sdk-extensions": ["org.freedesktop.Sdk.Extension.ziglang"],
     "command": "biblio-gnome",
     "finish-args": [
         "--share=network",
@@ -13,15 +12,30 @@
         "--device=dri",
         "--talk-name=org.freedesktop.secrets"
     ],
-    "build-options": { "append-path": "/usr/lib/sdk/ziglang" },
     "modules": [
         {
             "name": "biblio",
             "buildsystem": "simple",
             "build-commands": [
-                "cd gnome && zig build -Doptimize=safe --prefix /app"
+                "cd gnome && ../zig/zig build -Doptimize=safe --prefix /app --global-cache-dir ../.zig-global-cache"
             ],
-            "sources": [{ "type": "dir", "path": ".." }]
+            "sources": [
+                { "type": "dir", "path": "..", "skip": [".zig-cache", "zig-out"] },
+                {
+                    "type": "archive",
+                    "only-arches": ["x86_64"],
+                    "url": "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz",
+                    "sha256": "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a",
+                    "dest": "zig"
+                },
+                {
+                    "type": "archive",
+                    "only-arches": ["aarch64"],
+                    "url": "https://ziglang.org/download/0.17.1/zig-aarch64-linux-0.17.1.tar.xz",
+                    "sha256": "a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795",
+                    "dest": "zig"
+                }
+            ]
         }
     ]
 }

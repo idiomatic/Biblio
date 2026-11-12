@@ -54,20 +54,32 @@ pub fn tile(name: []const u8, icon_key: []const u8, website: ?[]const u8, subdom
     } else {
         const k = core.gpa.dupe(u8, icon_key) catch return box;
         if (fromDisk(k)) |icon| {
-            icons.put(core.gpa, k, icon) catch {};
             show(box, icon);
+            icons.put(core.gpa, k, icon) catch {
+                core.gpa.free(k);
+                if (icon.texture) |t| c.g_object_unref(t);
+            };
         } else {
-            var list: std.ArrayList(*c.GtkWidget) = .empty;
-            list.append(core.gpa, box) catch return box;
-            _ = c.g_object_ref(box);
-            waiting.put(core.gpa, k, list) catch return box;
-            const ctx = core.gpa.create([]const u8) catch return box;
-            ctx.* = k;
-            const j = core.Job.create(&onIcon, @ptrCast(ctx)) orelse return box;
-            j.fetchIcon(website, subdomain, logo);
+            lookUp(box, k, website, subdomain, logo) catch core.gpa.free(k);
         }
     }
     return box;
+}
+
+/// Starts looking up the icon for `k` (which `waiting` then owns), with `box` its first tile.
+/// On failure nothing is kept, and the tile keeps its initial.
+fn lookUp(box: *c.GtkWidget, k: []const u8, website: ?[]const u8, subdomain: ?[]const u8, logo: ?[]const u8) !void {
+    const ctx = try core.gpa.create([]const u8);
+    errdefer core.gpa.destroy(ctx);
+    ctx.* = k;
+    var list: std.ArrayList(*c.GtkWidget) = .empty;
+    errdefer list.deinit(core.gpa);
+    try list.append(core.gpa, box);
+    try waiting.put(core.gpa, k, list);
+    errdefer _ = waiting.remove(k);
+    const j = core.Job.create(&onIcon, @ptrCast(ctx)) orelse return error.OutOfMemory;
+    _ = c.g_object_ref(box);
+    j.fetchIcon(website, subdomain, logo);
 }
 
 fn onIcon(data: ?*anyopaque, r: *core.Result) void {
@@ -79,12 +91,15 @@ fn onIcon(data: ?*anyopaque, r: *core.Result) void {
     if (icon.texture != null) save(k, r.icon, r.bytes);
     const entry = waiting.fetchRemove(k) orelse return;
     var list = entry.value;
-    icons.put(core.gpa, entry.key, icon) catch {};
     for (list.items) |box| {
         show(box, icon);
         c.g_object_unref(box);
     }
     list.deinit(core.gpa);
+    icons.put(core.gpa, entry.key, icon) catch {
+        core.gpa.free(entry.key);
+        if (icon.texture) |t| c.g_object_unref(t);
+    };
 }
 
 fn show(box: *c.GtkWidget, icon: Icon) void {

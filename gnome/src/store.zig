@@ -5,6 +5,7 @@ const std = @import("std");
 const gtk = @import("gtk.zig");
 const c = gtk.c;
 const capi = @import("biblio").capi;
+const Symbology = @import("biblio").models.Symbology;
 
 const gpa = std.heap.c_allocator;
 
@@ -93,11 +94,13 @@ pub fn find(sub: []const u8) ?usize {
     return null;
 }
 
-/// Adds a library from a `biblio_library_info` result, or updates it, keeping its users.
+/// Adds a library from a `biblio_library_info` result, or updates it, keeping its users and
+/// barcode type.
 pub fn upsert(info: *const capi.LibraryInfo) void {
     var copy = fromInfo(info) catch return;
     if (find(subdomain(copy))) |i| {
         copy.object.put(arena(), "users", libraries.items[i].object.get("users") orelse .{ .array = .init(arena()) }) catch {};
+        if (libraries.items[i].object.get("barcodeType")) |t| copy.object.put(arena(), "barcodeType", t) catch {};
         libraries.items[i] = copy;
     } else {
         copy.object.put(arena(), "users", .{ .array = .init(arena()) }) catch {};
@@ -136,6 +139,20 @@ pub fn removeUser(sub: []const u8, username: []const u8) void {
     libraries.items[i].object.put(arena(), "users", .{ .array = list }) catch {};
     clearPassword(sub, username);
     deleteBorrowed(sub, username);
+    save();
+}
+
+/// The library card barcode's symbology chosen for the library: Codabar unless Code 128 was.
+pub fn barcodeType(sub: []const u8) Symbology {
+    const i = find(sub) orelse return .codabar;
+    const v = libraries.items[i].object.get("barcodeType") orelse return .codabar;
+    return if (v == .string and std.mem.eql(u8, v.string, "code128")) .code128 else .codabar;
+}
+
+pub fn setBarcodeType(sub: []const u8, symbology: Symbology) void {
+    const i = find(sub) orelse return;
+    const value: []const u8 = if (symbology == .code128) "code128" else "codabar";
+    libraries.items[i].object.put(arena(), "barcodeType", .{ .string = value }) catch return;
     save();
 }
 
@@ -207,18 +224,17 @@ fn fromInfo(info: *const capi.LibraryInfo) !std.json.Value {
 
 // MARK: Secret Service
 
-var schema: c.SecretSchema = undefined;
-var schema_ready = false;
+/// Built at compile time, so worker threads looking up passwords only ever read it.
+const schema: c.SecretSchema = blk: {
+    var s = std.mem.zeroes(c.SecretSchema);
+    s.name = "com.rbrian.Biblio";
+    s.flags = c.SECRET_SCHEMA_NONE;
+    s.attributes[0] = .{ .name = "subdomain", .type = c.SECRET_SCHEMA_ATTRIBUTE_STRING };
+    s.attributes[1] = .{ .name = "username", .type = c.SECRET_SCHEMA_ATTRIBUTE_STRING };
+    break :blk s;
+};
 
 fn secretSchema() *const c.SecretSchema {
-    if (!schema_ready) {
-        schema = std.mem.zeroes(c.SecretSchema);
-        schema.name = "com.rbrian.Biblio";
-        schema.flags = c.SECRET_SCHEMA_NONE;
-        schema.attributes[0] = .{ .name = "subdomain", .type = c.SECRET_SCHEMA_ATTRIBUTE_STRING };
-        schema.attributes[1] = .{ .name = "username", .type = c.SECRET_SCHEMA_ATTRIBUTE_STRING };
-        schema_ready = true;
-    }
     return &schema;
 }
 

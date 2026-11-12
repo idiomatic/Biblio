@@ -9,6 +9,7 @@ const capi = core.capi;
 const store = @import("store.zig");
 const Window = @import("window.zig").Window;
 const borrowed = @import("borrowed.zig");
+const barcode = @import("barcode.zig");
 
 pub const Account = struct {
     window: *Window,
@@ -16,7 +17,9 @@ pub const Account = struct {
     page: ?*c.GtkWidget = null,
     holder: *c.GtkWidget,
     arena: std.heap.ArenaAllocator,
-    barcode: []const f64 = &.{},
+    /// The library card's barcode, redrawn when its type changes.
+    card_holder: ?*c.GtkWidget = null,
+    card_value: []const u8 = "",
     email: ?*c.AdwEntryRow = null,
     current_password: ?*c.AdwPasswordEntryRow = null,
     new_password: ?*c.AdwPasswordEntryRow = null,
@@ -32,7 +35,11 @@ pub const Account = struct {
     pulse: c.guint = 0,
     /// Set while rows are filled in, so their change signals don't save anything.
     filling: bool = false,
-    pending_password: ?[]u8 = null,
+    /// A password change is under way; another waits for it.
+    changing_password: bool = false,
+    change_password: ?*c.GtkWidget = null,
+    language_row: ?*c.AdwComboRow = null,
+    system_language: ?*c.GtkWidget = null,
 
     pub fn create(w: *Window) *Account {
         const acc = core.gpa.create(Account) catch unreachable;
@@ -48,10 +55,6 @@ pub const Account = struct {
 
     pub fn free(acc: *Account) void {
         if (acc.pulse != 0) _ = c.g_source_remove(acc.pulse);
-        if (acc.pending_password) |p| {
-            std.crypto.secureZero(u8, p);
-            core.gpa.free(p);
-        }
         acc.arena.deinit();
         core.gpa.destroy(acc);
     }
@@ -79,22 +82,23 @@ pub const Account = struct {
         addInfo(acc, profile, "Library", store.name(w.library));
         c.adw_preferences_page_add(@ptrCast(@alignCast(page)), profile);
 
-        if (core.str(patron.barcode)) |barcode| {
+        acc.card_holder = null;
+        if (core.str(patron.barcode)) |value| {
             const card = group("Library Card", "Show this at the library’s self-checkout or desk.");
-            acc.barcode = core.barcode(acc.a(), barcode, .codabar);
-            const box = gtk.box(true, 6);
-            c.gtk_widget_add_css_class(box, "barcode");
-            if (acc.barcode.len > 0) {
-                const area = c.gtk_drawing_area_new();
-                c.gtk_widget_set_size_request(area, 300, 64);
-                c.gtk_drawing_area_set_draw_func(@ptrCast(@alignCast(area)), &drawBarcode, acc, null);
-                gtk.append(box, area);
-            }
-            const number = gtk.label(barcode, acc.a(), &.{"monospace"});
-            c.gtk_label_set_xalign(@ptrCast(@alignCast(number)), 0.5);
-            gtk.append(box, number);
-            c.gtk_accessible_update_property(@ptrCast(@alignCast(box)), c.GTK_ACCESSIBLE_PROPERTY_LABEL, gtk.z(acc.a(), std.fmt.allocPrint(acc.a(), "Library card barcode {s}", .{barcode}) catch ""), @as(c_int, -1));
-            c.adw_preferences_group_add(@ptrCast(@alignCast(card)), box);
+            const holder = gtk.box(true, 0);
+            c.adw_preferences_group_add(@ptrCast(@alignCast(card)), holder);
+            acc.card_holder = holder;
+            acc.card_value = acc.a().dupe(u8, value) catch "";
+            acc.showCard();
+            // The type the library's scanners read, for every card of this library.
+            const kinds = [_:null]?[*:0]const u8{ "Codabar", "Code 128" };
+            const kind: *c.GtkDropDown = @ptrCast(@alignCast(c.gtk_drop_down_new_from_strings(&kinds)));
+            c.gtk_drop_down_set_selected(kind, @intFromBool(store.barcodeType(w.subdomain) == .code128));
+            c.gtk_widget_set_tooltip_text(gtk.widget(kind), "Barcode type");
+            c.gtk_accessible_update_property(@ptrCast(@alignCast(kind)), c.GTK_ACCESSIBLE_PROPERTY_LABEL, "Barcode type", @as(c_int, -1));
+            c.gtk_widget_set_valign(gtk.widget(kind), c.GTK_ALIGN_CENTER);
+            gtk.connect(kind, "notify::selected", &onBarcodeType, acc);
+            c.adw_preferences_group_set_header_suffix(card, gtk.widget(kind));
             c.adw_preferences_page_add(@ptrCast(@alignCast(page)), card);
         }
 
@@ -116,7 +120,9 @@ pub const Account = struct {
         const change = c.adw_button_row_new();
         c.adw_preferences_row_set_title(@ptrCast(@alignCast(change)), "Change Password");
         gtk.connect(change, "activated", &onChangePassword, acc);
+        c.gtk_widget_set_sensitive(change, @intFromBool(!acc.changing_password));
         c.adw_preferences_group_add(@ptrCast(@alignCast(password_group)), change);
+        acc.change_password = change;
         c.adw_preferences_page_add(@ptrCast(@alignCast(page)), password_group);
 
         const holds = group("Holds", "Used for new holds unless you choose another location when placing one.");
@@ -165,6 +171,14 @@ pub const Account = struct {
         c.adw_combo_row_set_selected(@ptrCast(@alignCast(language)), language_selected);
         gtk.connect(language, "notify::selected", &onLanguage, acc);
         c.adw_preferences_group_add(@ptrCast(@alignCast(language_group)), language);
+        acc.language_row = @ptrCast(@alignCast(language));
+        // The account's preference, never set for it: offered, for the closest supported language.
+        const system = c.adw_button_row_new();
+        c.adw_preferences_row_set_title(@ptrCast(@alignCast(system)), "Use System Language");
+        gtk.connect(system, "activated", &onSystemLanguage, acc);
+        c.adw_preferences_group_add(@ptrCast(@alignCast(language_group)), system);
+        acc.system_language = system;
+        acc.updateSystemLanguage();
         c.adw_preferences_page_add(@ptrCast(@alignCast(page)), language_group);
 
         acc.history = null;
@@ -261,30 +275,99 @@ pub const Account = struct {
         return row;
     }
 
-    /// Black bars on white with quiet zones, scannable in dark mode too.
-    fn drawBarcode(_: [*c]c.GtkDrawingArea, cr: ?*c.cairo_t, width: c_int, height: c_int, data: ?*anyopaque) callconv(.c) void {
+    /// Draws the card in the library's barcode type.
+    fn showCard(acc: *Account) void {
+        const holder = acc.card_holder orelse return;
+        gtk.clearBox(holder);
+        gtk.append(holder, barcode.card(acc.card_value, store.barcodeType(acc.window.subdomain), 64));
+    }
+
+    fn onBarcodeType(dropdown: *c.GtkDropDown, _: ?*c.GParamSpec, data: ?*anyopaque) callconv(.c) void {
         const acc: *Account = @ptrCast(@alignCast(data.?));
-        const quiet = 10.0;
-        var total: f64 = 2 * quiet;
-        for (acc.barcode) |e| total += e;
-        const unit = @as(f64, @floatFromInt(width)) / total;
-        c.cairo_set_source_rgb(cr, 1, 1, 1);
-        c.cairo_paint(cr);
-        c.cairo_set_source_rgb(cr, 0, 0, 0);
-        var x = quiet * unit;
-        // Elements alternate bar, space, …; the gap after each character is a space, so even indices are bars.
-        for (acc.barcode, 0..) |e, i| {
-            if (i % 2 == 0) c.cairo_rectangle(cr, x, 0, e * unit, @floatFromInt(height));
-            x += e * unit;
+        if (acc.filling) return;
+        store.setBarcodeType(acc.window.subdomain, if (c.gtk_drop_down_get_selected(dropdown) == 1) .code128 else .codabar);
+        acc.showCard();
+    }
+
+    /// The library language closest to the system's, if the library supports one.
+    fn systemLanguage(acc: *Account) ?usize {
+        const names = c.g_get_language_names();
+        var best: ?usize = null;
+        var i: usize = 0;
+        // Most preferred first: "fr_CA.UTF-8", "fr_CA", "fr.UTF-8", "fr", ..., "C".
+        while (names[i]) |name| : (i += 1) {
+            var locale: []const u8 = std.mem.span(name);
+            if (std.mem.indexOfAny(u8, locale, ".@")) |end| locale = locale[0..end];
+            if (locale.len < 2 or std.mem.eql(u8, locale, "C") or std.mem.eql(u8, locale, "POSIX")) continue;
+            const language = locale[0 .. std.mem.indexOfScalar(u8, locale, '_') orelse locale.len];
+            for (acc.language_ids, 0..) |id, j| {
+                const id_language = id[0 .. std.mem.indexOfAny(u8, id, "-_") orelse id.len];
+                if (sameLocale(id, locale)) return j;
+                if (best == null and std.ascii.eqlIgnoreCase(id_language, language)) best = j;
+            }
+            if (best != null) return best;
         }
-        c.cairo_fill(cr);
+        return best;
+    }
+
+    /// "en-US" and "en_US" name the same locale.
+    fn sameLocale(x: []const u8, y: []const u8) bool {
+        if (x.len != y.len) return false;
+        for (x, y) |p, q| {
+            const pn = if (p == '_') '-' else std.ascii.toLower(p);
+            const qn = if (q == '_') '-' else std.ascii.toLower(q);
+            if (pn != qn) return false;
+        }
+        return true;
+    }
+
+    fn updateSystemLanguage(acc: *Account) void {
+        const button = acc.system_language orelse return;
+        const row = acc.language_row orelse return;
+        const match = acc.systemLanguage();
+        const current = c.adw_combo_row_get_selected(row);
+        c.gtk_widget_set_sensitive(button, @intFromBool(match != null and match.? != current));
+        c.gtk_widget_set_tooltip_text(button, if (match == null) "The library doesn’t offer your system’s language." else null);
+    }
+
+    fn onSystemLanguage(_: *c.AdwButtonRow, data: ?*anyopaque) callconv(.c) void {
+        const acc: *Account = @ptrCast(@alignCast(data.?));
+        const i = acc.systemLanguage() orelse return;
+        // Selecting it saves it, like choosing it from the menu.
+        if (acc.language_row) |row| c.adw_combo_row_set_selected(row, @intCast(i));
     }
 
     // MARK: Saving
 
+    /// One save in flight. A new password belongs to its own change, so no other save can
+    /// store it before the library has accepted it.
+    const Save = struct {
+        account: *Account,
+        kind: enum { setting, language, password },
+        password: ?[]u8 = null,
+
+        fn destroy(s: *Save) void {
+            if (s.password) |p| {
+                std.crypto.secureZero(u8, p);
+                core.gpa.free(p);
+            }
+            core.gpa.destroy(s);
+        }
+    };
+
     /// A call that saves a setting, then shows the patron again.
     fn job(acc: *Account) ?*core.Job {
-        return acc.window.job(&onSaved, acc);
+        return acc.saveJob(.{ .account = acc, .kind = .setting });
+    }
+
+    fn saveJob(acc: *Account, save: Save) ?*core.Job {
+        const s = core.gpa.create(Save) catch return null;
+        s.* = save;
+        return acc.window.job(&onSaved, s) orelse {
+            s.password = null; // still the caller's
+            s.destroy();
+            return null;
+        };
     }
 
     fn reloadPatron(acc: *Account) void {
@@ -293,27 +376,34 @@ pub const Account = struct {
     }
 
     fn onSaved(data: ?*anyopaque, r: *core.Result) void {
-        const acc: *Account = @ptrCast(@alignCast(data.?));
+        const s: *Save = @ptrCast(@alignCast(data.?));
+        defer s.destroy();
+        const acc = s.account;
         const w = acc.window;
         if (w.finishPending()) return;
+        if (s.kind == .password) {
+            acc.changing_password = false;
+            if (acc.change_password) |b| c.gtk_widget_set_sensitive(b, 1);
+        }
         if (!r.ok) {
-            if (acc.pending_password) |p| {
-                std.crypto.secureZero(u8, p);
-                core.gpa.free(p);
-                acc.pending_password = null;
-            }
             w.toast(r.message);
             return acc.reloadPatron(); // put the rows back
         }
-        if (acc.pending_password) |p| {
-            // Keep the keyring in step so signing in again automatically still works.
-            _ = store.storePassword(w.subdomain, w.username, p);
-            std.crypto.secureZero(u8, p);
-            core.gpa.free(p);
-            acc.pending_password = null;
-            w.toast("Password changed.");
-        } else {
-            w.toast("Saved.");
+        switch (s.kind) {
+            .password => {
+                // Keep the keyring in step so signing in again automatically still works.
+                if (s.password) |p| _ = store.storePassword(w.subdomain, w.username, p);
+                for ([_]?*c.AdwPasswordEntryRow{ acc.current_password, acc.new_password, acc.confirm_password }) |row| {
+                    if (row) |e| c.gtk_editable_set_text(@ptrCast(@alignCast(e)), "");
+                }
+                w.toast("Password changed.");
+            },
+            .language => {
+                w.toast("Saved.");
+                // Catalog text (formats, sort names) comes back in the new language.
+                for ([_]@import("window.zig").Section{ .search, .new_titles }) |sec| if (w.list(sec)) |l| l.reloadIfLoaded();
+            },
+            .setting => w.toast("Saved."),
         }
         acc.reloadPatron();
     }
@@ -324,8 +414,7 @@ pub const Account = struct {
         if (w.finishPending()) return;
         if (!r.ok) return;
         const patron = r.keep(capi.Patron) orelse return;
-        w.patron = patron;
-        w.keep(patron);
+        w.setPatron(patron);
         // Borrowing history turned on syncs the index; turned off, it is cleared.
         if (w.borrowed) |b| b.patronChanged(patron);
         acc.refresh();
@@ -346,8 +435,14 @@ pub const Account = struct {
         const confirm = std.mem.span(c.gtk_editable_get_text(@ptrCast(@alignCast(acc.confirm_password.?))));
         if (current.len == 0 or new.len == 0) return;
         if (!std.mem.eql(u8, new, confirm)) return acc.window.toast("The new passwords don’t match.");
-        const j = acc.job() orelse return;
-        acc.pending_password = core.gpa.dupe(u8, new) catch null;
+        if (acc.changing_password) return;
+        const password = core.gpa.dupe(u8, new) catch return;
+        const j = acc.saveJob(.{ .account = acc, .kind = .password, .password = password }) orelse {
+            std.crypto.secureZero(u8, password);
+            return core.gpa.free(password);
+        };
+        acc.changing_password = true;
+        if (acc.change_password) |b| c.gtk_widget_set_sensitive(b, 0);
         j.start(capi.biblio_change_password, .{ acc.window.client, j.z(current), j.z(new) });
     }
 
@@ -365,10 +460,10 @@ pub const Account = struct {
         if (acc.filling) return;
         const i = c.adw_combo_row_get_selected(row);
         if (i >= acc.language_ids.len) return;
-        const j = acc.job() orelse return;
+        acc.updateSystemLanguage();
+        // The catalog lists reload once the library has the new language.
+        const j = acc.saveJob(.{ .account = acc, .kind = .language }) orelse return;
         j.start(capi.biblio_set_language, .{ acc.window.client, j.z(acc.language_ids[i]) });
-        // Catalog text (formats, sort names) comes back in the new language.
-        for ([_]@import("window.zig").Section{ .search, .new_titles }) |s| if (acc.window.list(s)) |l| l.reloadIfLoaded();
     }
 
     fn setHistory(acc: *Account, enabled: bool) void {

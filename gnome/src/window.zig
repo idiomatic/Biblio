@@ -240,6 +240,12 @@ pub const Window = struct {
         return j;
     }
 
+    /// Replaces the patron, releasing the one it replaces.
+    pub fn setPatron(w: *Window, patron: *capi.Patron) void {
+        if (w.patron) |old| core.release(old);
+        w.patron = patron;
+    }
+
     /// Keeps a result (from `Result.keep`) until the window is freed.
     pub fn keep(w: *Window, value: ?*anyopaque) void {
         if (value) |v| w.kept.append(core.gpa, v) catch core.release(v);
@@ -255,8 +261,7 @@ pub const Window = struct {
         const w: *Window = @ptrCast(@alignCast(data.?));
         if (w.finishPending()) return;
         if (!r.ok) return w.toast(r.message);
-        w.patron = r.keep(capi.Patron);
-        w.keep(w.patron);
+        w.setPatron(r.keep(capi.Patron) orelse return);
         // Fill the sidebar's hold and checkout counts without waiting for those lists to be opened.
         if (w.lists[@intFromEnum(Section.holds)]) |l| l.loadIfNeeded();
         if (w.lists[@intFromEnum(Section.checkouts)]) |l| l.loadIfNeeded();
@@ -330,6 +335,7 @@ pub const Window = struct {
         w.detail.free();
         if (w.account) |acc| acc.free();
         if (w.borrowed) |b| b.free();
+        if (w.patron) |p| core.release(p);
         for (w.kept.items) |v| core.release(v);
         w.kept.deinit(core.gpa);
         @import("biblio").biblio_client_free(w.client);

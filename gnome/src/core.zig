@@ -15,6 +15,8 @@ pub const Client = biblio.Handle;
 /// returns, unless the callback takes it with `keep()`.
 pub const Result = struct {
     ok: bool,
+    /// What went wrong, such as `.hold_limit`; `.ok` on success.
+    kind: capi.Result = .ok,
     message: []const u8,
     value: ?*anyopaque = null,
     /// Image bytes from `fetchImage`, or the string a string-returning function gave.
@@ -155,6 +157,7 @@ fn deliver(data: ?*anyopaque) callconv(.c) c.gboolean {
     }
     var result: Result = .{
         .ok = job.result == .ok,
+        .kind = job.result,
         .message = if (job.err.message) |m| std.mem.span(m) else "Biblio couldn’t reach its library engine.",
         .value = job.value,
         .bytes = if (job.bytes) |b| b[0..job.len] else &.{},
@@ -248,6 +251,12 @@ pub fn formatName(a: std.mem.Allocator, code: []const u8, labels: []const capi.P
 pub fn sortName(a: std.mem.Allocator, id: []const u8, labels: []const capi.Pair) []const u8 {
     const z = a.dupeSentinel(u8, id, 0) catch return id;
     return take(a, capi.biblio_sort_name(z.ptr, labels.ptr, labels.len)) orelse id;
+}
+
+/// The year a publication date names ("c2019." gives "2019"), else the date as given.
+pub fn year(a: std.mem.Allocator, date: []const u8) []const u8 {
+    const z = a.dupeSentinel(u8, date, 0) catch return date;
+    return take(a, capi.biblio_year(z.ptr)) orelse date;
 }
 
 /// "wccls" from "WCCLS", "https://smpl.bibliocommons.com/", ...
