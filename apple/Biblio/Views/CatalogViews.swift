@@ -302,6 +302,8 @@ struct FacetFilterBar<Leading: View>: View {
                 }
                 .pickerStyle(.inline)
             }
+            // The system menu is built once; new counts (4K's, once every result is in) rebuild it.
+            .id(values.map { "\($0.value) \($0.count)" })
         }
     }
 }
@@ -319,11 +321,19 @@ struct FilterChip<Content: View>: View {
     var isActive: Bool
     @ViewBuilder var content: () -> Content
 
+    /// The label on show. A choice made in the menu shows once the menu has closed: while it
+    /// closes into the button, the button keeps its old width, which would clip the new label to
+    /// a sliver of its middle. (The menu's content reports appearing but not disappearing, so
+    /// the closing is timed.) `.id(shown)` doesn't reset these: they're outside the button.
+    @State private var shown: String?
+    @State private var isMenuOpen = false
+
     var body: some View {
         Menu {
             content()
+                .onAppear { isMenuOpen = true }
         } label: {
-            Text(selection ?? title)
+            Text(shown ?? title)
                 .lineLimit(1)
         }
         .menuStyle(.button)
@@ -331,14 +341,35 @@ struct FilterChip<Content: View>: View {
         .controlSize(.small)
         .tint(isActive ? .accentColor : .secondary)
         .fixedSize()
+        // A new button for a new label: an updated one keeps its old width for most of a second.
+        .id(shown)
+        .transaction(value: shown) { $0.animation = nil }
+        .task(id: selection) {
+            if isMenuOpen {
+                try? await Task.sleep(for: .seconds(0.6))
+                guard !Task.isCancelled else { return }
+                isMenuOpen = false
+            }
+            shown = selection
+        }
         .accessibilityLabel(selection.map { "\(title): \($0)" } ?? title)
     }
 }
 
+/// A holds list the filter bar filters: one card's, or several cards' together (counts summed).
+protocol HoldFiltering {
+    var holdFilter: ItemListModel.HoldFilter? { get }
+    func holdCount(_ filter: ItemListModel.HoldFilter) -> Int
+    func setHoldFilter(_ value: ItemListModel.HoldFilter?)
+}
+
+extension ItemListModel: HoldFiltering {}
+extension MergedListModel: HoldFiltering {}
+
 /// Ready / Not Ready / On Order filter for the holds list: a segmented control whose segments
 /// carry count badges (a system segmented Picker can only show plain text).
-struct HoldFilterBar: View {
-    var model: ItemListModel
+struct HoldFilterBar<Model: HoldFiltering>: View {
+    var model: Model
 
     @Namespace private var selectionSpace
 

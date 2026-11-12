@@ -1,19 +1,19 @@
 {
  "holds": [
   {
-   "bib": "S143C3401875",
+   "bib": "S143C1998906",
    "pickup": "Port FreeCommerce",
    "status": "NOT_YET_AVAILABLE",
    "position": 4
   },
   {
-   "bib": "S143C3549281",
+   "bib": "S143C3590568",
    "pickup": "Haven Landing",
    "status": "NOT_YET_AVAILABLE",
    "position": 8
   },
   {
-   "bib": "S143C2293185",
+   "bib": "S143C3240444",
    "pickup": "Mihira Branch",
    "status": "READY_FOR_PICKUP",
    "pickupByDays": 3,
@@ -30,37 +30,37 @@
   {
    "bib": "S143C2817856",
    "dueDays": 2,
-   "outDays": -19,
+   "outDays": 19,
    "renewed": 1
   },
   {
    "bib": "S143C2233714",
    "dueDays": 9,
-   "outDays": -12,
+   "outDays": 12,
    "renewed": 0
   },
   {
    "bib": "S143C4007192",
    "dueDays": 16,
-   "outDays": -5,
+   "outDays": 5,
    "renewed": 0
   }
  ],
  "history": [
   {
    "bib": "S143C2493124",
-   "outDays": -60,
-   "returnedDays": -45
+   "outDays": 60,
+   "returnedDays": 45
   },
   {
    "bib": "S143C2797100",
-   "outDays": -70,
-   "returnedDays": -55
+   "outDays": 70,
+   "returnedDays": 55
   },
   {
    "bib": "S143C1942175",
-   "outDays": -80,
-   "returnedDays": -65
+   "outDays": 80,
+   "returnedDays": 65
   }
  ]
 }

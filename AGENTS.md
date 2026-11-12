@@ -75,11 +75,12 @@
 * may subtly color availability statuses, and list items by the account's status.
 * build without compiler warnings.
 ## documentation
-* [README.md](README.md) for GitHub: features, requirements, building, project layout, and license (BSD 3-Clause).
+* [README.md](README.md) for GitHub, for the apps' users: features, requirements to run, and license (BSD 3-Clause), linking [DEVELOPMENT.md](DEVELOPMENT.md).
 * [NOTES-API.md](NOTES-API.md): the BiblioCommons gateway endpoints the app uses.
 * [CHANGELOG.md](CHANGELOG.md): user-facing changes per version, tagged `vX.Y` at each version bump.
 * [docs/specifications/](docs/specifications/README.md): external specifications.
-* [docs/screenshots/](docs/screenshots): the README's screenshots, one patron's visit from first launch to returns, captured against the fictional mock library (`BIBLIO_MOCK`, [core/mock/](core/mock/README.md)); draw placeholders for apps not yet captured with [tools/coming-soon.swift](tools/coming-soon.swift); blur any private details with [tools/blur.swift](tools/blur.swift); never capture the host Mac's screen.
+* [DEVELOPMENT.md](DEVELOPMENT.md), for those working on Biblio: building, project layout, testing, releasing, and next (to build, open, not planned), linking each component's README for its own details; delete items as they're resolved.
+* [docs/screenshots/](docs/screenshots): the README's screenshots, one patron's visit from first launch to returns, captured against the fictional mock library (`BIBLIO_MOCK`, [core/mock/](core/mock/README.md)); draw placeholders for apps not yet captured with [tools/coming-soon.swift](tools/coming-soon.swift); turn recordings into GIFs with [tools/gif.swift](tools/gif.swift); blur any private details with [tools/blur.swift](tools/blur.swift); never capture the host Mac's screen.
 ## cross-platform builds and testing
 * root [build.zig](build.zig): `zig build cross`.
 * CI: [.github/workflows/ci.yml](.github/workflows/ci.yml).

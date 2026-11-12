@@ -512,7 +512,8 @@ typedef struct {
     bool is_hold;
     bool ready;    /* a hold ready for pickup */
     bool on_order; /* waiting on copies the library hasn't received */
-    int64_t due_day; /* a checkout's due date as days since 1970-01-01; 0 for none */
+    int64_t due_day; /* a checkout's due date, or the day a history entry was borrowed (else
+                        returned), as days since 1970-01-01; 0 for none */
     uint8_t status_rank; /* a hold's place in the status sort: 0 ready, 1 in transit, 2 not yet available, 3 paused */
     const char *author; /* the first author; "" for none */
 } biblio_list_item;
@@ -558,6 +559,11 @@ bool biblio_list_apply_page(biblio_list *list, uint64_t generation, int64_t page
                             const biblio_list_page_t *result, int64_t now_ms);
 bool biblio_list_apply(biblio_list *list, uint64_t generation, int64_t page, const biblio_list_item *items,
                        size_t count, int64_t total, int64_t page_size, int64_t now_ms);
+/* biblio_list_apply with each item's library format code (library_formats parallels items;
+ * NULL, or a NULL entry, for unknown), which exact refined-format counts need. */
+bool biblio_list_apply_formats(biblio_list *list, uint64_t generation, int64_t page,
+                               const biblio_list_item *items, const char *const *library_formats,
+                               size_t count, int64_t total, int64_t page_size, int64_t now_ms);
 bool biblio_list_fail(biblio_list *list, uint64_t generation, int64_t page);
 bool biblio_list_is_stale(const biblio_list *list, int64_t now_ms);
 
@@ -592,6 +598,10 @@ const biblio_list_row *biblio_list_rows(const biblio_list *list, size_t *count);
 const char *const *biblio_list_ids(const biblio_list *list, size_t *count);
 /* The items' formats, most common first. */
 const biblio_format_count *biblio_list_formats(const biblio_list *list, size_t *count);
+/* A search's FORMAT facet counts, made exact for refined formats (count -1, unknown) once every
+ * item is loaded: counts parallels values and changes in place. */
+void biblio_list_format_facet_counts(const biblio_list *list, const char *const *values, int64_t *counts,
+                                     size_t count);
 
 /* ---------------------------------------------------------------------------------------
  * Merged lists

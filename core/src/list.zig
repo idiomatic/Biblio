@@ -43,8 +43,12 @@ pub const Item = struct {
     on_order: bool = false,
     /// The due date of a checkout as days since 1970-01-01; 0 when there is none.
     due_day: i64 = 0,
+    /// When a history entry was borrowed (else returned), as days since 1970-01-01; 0 for none.
+    borrowed_day: i64 = 0,
     /// Where a hold's status falls in the "status" sort: ready, in transit, not yet available, paused.
     status_rank: u8 = 0,
+    /// The library's own format code, when `format` refines it (formats.zig); "" if unknown.
+    library_format: []const u8 = "",
     /// formats.workKey of the title and author; the list computes it.
     work_key: []const u8 = "",
 
@@ -77,8 +81,16 @@ pub const Item = struct {
             .on_order = e.bib.onOrderCopies > 0 or
                 (if (e.bib.status) |s| std.mem.eql(u8, s, "ON_ORDER") else false),
             .due_day = if (e.checkout) |c| if (c.dueDate) |d| dayNumber(d) else 0 else 0,
+            .borrowed_day = if (e.history) |h| historyDay(h.checkoutDate, h.returnedDate) else 0,
             .status_rank = if (e.hold) |h| holdRank(h) else 0,
+            .library_format = e.bib.libraryFormat,
         };
+    }
+
+    /// The day a history row is dated by, as the apps show it: borrowed, else returned.
+    pub fn historyDay(checkout: ?[]const u8, returned: ?[]const u8) i64 {
+        if (checkout) |d| if (dayNumber(d) != 0) return dayNumber(d);
+        return if (returned) |d| dayNumber(d) else 0;
     }
 
     fn matches(it: Item, filter: HoldFilter) bool {
@@ -289,6 +301,7 @@ pub const List = struct {
             it.title = try a.dupe(u8, src.title);
             it.format = try a.dupeSentinel(u8, src.format, 0);
             it.author = try a.dupe(u8, src.author);
+            it.library_format = try a.dupe(u8, src.library_format);
             it.work_key = try formats.workKey(a, src.title, src.author);
             l.slots.items[i] = it;
             try l.positions.put(l.gpa, it.id, i);
@@ -467,6 +480,53 @@ pub const List = struct {
         return n;
     }
 
+    /// Exact counts for a search's FORMAT facet once every item is loaded: a refined code's
+    /// count (-1, unknown, from formats.refinePage) becomes its loaded items, and each base's
+    /// count drops by the items refined from it. `counts` parallels `values` and changes in
+    /// place; a count stays -1 while the loaded items can't tell it (pages to come, or a format
+    /// filter that kept a base's items from the server).
+    pub fn formatFacetCounts(l: *const List, values: []const []const u8, counts: []i64) void {
+        if (l.kind != .search or !l.loaded or l.refreshing or l.hasMore()) return;
+        for (values, counts) |value, *count| {
+            if (count.* >= 0 or !formats.isRefined(value)) continue;
+            // The bases present in the facet, and whether every item of each is loaded.
+            var present: usize = 0;
+            var known = true;
+            for (formats.rules) |r| {
+                if (!std.mem.eql(u8, r.refined, value)) continue;
+                const b = indexOf(values, r.base) orelse continue;
+                if (counts[b] <= 0) continue;
+                present += 1;
+                if (l.format) |f| known = known and std.mem.eql(u8, formats.serverCode(f, 0), r.base);
+            }
+            if (!known) continue;
+            // Items whose library code the app didn't give belong to the only base, if one.
+            var unattributed: i64 = 0;
+            for (l.slots.items) |slot| if (slot) |it| {
+                if (std.mem.eql(u8, it.format, value) and indexOf(values, it.library_format) == null) unattributed += 1;
+            };
+            if (unattributed > 0 and present > 1) continue;
+            var total: i64 = 0;
+            for (formats.rules) |r| {
+                if (!std.mem.eql(u8, r.refined, value)) continue;
+                const b = indexOf(values, r.base) orelse continue;
+                if (counts[b] <= 0) continue;
+                var n: i64 = if (present == 1) unattributed else 0;
+                for (l.slots.items) |slot| if (slot) |it| {
+                    if (std.mem.eql(u8, it.format, value) and std.mem.eql(u8, it.library_format, r.base)) n += 1;
+                };
+                counts[b] = @max(0, counts[b] - n);
+                total += n;
+            }
+            count.* = total;
+        }
+    }
+
+    fn indexOf(values: []const []const u8, value: []const u8) ?usize {
+        for (values, 0..) |v, i| if (std.mem.eql(u8, v, value)) return i;
+        return null;
+    }
+
     fn passesFormat(l: *const List, it: Item) bool {
         const f = l.format orelse return true;
         // The server filtered searches, except to refined formats.
@@ -639,7 +699,9 @@ pub const MergedRow = extern struct {
 /// that card's rows are viewed. The merge only orders what they have fetched.
 ///
 /// Rows interleave by server position (card breaking ties), or by the sort with the card as
-/// the secondary key. `due_date` merges a server sort by due date, which each list already has. Placeholders of every card keep the scroll bar's length.
+/// the secondary key. `due_date` merges a server sort by due date, which each list already has;
+/// borrowing history in the server's order interleaves by date, newest first. Placeholders of
+/// every card keep the scroll bar's length.
 pub const Merge = struct {
     gpa: Allocator,
     /// Borrowed; they must outlive the merge.
@@ -696,6 +758,13 @@ pub const Merge = struct {
         return n;
     }
 
+    /// Borrowing history in the library's order, newest first: the cards interleave by date.
+    fn byDate(m: *const Merge) bool {
+        if (m.sort != .server or m.lists.len == 0) return false;
+        for (m.lists) |l| if (l.kind != .history) return false;
+        return true;
+    }
+
     fn shows(m: *const Merge, login: usize) bool {
         return login < 64 and (m.cards >> @intCast(login)) & 1 == 1;
     }
@@ -721,7 +790,14 @@ pub const Merge = struct {
         return a.login < b.login;
     }
 
-    fn keyBefore(m: *const Merge, x: Item, y: Item) bool {
+    fn keyBefore(m: *const Merge, a: Entry, b: Entry) bool {
+        const x = a.item.?;
+        const y = b.item.?;
+        if (m.byDate()) {
+            // Newest first; undated rows (an app that gives no dates) interlace by position.
+            if (x.borrowed_day != y.borrowed_day and x.borrowed_day != 0 and y.borrowed_day != 0) return x.borrowed_day > y.borrowed_day;
+            return a.position < b.position;
+        }
         if (m.sort == .author) {
             // Items with no author go last.
             if ((x.author.len == 0) != (y.author.len == 0)) return x.author.len != 0;
@@ -749,7 +825,7 @@ pub const Merge = struct {
             for (queues, 0..) |q, login| {
                 if (heads[login] >= q.items.len) continue;
                 if (best) |b| {
-                    if (m.keyBefore(q.items[heads[login]].item.?, queues[b].items[heads[b]].item.?)) best = login;
+                    if (m.keyBefore(q.items[heads[login]], queues[b].items[heads[b]])) best = login;
                 } else best = login;
             }
             const b = best orelse break;
@@ -780,7 +856,7 @@ pub const Merge = struct {
                 }
             }
         }
-        if (m.sort == .server_title or m.sort == .author) try m.mergeByKey(&entries) else std.mem.sort(Entry, entries.items, m, lessThan);
+        if (m.sort == .server_title or m.sort == .author or m.byDate()) try m.mergeByKey(&entries) else std.mem.sort(Entry, entries.items, m, lessThan);
         m.rows.clearRetainingCapacity();
         for (entries.items) |e| {
             try m.rows.append(m.gpa, .{
@@ -1221,4 +1297,84 @@ test "searches filter refined formats and what was borrowed locally" {
     try testing.expectEqualStrings("S2", std.mem.span(l.rows.items[0].id.?));
     try l.setNotBorrowed(&.{});
     try testing.expectEqual(@as(usize, 3), l.rows.items.len);
+}
+
+test "a loaded search counts refined formats exactly" {
+    var l: List = .init(testing.allocator, .search);
+    defer l.deinit();
+    try l.reload(false);
+    var page = [_]Item{
+        .{ .id = "S1", .title = "Dune", .format = "UK", .library_format = "BLURAY" },
+        .{ .id = "S2", .title = "Dune", .format = "BLURAY", .library_format = "BLURAY", .server_index = 1 },
+        .{ .id = "S3", .title = "Dune", .format = "UK", .library_format = "DVD_PBLURAY", .server_index = 2 },
+        .{ .id = "S4", .title = "Dune", .format = "DVD", .library_format = "DVD", .server_index = 3 },
+    };
+    const values = [_][]const u8{ "BLURAY", "UK", "DVD", "DVD_PBLURAY" };
+    // Unknowable until every page is loaded.
+    try testing.expect(try l.apply(l.generation, 1, page[0..2], 4, 2, 0));
+    var counts = [_]i64{ 2, -1, 1, 1 };
+    l.formatFacetCounts(&values, &counts);
+    try testing.expectEqualSlices(i64, &.{ 2, -1, 1, 1 }, &counts);
+    try testing.expect(try l.request(2));
+    try testing.expect(try l.apply(l.generation, 2, page[2..4], 4, 2, 0));
+    l.formatFacetCounts(&values, &counts);
+    try testing.expectEqualSlices(i64, &.{ 1, 2, 1, 0 }, &counts);
+
+    // A server-side filter to another format leaves the bases' items unfetched.
+    try l.setFormat("DVD");
+    counts = .{ 2, -1, 1, 1 };
+    l.formatFacetCounts(&values, &counts);
+    try testing.expectEqualSlices(i64, &.{ 2, -1, 1, 1 }, &counts);
+    try l.setFormat(null);
+
+    // Without the library's codes, the refined items belong to the only base.
+    var bare = [_]Item{
+        .{ .id = "S1", .title = "Dune", .format = "UK" },
+        .{ .id = "S2", .title = "Dune", .format = "BLURAY", .server_index = 1 },
+    };
+    try l.reload(false);
+    try testing.expect(try l.apply(l.generation, 1, &bare, 2, 25, 0));
+    const two = [_][]const u8{ "BLURAY", "UK" };
+    var pair = [_]i64{ 2, -1 };
+    l.formatFacetCounts(&two, &pair);
+    try testing.expectEqualSlices(i64, &.{ 1, 1 }, &pair);
+    // But not when several bases could have given them.
+    counts = .{ 2, -1, 1, 1 };
+    l.formatFacetCounts(&values, &counts);
+    try testing.expectEqualSlices(i64, &.{ 2, -1, 1, 1 }, &counts);
+}
+
+test "merged borrowing history interleaves by date, newest first" {
+    var a: List = .init(testing.allocator, .history);
+    defer a.deinit();
+    var b: List = .init(testing.allocator, .history);
+    defer b.deinit();
+    try a.reload(false);
+    try b.reload(false);
+    var one = [_]Item{
+        .{ .id = "A1", .title = "x", .format = "BK", .borrowed_day = 300 },
+        .{ .id = "A2", .title = "x", .format = "BK", .server_index = 1, .borrowed_day = 100 },
+    };
+    var two = [_]Item{
+        .{ .id = "B1", .title = "x", .format = "BK", .borrowed_day = 400 },
+        .{ .id = "B2", .title = "x", .format = "BK", .server_index = 1, .borrowed_day = 200 },
+        .{ .id = "B3", .title = "x", .format = "BK", .server_index = 2, .borrowed_day = 50 },
+    };
+    try testing.expect(try a.apply(a.generation, 1, &one, 2, 25, 0));
+    try testing.expect(try b.apply(b.generation, 1, &two, 3, 25, 0));
+    var m: Merge = .init(testing.allocator, &.{ &a, &b });
+    defer m.deinit();
+    var rows = try m.buildRows();
+    const want = [_][]const u8{ "B1", "A1", "B2", "A2", "B3" };
+    for (want, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
+    // Undated rows (an app that gives no dates) interlace by position.
+    for (&one) |*it| it.borrowed_day = 0;
+    for (&two) |*it| it.borrowed_day = 0;
+    try a.reload(false);
+    try b.reload(false);
+    try testing.expect(try a.apply(a.generation, 1, &one, 2, 25, 0));
+    try testing.expect(try b.apply(b.generation, 1, &two, 3, 25, 0));
+    rows = try m.buildRows();
+    const by_position = [_][]const u8{ "A1", "B1", "A2", "B2", "B3" };
+    for (by_position, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
 }

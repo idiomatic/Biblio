@@ -102,6 +102,8 @@ struct BarcodeWithPicker: View {
 struct LibraryCardButton: View {
     @Bindable var session: WindowSession
     @Environment(\.isShort) private var isShort
+    /// The pager's height, measured from its pages, which sizes the popover and the sheet.
+    @State private var height: CGFloat = 300
 
     var body: some View {
         Button {
@@ -113,9 +115,9 @@ struct LibraryCardButton: View {
         .disabled(session.patron?.barcode == nil)
         .popover(isPresented: $session.showingLibraryCard) {
             if let card = session.card {
-                LibraryCardPager(current: card)
+                LibraryCardPager(current: card, height: $height)
                     .frame(idealWidth: 380)
-                    .presentationDetents(isShort ? [.large] : [.height(300)])
+                    .presentationDetents(isShort ? [.large] : [.height(height)])
             } else {
                 ProgressView().padding()
             }
@@ -127,10 +129,14 @@ struct LibraryCardButton: View {
 /// rotate between them.
 struct LibraryCardPager: View {
     var current: CardInfo
+    /// The tallest page's height: a paged TabView has none of its own.
+    @Binding var height: CGFloat
+    @State private var heights: [String: CGFloat] = [:]
     @State private var selection: String
 
-    init(current: CardInfo) {
+    init(current: CardInfo, height: Binding<CGFloat>) {
         self.current = current
+        _height = height
         _selection = State(initialValue: current.id)
     }
 
@@ -147,14 +153,23 @@ struct LibraryCardPager: View {
         let cards = cards
         TabView(selection: $selection) {
             ForEach(cards) { card in
-                page(card).tag(card.id)
+                page(card, dots: cards.count > 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { new in
+                        heights[card.id] = new
+                        let tallest = heights.values.max() ?? new
+                        if abs(tallest - height) > 0.5 { height = tallest }
+                    }
+                    .tag(card.id)
             }
         }
+        .frame(height: height)
         .tabViewStyle(.page(indexDisplayMode: cards.count > 1 ? .always : .never))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
     }
 
-    private func page(_ card: CardInfo) -> some View {
+    /// One card; `dots` leaves room below for the page indicator.
+    private func page(_ card: CardInfo, dots: Bool) -> some View {
         VStack(spacing: 12) {
             VStack(spacing: 2) {
                 Text(card.name)
@@ -170,7 +185,7 @@ struct LibraryCardPager: View {
                 .multilineTextAlignment(.center)
         }
         .padding()
-        .padding(.bottom, 24)
+        .padding(.bottom, dots ? 24 : 0)
     }
 }
 #endif

@@ -181,6 +181,16 @@ struct CombinedListView: View {
     var body: some View {
         let rows = model.rows
         List(selection: $selection) {
+            if section == .holds {
+                HoldFilterBar(model: model)
+                    // Matches the space above the bar, which the list's top margin adds.
+                    #if os(macOS)
+                    .padding(.bottom, 10)
+                    #else
+                    .padding(.bottom, 16)
+                    #endif
+                    .listRowSeparator(.hidden)
+            }
             ForEach(rows) { row in
                 CombinedRow(combined: combined, model: model, row: row, isSelected: selection == row.id) {
                     confirmCancel = ($0, row.login)
@@ -205,7 +215,7 @@ struct CombinedListView: View {
             if phase == .active { model.loadIfNeeded() }
         }
         .toolbar {
-            CombinedControls(model: model, library: combined.library, showsHoldFilter: section == .holds,
+            CombinedControls(model: model, library: combined.library,
                              borrowed: section == .holds ? combined.borrowedIndexes : [])
             #if os(macOS)
             ToolbarItem { InspectorToggle(session: combined.active) }
@@ -271,6 +281,8 @@ struct CombinedListView: View {
     private var emptyState: some View {
         if model.isEmpty && model.error == nil {
             ContentUnavailableView(emptyTitle, systemImage: section.systemImage)
+        } else if model.loaded && !model.isBackgroundFetching && model.error == nil && !model.rows.contains(where: { $0.entry != nil }) {
+            ContentUnavailableView("No Matching Items", systemImage: "line.3.horizontal.decrease.circle", description: Text("Try a different filter."))
         }
     }
 
@@ -326,35 +338,18 @@ private struct CombinedRow: View {
     }
 }
 
-/// Card, format, hold-status, and sort menus for a merged list.
+/// Format and sort menus for a merged list, as a card's own list has; holds filter by status in
+/// the list's `HoldFilterBar`.
 private struct CombinedControls: ToolbarContent {
     var model: MergedListModel
     var library: LibraryInfo
-    var showsHoldFilter: Bool
-    /// The cards' indexes for the "Not Borrowed" filter; none hides it.
+    /// The cards' indexes for the holds' "Not Borrowed" filter; none hides it.
     var borrowed: [BorrowedIndex] = []
+
+    private var filtered: Bool { model.format != nil || model.isNotBorrowed }
 
     var body: some ToolbarContent {
         ToolbarItemGroup {
-            if showsHoldFilter {
-                Menu {
-                    Picker("Show", selection: Binding(get: { model.holdFilter }, set: { model.setHoldFilter($0) })) {
-                        Text("All Holds").tag(ItemListModel.HoldFilter?.none)
-                        ForEach(ItemListModel.HoldFilter.allCases) { f in
-                            Text("\(f.title) (\(model.holdCount(f)))").tag(Optional(f))
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    if !borrowed.isEmpty, borrowed.allSatisfy(\.isComplete) || model.isNotBorrowed {
-                        Divider()
-                        Toggle("Not Borrowed", isOn: Binding(get: { model.isNotBorrowed },
-                                                             set: { model.setNotBorrowed($0 ? borrowed : []) }))
-                    }
-                } label: {
-                    Label("Status", systemImage: model.holdFilter == nil ? "tray" : "tray.fill")
-                }
-                .help("Filter holds by status")
-            }
             Menu {
                 Picker("Format", selection: Binding(get: { model.format }, set: { model.setFormat($0) })) {
                     Text("All Formats").tag(String?.none)
@@ -363,11 +358,16 @@ private struct CombinedControls: ToolbarContent {
                     }
                 }
                 .pickerStyle(.inline)
+                if !borrowed.isEmpty, borrowed.allSatisfy(\.isComplete) || model.isNotBorrowed {
+                    Divider()
+                    Toggle("Not Borrowed", isOn: Binding(get: { model.isNotBorrowed },
+                                                         set: { model.setNotBorrowed($0 ? borrowed : []) }))
+                }
             } label: {
-                Label("Format", systemImage: model.format == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                Label("Format", systemImage: filtered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
             }
             .help("Filter by format")
-            .disabled(model.formatChoices.isEmpty && model.format == nil)
+            .disabled(model.formatChoices.isEmpty && model.format == nil && borrowed.isEmpty)
 
             Menu {
                 Picker("Sort By", selection: Binding(get: { model.sort }, set: { model.setSort($0) })) {
@@ -421,32 +421,47 @@ struct CardsHoldSection: View {
     }
 
     private func holdRow(_ login: Int, _ hold: Hold) -> some View {
-        let session = combined.sessions[login]
-        return HStack(spacing: 8) {
+        let status = HStack(spacing: 8) {
             CardChip(style: combined.style(login))
             AccountStatusTag(status: .onHold(ready: hold.isReady, position: hold.position), hold: hold)
-            Spacer(minLength: 0)
-            if hold.canCancel {
-                Button(role: .destructive) {
-                    confirmCancel = login
-                } label: {
-                    if canceling == login { ProgressView().controlSize(.small) }
-                    else { Label("Cancel Hold", systemImage: "xmark.circle").fixedSize() }
-                }
-                .buttonStyle(.bordered)
-                .tint(.red)
-                .disabled(canceling != nil)
-                .confirmationDialog("Cancel \(combined.name(login))’s hold on “\(bib.title)”?",
-                                    isPresented: Binding(get: { confirmCancel == login }, set: { if !$0 { confirmCancel = nil } })) {
-                    Button("Cancel Hold", role: .destructive) {
-                        canceling = login
-                        Task {
-                            await session.cancel([hold])
-                            canceling = nil
-                        }
+        }
+        // Cancel Hold beside the status when they fit, else below it (a narrow inspector).
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                status
+                Spacer(minLength: 0)
+                cancelButton(login, hold)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                status
+                cancelButton(login, hold)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cancelButton(_ login: Int, _ hold: Hold) -> some View {
+        let session = combined.sessions[login]
+        if hold.canCancel {
+            Button(role: .destructive) {
+                confirmCancel = login
+            } label: {
+                if canceling == login { ProgressView().controlSize(.small) }
+                else { Label("Cancel Hold", systemImage: "xmark.circle").fixedSize() }
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+            .disabled(canceling != nil)
+            .confirmationDialog("Cancel \(combined.name(login))’s hold on “\(bib.title)”?",
+                                isPresented: Binding(get: { confirmCancel == login }, set: { if !$0 { confirmCancel = nil } })) {
+                Button("Cancel Hold", role: .destructive) {
+                    canceling = login
+                    Task {
+                        await session.cancel([hold])
+                        canceling = nil
                     }
-                    Button("Keep Hold", role: .cancel) {}
                 }
+                Button("Keep Hold", role: .cancel) {}
             }
         }
     }

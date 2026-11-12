@@ -697,7 +697,8 @@ pub const ListItem = extern struct {
     is_hold: bool,
     ready: bool,
     on_order: bool,
-    /// A checkout's due date as days since 1970-01-01; 0 for none.
+    /// A checkout's due date, or the day a history entry was borrowed (else returned), as days
+    /// since 1970-01-01; 0 for none.
     due_day: i64,
     /// A hold's place in the status sort: 0 ready, 1 in transit, 2 not yet available, 3 paused.
     status_rank: u8,
@@ -772,9 +773,16 @@ pub export fn biblio_list_request(l: *List, page: i64) bool {
 }
 
 pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*]const ListItem, count: usize, total: i64, page_size: i64, now_ms: i64) bool {
+    return biblio_list_apply_formats(l, generation, page, items, null, count, total, page_size, now_ms);
+}
+
+/// biblio_list_apply with each item's library format code (`library_formats` parallels
+/// `items`; NULL, or a NULL entry, for unknown), which exact refined-format counts need.
+pub export fn biblio_list_apply_formats(l: *List, generation: u64, page: i64, items: ?[*]const ListItem, library_formats: ?[*]const OptStr, count: usize, total: i64, page_size: i64, now_ms: i64) bool {
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
     const converted = must(arena.allocator().alloc(item_list.Item, if (items == null) 0 else count));
+    const history = l.kind == .history;
     for (converted, 0..) |*it, i| {
         const src = items.?[i];
         it.* = .{
@@ -786,9 +794,11 @@ pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*
             .is_hold = src.is_hold,
             .ready = src.ready,
             .on_order = src.on_order,
-            .due_day = src.due_day,
+            .due_day = if (history) 0 else src.due_day,
+            .borrowed_day = if (history) src.due_day else 0,
             .status_rank = src.status_rank,
             .author = std.mem.span(src.author),
+            .library_format = if (library_formats) |f| opt(f[i]) orelse "" else "",
         };
     }
     return must(l.apply(generation, page, converted, total, page_size, now_ms));
@@ -810,8 +820,10 @@ pub export fn biblio_list_apply_page(l: *List, generation: u64, page: i64, resul
             .ready = if (e.hold) |h| std.mem.eql(u8, std.mem.span(h.status), "READY_FOR_PICKUP") else false,
             .on_order = e.bib.on_order_copies > 0 or on_order_status,
             .due_day = if (e.checkout) |c| if (c.due_date) |d| item_list.dayNumber(std.mem.span(d)) else 0 else 0,
+            .borrowed_day = if (e.history) |h| item_list.Item.historyDay(opt(h.checkout_date), opt(h.returned_date)) else 0,
             .status_rank = if (e.hold) |h| item_list.Item.statusRank(std.mem.span(h.status)) else 0,
             .author = if (e.bib.authors_count > 0) std.mem.span(e.bib.authors[0]) else "",
+            .library_format = std.mem.span(e.bib.library_format),
         };
     }
     return must(l.apply(generation, page, converted, result.count, result.page_size, now_ms));
@@ -1050,6 +1062,17 @@ pub export fn biblio_merge_set_not_borrowed(m: *item_list.Merge, indexes: ?[*]co
 pub export fn biblio_list_ids(l: *const List, count: *usize) [*]const Str {
     count.* = l.ids.items.len;
     return l.ids.items.ptr;
+}
+
+/// A search's FORMAT facet counts, made exact for refined formats (-1, unknown) once every item
+/// is loaded: `counts` parallels `values` and changes in place.
+pub export fn biblio_list_format_facet_counts(l: *const List, values: ?[*]const Str, counts: ?[*]i64, count: usize) void {
+    if (values == null or counts == null or count == 0) return;
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const spans = must(arena.allocator().alloc([]const u8, count));
+    for (spans, values.?[0..count]) |*s, v| s.* = std.mem.span(v);
+    l.formatFacetCounts(spans, counts.?[0..count]);
 }
 
 pub export fn biblio_list_formats(l: *const List, count: *usize) [*]const FormatCount {

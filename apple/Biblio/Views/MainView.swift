@@ -340,6 +340,9 @@ struct StatusBar: View {
     /// screen's rounded corners (the iPhone 17's clip anything nearer at the bottom edge).
     @State private var barHeight: CGFloat = 24
     static let fadeDelay: Duration = .seconds(2)
+    /// A request still running after this long with nothing else happening fades too, so a
+    /// request that never reports back can't keep the bar up.
+    static let stalledDelay: Duration = .seconds(20)
 
     var body: some View {
         HStack(spacing: 6) {
@@ -372,8 +375,7 @@ struct StatusBar: View {
         .task(id: status.activity) {
             guard status.activity > 0 else { return }
             withAnimation(.easeIn(duration: 0.15)) { isShown = true }
-            guard status.active == 0 else { return }
-            try? await Task.sleep(for: Self.fadeDelay)
+            try? await Task.sleep(for: status.active == 0 ? Self.fadeDelay : Self.stalledDelay)
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.6)) { isShown = false }
         }

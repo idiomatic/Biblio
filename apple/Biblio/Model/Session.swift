@@ -252,20 +252,69 @@ final class WindowSession {
             show(String(localized: "Hold placed on “\(bib.title)”."))
             markHeld(bib)
             // Load the whole (short) holds list so the new hold can be found and canceled.
-            Task { await holdsList.reloadAll() }
+            Task { await reloadHolds(placed: [bib]) }
         } catch {
             if await holdPlacedDespite(error, bib) {
                 show(String(localized: "Hold placed on “\(bib.title)”. The library reported an error first, but the hold is there."))
                 markHeld(bib)
+                holdLoaded(bib.id)
             } else {
                 show(error.localizedDescription, isError: true)
             }
         }
     }
 
-    private func markHeld(_ bib: Bib) {
+    /// Marks a hold just placed on the catalog rows, one more person waiting, until the
+    /// holds list has it (`holdLoaded`).
+    func markHeld(_ bib: Bib) {
         for list in [searchList, newTitlesList] {
             list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
+        }
+        adjustPeopleWaiting(bib.id, by: 1)
+    }
+
+    /// Reloads the whole (short) holds list, so new holds can be found and canceled, and shows
+    /// their places in line.
+    func reloadHolds(placed bibs: [Bib]) async {
+        await holdsList.reloadAll()
+        for bib in bibs { holdLoaded(bib.id) }
+    }
+
+    /// Once the holds list has an item's hold: its place in line on the catalog rows, and the
+    /// library's count of people waiting (at least the place in line) in the rows and details.
+    func holdLoaded(_ bibID: String) {
+        guard let entry = holdsList.holdEntry(for: bibID) else { return }
+        for list in [searchList, newTitlesList] {
+            list.setAccountStatus(entry.accountStatus, hold: entry.hold, for: bibID)
+        }
+        let waiting = max(entry.bib.heldCopies, entry.hold?.position ?? 0)
+        if waiting > 0 {
+            for s in catalogSessions { s.setPeopleWaiting(bibID) { _ in waiting } }
+        }
+    }
+
+    /// Set by a combined window, whose catalog lists and item details are its first card's.
+    weak var catalogSession: WindowSession?
+
+    /// The sessions whose catalog rows and item details show this card's holds.
+    private var catalogSessions: [WindowSession] {
+        guard let other = catalogSession, other !== self else { return [self] }
+        return [self, other]
+    }
+
+    /// After placing (+1) or canceling (−1) a hold: the item's people waiting, until the
+    /// library says.
+    private func adjustPeopleWaiting(_ bibID: String, by delta: Int) {
+        for s in catalogSessions { s.setPeopleWaiting(bibID) { max(0, $0 + delta) } }
+    }
+
+    private func setPeopleWaiting(_ bibID: String, _ count: (Int) -> Int) {
+        for list in [searchList, newTitlesList] {
+            list.updateCatalogEntries(for: bibID) { $0.bib.heldCopies = count($0.bib.heldCopies) }
+        }
+        if let selected = selection, selected.id == bibID {
+            let held = count(selected.heldCopies)
+            if held != selected.heldCopies { selection?.heldCopies = held }
         }
     }
 
@@ -299,18 +348,16 @@ final class WindowSession {
     /// Places holds on several items, one at a time, and reports the outcome in one banner.
     func placeHolds(_ bibs: [Bib]) async {
         guard !isGuest else { requestSignIn(); return }
-        var placed = 0
+        var placed: [Bib] = []
         var firstError: String?
         for bib in bibs {
             do {
                 try await client.placeHold(bib, pickupBranch: nil)
-                placed += 1
-                for list in [searchList, newTitlesList] {
-                    list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
-                }
+                placed.append(bib)
+                markHeld(bib)
             } catch {
                 if await holdPlacedDespite(error, bib) {
-                    placed += 1
+                    placed.append(bib)
                     markHeld(bib)
                     continue
                 }
@@ -320,11 +367,11 @@ final class WindowSession {
             }
         }
         if let firstError {
-            show(inflected("Placed \(placed) of ^[\(bibs.count) hold](inflect: true). \(firstError)"), isError: true)
+            show(inflected("Placed \(placed.count) of ^[\(bibs.count) hold](inflect: true). \(firstError)"), isError: true)
         } else {
-            show(placed == 1 ? String(localized: "Hold placed.") : inflected("^[\(placed) hold](inflect: true) placed."))
+            show(placed.count == 1 ? String(localized: "Hold placed.") : inflected("^[\(placed.count) hold](inflect: true) placed."))
         }
-        if placed > 0 { Task { await holdsList.reloadAll() } }
+        if !placed.isEmpty { Task { await reloadHolds(placed: placed) } }
     }
 
     func cancel(_ requested: [Hold]) async {
@@ -340,6 +387,7 @@ final class WindowSession {
             }
             for hold in holds {
                 for list in [searchList, newTitlesList] { list.setAccountStatus(nil, for: hold.metadataId) }
+                adjustPeopleWaiting(hold.metadataId, by: -1)
             }
             holdsList.remove { entry in
                 if case .hold(let h) = entry.kind { return holds.contains(h) }

@@ -181,7 +181,11 @@ struct WindowRoot: View {
         let sessions = (users.isEmpty ? [""] : ordered).map { user -> WindowSession in
             existing[user] ?? WindowSession(library: library, username: user)
         }
-        for s in sessions { s.windowActions = windowActions }
+        for s in sessions {
+            s.windowActions = windowActions
+            // A combined window sets it again.
+            s.catalogSession = nil
+        }
         if let first = sessions.first, let previous, first !== previous { first.continueBrowsing(from: previous) }
         openUser = users.isEmpty ? "" : ordered.joined(separator: "\n")
         LibraryStore.shared.noteScope(subdomain: library.subdomain, usernames: ordered)

@@ -1,9 +1,14 @@
 name: CI
 
+# A push or pull request that changes only docs, across all its commits, skips CI. A version
+# tag (vX.Y) runs everything, then drafts a GitHub release from the builds (the release job).
 on:
   push:
     branches: [main]
+    tags: [ 'v*' ]
+    paths-ignore: [ '**.md', 'docs/**' ]
   pull_request:
+    paths-ignore: [ '**.md', 'docs/**' ]
 
 permissions:
   contents: read
@@ -94,6 +99,13 @@ jobs:
           path: .zig-cache/sysroots
           key: sysroots-${{ hashFiles('gnome/debian-sysroot.sh') }}
       - run: zig build cross --summary all
+      # The terminal app for every release target, small and with the mock library compiled out.
+      - name: Cross-compile the terminal app
+        run: |
+          for target in x86_64-linux-musl aarch64-linux-musl x86_64-macos aarch64-macos; do
+            zig build -Dtarget=$target -Doptimize=ReleaseSmall --prefix ../zig-out/cross/terminal-$target --summary failures
+          done
+        working-directory: tui
       - uses: actions/upload-artifact@v7
         with:
           name: cross
@@ -197,10 +209,74 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - run: dotnet build -p:Platform=${{ matrix.platform }}
+      - run: dotnet build -p:Platform=${{ matrix.platform }} -c ${{ env.CONFIGURATION }}
         working-directory: windows/Biblio
+        env:
+          CONFIGURATION: ${{ startsWith(github.ref, 'refs/tags/v') && 'Release' || 'Debug' }}
       - uses: actions/upload-artifact@v7
         with:
           name: windows-${{ matrix.platform }}
-          path: windows/Biblio/bin/${{ matrix.platform }}/Debug/
+          path: windows/Biblio/bin/${{ matrix.platform }}/${{ startsWith(github.ref, 'refs/tags/v') && 'Release' || 'Debug' }}/
           retention-days: 7
+
+  # A draft pre-release for a version tag, once every build passes: the terminal app, the GNOME
+  # app, and the Windows app. The Apple and Android apps need signing first.
+  release:
+    timeout-minutes: 15
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [core, distros, cross, gnome, apple, android, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the versions against the tag
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          status=0
+          expect() {
+            grep -qF -- "$2" "$1" || { echo "::error file=$1::expected $2 for $GITHUB_REF_NAME"; status=1; }
+          }
+          expect apple/Biblio.xcodeproj/project.pbxproj "MARKETING_VERSION = $v;"
+          expect android/app/build.gradle.kts "val appVersion = \"$v\""
+          expect windows/Biblio/Biblio.csproj "<Version>$v</Version>"
+          expect core/src/version.zig "\"$v.0\""
+          expect gnome/data/com.rbrian.Biblio.metainfo.xml "<release version=\"$v\""
+          expect CHANGELOG.md "## $v "
+          exit $status
+      - name: Take the release notes from the changelog
+        run: |
+          awk -v heading="## ${GITHUB_REF_NAME#v} " '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: '{cross,windows-*}'
+      - name: Package
+        run: |
+          v=$GITHUB_REF_NAME
+          mkdir dist
+          for d in artifacts/cross/terminal-*; do
+            tar -czf dist/biblio-terminal-$v-${d##*/terminal-}.tar.gz -C $d/bin biblio-tui
+          done
+          for d in artifacts/cross/gnome-*-linux-gnu; do
+            arch=${d##*/gnome-}
+            tar -czf dist/biblio-gnome-$v-${arch%-linux-gnu}-linux.tar.gz -C $d .
+          done
+          for d in artifacts/windows-*; do
+            (cd $d && zip -qr ../../dist/biblio-windows-$v-${d##*/windows-}.zip .)
+          done
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -l dist
+      - name: Draft the release
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --draft --prerelease --verify-tag
+          --title "Biblio ${GITHUB_REF_NAME#v}" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

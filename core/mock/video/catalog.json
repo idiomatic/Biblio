@@ -3069,19 +3069,19 @@
   "copies": [
    {
     "branch": "Port FreeCommerce",
-    "collection": "Adult Blu-ray",
+    "collection": "Adult Music CD",
     "call": "CD TV SANC",
     "status": "AVAILABLE"
    },
    {
     "branch": "Haven Landing",
-    "collection": "Adult Blu-ray",
+    "collection": "Adult Music CD",
     "call": "CD TV SANC",
     "status": "AVAILABLE"
    },
    {
     "branch": "Port FreeCommerce",
-    "collection": "Adult Blu-ray",
+    "collection": "Adult Music CD",
     "call": "CD TV SANC",
     "status": "HELD"
    }

@@ -8,8 +8,7 @@ patron front end to any public library catalog hosted on
 (`https://LIBRARY.bibliocommons.com/`).
 
 Search the catalog, place and cancel holds, and keep track of checkouts and borrowing
-history, all in an interface that follows each platform's own design. The apps share one
-core, libbiblio, written in Zig ([developer guide](core/README.md)), and each has a native UI.
+history, all in an interface that follows each platform's own design.
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each version.
 
 > Biblio is an independent project and isn't affiliated with or endorsed by BiblioCommons
@@ -17,14 +16,16 @@ core, libbiblio, written in Zig ([developer guide](core/README.md)), and each ha
 
 ## Screenshots
 
-One patron's visit, from first launch to checking on returns, in the Apple apps. The library, account, and card are made up; the titles and covers come from a real catalog.
+<img src="docs/screenshots/iphone-03-flow.gif" alt="On iPhone: searching for Interstellar, filtering to 4K Ultra HD Blu-ray, opening it as its copies by branch load, placing a hold, checking Holds, and showing the library card's barcode" width="300" align="right">
+
+One patron's visit, from first launch to picking up a film, in the Apple apps. The library, account, and card are made up; the titles and covers come from a real catalog.
 
 ### Get started
 
 <table>
 <tr>
-<td><img src="docs/screenshots/iphone-01-welcome.png" alt="Adding a library by name, with FirstLanding Public Library suggested" width="300"></td>
-<td><img src="docs/screenshots/iphone-02-sign-in.png" alt="Signing in with a library card number and PIN" width="300"></td>
+<td><img src="docs/screenshots/iphone-01-welcome.png" alt="Adding a library by name, with FirstLanding Public Library suggested" width="220"></td>
+<td><img src="docs/screenshots/iphone-02-sign-in.png" alt="Signing in with a library card number and PIN" width="220"></td>
 </tr>
 <tr>
 <td align="center">Add your library</td>
@@ -36,47 +37,31 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 
 <table>
 <tr>
-<td><img src="docs/screenshots/iphone-03-search.png" alt="Search results for a Sanctuary Moon box set, with the format filter open and its counts" width="220"></td>
-<td><img src="docs/screenshots/iphone-04-detail.png" alt="The Rise and Fall of Sanctuary Moon on DVD, with its copies by location and a Hold button" width="220"></td>
-<td><img src="docs/screenshots/iphone-05-hold.png" alt="The hold placed, with a Cancel Hold button" width="220"></td>
 <td>
 <picture>
-<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/android-coming-soon-dark.png">
-<img src="docs/screenshots/android-coming-soon.png" alt="Sketch of the Android app, coming soon" width="220">
+<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/iphone-03-search-dark.png">
+<img src="docs/screenshots/iphone-03-search.png" alt="Search results for Interstellar, with the format filter open: Blu-ray Disc, 4K Ultra HD Blu-ray, and DVD" width="220">
 </picture>
 </td>
+<td><img src="docs/screenshots/iphone-04-detail.png" alt="Interstellar on 4K Ultra HD Blu-ray, with its copies by branch and a pickup branch beside Hold" width="220"></td>
+<td><img src="docs/screenshots/iphone-05-hold.png" alt="The hold placed, eleventh in line, with a Cancel Hold button" width="220"></td>
 </tr>
 <tr>
 <td align="center">Search with filters</td>
-<td align="center">Copies by location</td>
+<td align="center">Copies by branch</td>
 <td align="center">Hold placed</td>
-<td align="center">Android</td>
 </tr>
 </table>
 
-<table>
-<tr>
-<td width="60%"><img src="docs/screenshots/ipad-04-detail.png" alt="Search results for Martha Wells on iPad, with Rogue Protocol and its copies by location in the inspector"></td>
-<td><img src="docs/screenshots/windows-04-detail.png" alt="Search results for Martha Wells in the Windows app, with Rogue Protocol and its copies by location in the detail pane"></td>
-<td>
-<picture>
-<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/gnome-coming-soon-dark.png">
-<img src="docs/screenshots/gnome-coming-soon.png" alt="Sketch of the GNOME app, coming soon">
-</picture>
-</td>
-</tr>
-<tr>
-<td align="center">iPadOS: details in the inspector</td>
-<td align="center">Windows: details in the pane</td>
-<td align="center">GNOME</td>
-</tr>
-</table>
+<img src="docs/screenshots/ipad-03-new-titles.png" alt="New Titles on iPad, just arrived, with the format filter open: Book, Downloadable Audiobook, eBook, Graphic Novel, Music CD, Picture Book, and Audiobook CD, each with its count">
+
+<img src="docs/screenshots/ipad-04-detail.png" alt="Search results for Martha Wells on iPad, with the audiobook of Rogue Protocol in the inspector: borrowed before in June 2026, a pickup branch beside Hold, and its copies by branch">
 
 ### Pick up
 
 <table>
 <tr>
-<td><img src="docs/screenshots/iphone-06-holds.png" alt="Holds, with the ones ready for pickup first" width="220"></td>
+<td><img src="docs/screenshots/iphone-06-holds.png" alt="Holds, ready for pickup first, with counts for Ready, Not Ready, and On Order" width="220"></td>
 <td><img src="docs/screenshots/iphone-07-card.png" alt="The library card as a scannable barcode" width="220"></td>
 <td width="58%"><img src="docs/screenshots/ipad-06-holds.png" alt="Holds on iPad, with a ready Murderbot book in the inspector"></td>
 </tr>
@@ -102,116 +87,107 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 </tr>
 </table>
 
+### And more
+
+<img src="docs/screenshots/ipad-10-household.png" alt="A household's two cards in one iPad window: both switched on in the sidebar, their holds together with each card's initial, and one card's hold in the inspector with a button to hold it for the other card too">
+
+<p align="center">A household's cards together in one window</p>
+
+<img src="docs/screenshots/mac-11-drag.gif" alt="On Mac: searching for Station Eleven and dragging its cover onto Holds, which places a hold">
+
+<p align="center">On Mac, drag a cover onto Holds to place a hold</p>
+
+<table>
+<tr>
+<td><img src="docs/screenshots/windows-04-detail.png" alt="Search results for Martha Wells in the Windows app, with Rogue Protocol and its copies by location in the detail pane"></td>
+<td>
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/gnome-coming-soon-dark.png">
+<img src="docs/screenshots/gnome-coming-soon.png" alt="Sketch of the GNOME app, coming soon">
+</picture>
+</td>
+<td width="18%">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/android-coming-soon-dark.png">
+<img src="docs/screenshots/android-coming-soon.png" alt="Sketch of the Android app, coming soon">
+</picture>
+</td>
+</tr>
+<tr>
+<td align="center">Windows</td>
+<td align="center">GNOME</td>
+<td align="center">Android</td>
+</tr>
+</table>
+
 ## Features
 
-**Catalog**
-- Search and advanced search (keyword, title, author, subject, …), with filters for format,
-  availability location, audience, content, language, publication date, and date added.
-  - The GNOME, Android, Windows, and terminal apps have no advanced search yet, and filter
-    only by format.
-- Explore New Titles: Just Arrived and On Order, with the library's "Filter by" options.
-  - The terminal app shows Just Arrived only.
-- Infinite scrolling. The scroll bar starts at the full list length, and only the pages you
-  actually scroll to are fetched.
-- Sort orders, including by number of people waiting, and by title, ignoring case and accents
-  and putting "Book 2" before "Book 10".
-- An inspector with item details and copy availability by location, loaded in the background.
+**Find something to borrow**
+- Search the catalog, narrow it by format, and, in the Apple apps, use advanced search with
+  filters for audience, content, language, publication date, and more.
+- Browse the library's new titles: what just arrived and what's on order.
+- Sort by title (accents and case don't matter, and "Book 2" comes before "Book 10"), by
+  author, by date, or by how many people are waiting.
+- Scroll through long lists without paging; only what you look at is loaded.
+- See every copy's status at each branch, with its collection and call number.
+- Spot what you've borrowed before: those items are marked, and their details say when.
+  Another format of something you've had, such as the audiobook of a book you read, is marked
+  more faintly, and Not Borrowed hides what you've already had in that format. Your borrowing
+  history stays on your device, and only while the library keeps it.
+- Find 4K Ultra HD Blu-ray discs as their own format, even where the library files them as
+  Blu-ray.
 
-**Your account**
-- Holds: place, cancel, and filter by Ready, Not Ready, and On Order, with count badges.
-- Checked out items and borrowing history, with counts in the sidebar.
-- Select several items in a list to place or cancel holds on all of them at once.
-- List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
-  checked out, or overdue.
-- Items you've borrowed before are marked, using your borrowing history, and item details say
-  when. The same title in another format (the audiobook of a book you read, the DVD of a 4K
-  disc) is marked more faintly. A Not Borrowed filter hides what you've already borrowed in that
-  format. The history is kept privately on the device, and only while the library keeps it.
-- 4K Ultra HD Blu-ray is its own format, even where a library files it as Blu-ray.
-- Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away on iPhone and iPad, or from a
-  Lock Screen or Control Center control. Choose the barcode type for each library in the account view; swipe between that library's logins' cards.
-  - The terminal app draws it in text on its Account tab.
-- On iPhone and iPad, sign in by scanning the barcode on your physical library card with the camera.
-- Settings for email, password, pickup location, language, and borrowing history, on each card's
-  page in the sidebar.
-  - The terminal app has them on its Account tab.
+**Holds and checkouts**
+- Place and cancel holds, choosing where to pick them up. Select several items to hold or
+  cancel them all at once.
+- See which holds are ready, in transit, or still waiting, and your place in line, with counts
+  in the sidebar.
+- Keep track of what's checked out and when it's due.
+- Each list row is tinted by where you stand with it: on hold, ready, checked out, or overdue.
 
-**App**
-- Multiple windows, each with its own session: different libraries, different accounts, or
-  different searches side by side.
-  - The terminal app runs one session per process.
-- Add a library by its subdomain (`wccls`) or URL, with autocomplete from the BiblioCommons
-  libraries directory.
-- Credentials are stored in the Keychain, and expired sessions are renewed without
-  interrupting you.
-  - GNOME uses the Secret Service, Android the Keystore, and Windows the Credential Locker.
-    The terminal app doesn't save passwords.
-- Guest browsing without an account.
-- Pull to refresh on iOS and iPadOS; View ▸ Refresh (⌘R) on macOS.
-- The version at the foot of the sidebar opens the About box (also Biblio ▸ About Biblio on macOS).
-  - The terminal app has no About box.
-- Drag an item's cover onto Holds to place a hold, or onto a search field to search for it.
-  On macOS this also works across windows.
-  - The terminal app has no drag and drop.
+**Your library card**
+- Show your card as a barcode the checkout desk can scan, Codabar or Code 128, whichever your
+  library uses. On iPhone and iPad it's one tap from the toolbar, the Lock Screen, or Control
+  Center, and you can swipe between the cards you have at that library.
+- On iPhone and iPad, sign in by scanning the barcode on your physical card.
+
+**Your accounts**
+- Use several libraries, and several cards at each, each in its own window, or see a
+  household's cards together in one window, each item marked with its card.
+- Change your email, password, pickup location, language, and borrowing history on each card's
+  page.
+- Your passwords are kept in the system's secure storage (the Keychain, Secret Service,
+  Android Keystore, or Windows Credential Locker), and you stay signed in as sessions expire.
+  The terminal app asks for your password each time instead.
+- Browse as a guest without signing in, then sign in when you want to place a hold.
+
+**Everywhere**
+- Each app follows its platform's own design, with the shortcuts and gestures you'd expect:
+  pull to refresh on iPhone and iPad, ⌘R on Mac, and drag a cover onto Holds or a search field
+  on Mac, iPhone, and iPad.
+
+The Apple apps have every feature; the GNOME, Android, Windows, and terminal apps are catching
+up, and don't yet offer advanced search, the Lock Screen card, or a combined window of several
+cards.
 
 ## Requirements
 
-| Platform | Needs |
+| Platform | Runs on |
 |---|---|
-| All | Zig 0.17 |
-| macOS, iOS, iPadOS | Xcode 26 or later; runs on macOS 15 or later, or iOS / iPadOS 18 or later |
-| GNOME | GTK 4, libadwaita 1.6 or later, libsecret |
-| Android | The Android SDK (API 36) and JDK 17 or later; the Gradle wrapper fetches Gradle |
-| Windows | The .NET 10 SDK and the Windows App SDK |
-| Terminal | Nothing more; any xterm-256color terminal on macOS or Linux |
-
-## Building
-
-The core's tests: `cd core && zig build test`. Then, per platform:
-
-| Platform | Steps |
-|---|---|
-| Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, put your signing team in `apple/Local.xcconfig` (one line, `DEVELOPMENT_TEAM = <team ID>`; Git ignores it), and build. Xcode runs `zig build` in `apple/` (see [apple/build.zig](apple/build.zig)), which builds the core as `zig-out/lib/PLATFORM/libbiblio.a` with its `BiblioCore` module in `zig-out/include`, before compiling, even after a clean. |
-| GNOME | `cd gnome && zig build run` |
-| Android | `cd android && ./gradlew installDebug` |
-| Windows | `cd windows/Biblio && dotnet build -p:Platform=x64` |
-| Terminal | `cd tui && zig build run` |
-
-`zig build cross` at the root cross-compiles the core for Linux, Windows, and Android, plus
-the GNOME app for Linux, into `zig-out/cross`. The GNOME app builds against Debian sysroots that
-[gnome/debian-sysroot.sh](gnome/debian-sysroot.sh) downloads (it needs a POSIX shell, curl, xz,
-and zstd), so it also targets 64-bit Raspberry Pi OS.
+| macOS, iOS, iPadOS | macOS 15 or later; iOS or iPadOS 18 or later |
+| GNOME | GTK 4, libadwaita 1.6 or later, and libsecret, on x86_64 or aarch64 Linux (including 64-bit Raspberry Pi OS) |
+| Android | Android 10 or later |
+| Windows | Windows 10 (1809) or later, x64 or ARM64 |
+| Terminal | Any xterm-256color terminal on macOS or Linux |
 
 To try it, add a library such as `wccls` or `multcolib`, then sign in with a library card and
 PIN, or choose **Browse as Guest**.
 
-## Project layout
+## Development
 
-| Folder | Contents |
-|---|---|
-| `core` | libbiblio, the shared Zig core, its C header, and its [developer guide](core/README.md) |
-| `apple` | The SwiftUI app for macOS, iOS, and iPadOS |
-| `gnome` | The GTK 4 and libadwaita app, in Zig |
-| `android` | The Jetpack Compose app, and its Zig JNI shim |
-| `windows` | The WinUI 3 app, in C#, and [how to build and test it](windows/README.md) |
-| `tui` | The terminal app, in Zig |
-| `docs` | [Screenshots](docs/screenshots/README.md) and [external specifications](docs/specifications/README.md) |
-| `tools` | Developer tools: [blur.swift](tools/blur.swift) blurs private details in screenshots, and [coming-soon.swift](tools/coming-soon.swift) draws the placeholder sketches |
-
-Inside the Apple app:
-
-| Folder | Contents |
-|---|---|
-| `apple/Biblio/Model` | Data models, per-window session state, and the list model that fetches pages for the core's item list |
-| `apple/Biblio/Net` | `BiblioClient` (an actor that handles sign-in and re-authentication), the gateway API calls, account-settings form handling, request throttling, and the library directory |
-| `apple/Biblio/Store` | Keychain access, and the saved libraries with their branding |
-| `apple/Biblio/Views` | SwiftUI views |
-| `apple/Shared` | Code shared by the app and its Lock Screen control |
-| `apple/BiblioControls` | The iOS Lock Screen and Control Center control that opens the library card |
-
-The app uses the same gateway API as the BiblioCommons web app. Account settings go through
-the website's own forms. [NOTES-API.md](NOTES-API.md) lists the endpoints. Requests are
-throttled to be gentle on library servers.
+The apps share one core, libbiblio, written in Zig, under a native UI on each platform.
+[DEVELOPMENT.md](DEVELOPMENT.md) covers building, the project layout, testing, releasing, and
+what comes next.
 
 ## How it was made
 

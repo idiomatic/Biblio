@@ -65,6 +65,8 @@ final class CombinedSession {
         history = MergedListModel(models: sessions.map(\.historyList))
         // A search from an item's author link, or a drop on the search field, shows the results.
         for session in sessions {
+            // A hold on any card updates the people waiting the first card's catalog shows.
+            session.catalogSession = sessions[0]
             session.searchRouter = { [weak self] text, type in
                 guard let self else { return }
                 primary.performSearch(text, searchType: type)
@@ -117,7 +119,7 @@ final class CombinedSession {
     /// Places holds for `target`, one request at a time, and reports the outcome in one banner,
     /// naming the card of each refusal.
     func placeHolds(_ bibs: [Bib], target: HoldTarget) async {
-        var placed: [Int: Int] = [:]
+        var placed: [Int: [Bib]] = [:]
         var refusals: [String] = []
         var full: Set<Int> = []
         var skipped = 0
@@ -135,21 +137,17 @@ final class CombinedSession {
             for c in candidates {
                 do {
                     try await sessions[c].client.placeHold(bib, pickupBranch: nil)
-                    placed[c, default: 0] += 1
+                    placed[c, default: []].append(bib)
                     counts[c] += 1
                     // Only the card that placed it holds it.
-                    for list in [sessions[c].searchList, sessions[c].newTitlesList] {
-                        list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
-                    }
+                    sessions[c].markHeld(bib)
                     break
                 } catch {
                     // A server error after the library placed the hold still counts.
                     if await sessions[c].holdPlacedDespite(error, bib) {
-                        placed[c, default: 0] += 1
+                        placed[c, default: []].append(bib)
                         counts[c] += 1
-                        for list in [sessions[c].searchList, sessions[c].newTitlesList] {
-                            list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
-                        }
+                        sessions[c].markHeld(bib)
                         break
                     }
                     let message = String(localized: "\(name(c))’s card: \(error.localizedDescription)")
@@ -159,8 +157,8 @@ final class CombinedSession {
                 }
             }
         }
-        let total = placed.values.reduce(0, +)
-        let by = placed.sorted { $0.key < $1.key }.map { "\(name($0.key)) \($0.value)" }.joined(separator: ", ")
+        let total = placed.values.reduce(0) { $0 + $1.count }
+        let by = placed.sorted { $0.key < $1.key }.map { "\(name($0.key)) \($0.value.count)" }.joined(separator: ", ")
         var parts: [String] = []
         if refusals.isEmpty {
             parts.append(total == 0 ? String(localized: "No holds placed.")
@@ -173,7 +171,7 @@ final class CombinedSession {
         }
         if skipped > 0 { parts.append(String(localized: "\(skipped) skipped: that card already has them.")) }
         primary.show(parts.joined(separator: " "), isError: total == 0 || !refusals.isEmpty)
-        for (c, _) in placed { Task { await sessions[c].holdsList.reloadAll() } }
+        for (c, bibs) in placed { Task { await sessions[c].reloadHolds(placed: bibs) } }
     }
 
     func list(for section: AppSection) -> MergedListModel? {

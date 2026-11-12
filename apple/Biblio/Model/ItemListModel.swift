@@ -105,7 +105,10 @@ final class ItemListModel {
     private(set) var isRefreshing = false
     private(set) var isBackgroundFetching = false
     private(set) var error: String?
+    /// The search's facets, with exact refined-format counts once the core can tell them.
     private(set) var facets: [Facet] = []
+    /// The facets as the latest page gave them.
+    @ObservationIgnored private var serverFacets: [Facet] = []
     private(set) var serverSorts: [String] = []
     /// The loaded entries' formats with counts, for account lists' format filter.
     private var localFormats: [(value: String, count: Int)] = []
@@ -155,7 +158,9 @@ final class ItemListModel {
 
     /// How many loaded holds fall under each hold filter.
     func holdCount(_ filter: HoldFilter) -> Int {
-        Int(biblio_list_hold_count(list.pointer, filter.core))
+        // The count comes from the core; reading `rows` makes a view showing it update as holds load.
+        _ = rows
+        return Int(biblio_list_hold_count(list.pointer, filter.core))
     }
 
     private var generation: UInt64 { biblio_list_state(list.pointer).generation }
@@ -196,6 +201,13 @@ final class ItemListModel {
         }
         let formats = biblio_list_formats(list.pointer, &count)
         localFormats = UnsafeBufferPointer(start: formats, count: count).map { (String(cString: $0.format), Int($0.count)) }
+        let newFacets = serverFacets.map { facet in
+            guard facet.id == "FORMAT" else { return facet }
+            var counts = facet.values.map { Int64($0.count) }
+            Core.withCStrings(facet.values.map(\.value)) { biblio_list_format_facet_counts(list.pointer, $0, &counts, counts.count) }
+            return Facet(id: facet.id, values: zip(facet.values, counts).map { ($0.value, Int($1)) })
+        }
+        if newFacets != facets { facets = newFacets }
         if newEntries != entries { entries = newEntries }
         if newRows != rows { rows = newRows }
     }
@@ -222,7 +234,7 @@ final class ItemListModel {
         error = nil
         if case .search(let q) = source, q.isEmpty {
             biblio_list_clear(list.pointer)
-            facets = []
+            serverFacets = []
             syncContent()
             return
         }
@@ -314,8 +326,9 @@ final class ItemListModel {
         if page == 1 && biblio_list_state(list.pointer).refreshing { entriesByID = [:] }
         // An item that moved between pages while fetching is kept at its first position.
         for entry in result.entries where entriesByID[entry.id] == nil { entriesByID[entry.id] = entry }
-        let strings = result.entries.flatMap { [$0.id, $0.bib.title, $0.bib.format, $0.bib.primaryAuthor ?? ""] }
+        let strings = result.entries.flatMap { [$0.id, $0.bib.title, $0.bib.format, $0.bib.primaryAuthor ?? "", $0.bib.libraryFormat] }
         Core.withCStrings(strings) { c in
+            let libraryFormats = result.entries.indices.map { c[5 * $0 + 4] }
             let items = result.entries.enumerated().map { i, e in
                 var ready = false
                 var isHold = false
@@ -327,16 +340,18 @@ final class ItemListModel {
                     rank = UInt8(h.rank.rawValue)
                 }
                 if case .checkout(let c) = e.kind, let due = c.dueDate { dueDay = DateText.dayNumber(due) }
-                return biblio_list_item(id: c[4 * i], title: c[4 * i + 1], format: c[4 * i + 2],
+                // History rows are dated as they show: borrowed, else returned.
+                if case .history(let h) = e.kind, let day = h.checkoutDate ?? h.returnedDate { dueDay = DateText.dayNumber(day) }
+                return biblio_list_item(id: c[5 * i], title: c[5 * i + 1], format: c[5 * i + 2],
                                         held_copies: Int64(e.bib.heldCopies), server_index: Int64(e.serverIndex),
                                         is_hold: isHold, ready: ready,
                                         on_order: e.bib.status == "ON_ORDER" || e.bib.onOrderCopies > 0,
-                                        due_day: Int64(dueDay), status_rank: rank, author: c[4 * i + 3])
+                                        due_day: Int64(dueDay), status_rank: rank, author: c[5 * i + 3])
             }
-            _ = biblio_list_apply(list.pointer, generation, Int64(page), items, items.count, Int64(result.count),
-                                  Int64(result.pageSize), Self.now)
+            _ = biblio_list_apply_formats(list.pointer, generation, Int64(page), items, libraryFormats, items.count,
+                                          Int64(result.count), Int64(result.pageSize), Self.now)
         }
-        if page == 1 || !result.facets.isEmpty { facets = result.facets }
+        if page == 1 || !result.facets.isEmpty { serverFacets = result.facets }
         if !result.sortOptions.isEmpty { serverSorts = result.sortOptions }
         if case .server(let s) = sort, s.isEmpty, let applied = result.appliedSort { sort = .server(applied) }
         syncContent()
@@ -400,8 +415,6 @@ final class ItemListModel {
 
     func setFormat(_ value: String?) {
         if source.isSearch {
-            // The server can't filter a refined format (4K filed as Blu-ray); the core list does.
-            Core.withCStrings([value]) { biblio_list_set_format(list.pointer, $0[0]) }
             setFacet("FORMAT", value)
         } else {
             withAnimation {
@@ -446,6 +459,8 @@ final class ItemListModel {
     func setFacet(_ id: String, _ value: String?) {
         guard facetFilters[id] != value else { return }
         facetFilters[id] = value
+        // The server can't filter a refined format (4K filed as Blu-ray); the core list does.
+        if id == "FORMAT" { Core.withCStrings([value]) { biblio_list_set_format(list.pointer, $0[0]) } }
         reload()
     }
 
@@ -473,13 +488,28 @@ final class ItemListModel {
 
     /// Updates the account status shown on catalog rows for an item (after placing or canceling a hold).
     func setAccountStatus(_ status: AccountStatus?, hold: Hold? = nil, for metadataId: String) {
+        updateCatalogEntries(for: metadataId) {
+            $0.catalogStatus = status
+            $0.catalogHold = hold
+        }
+    }
+
+    /// Changes an item's catalog rows in place (its account status, its people waiting).
+    func updateCatalogEntries(for metadataId: String, _ change: (inout ListEntry) -> Void) {
         var changed = false
         for (id, entry) in entriesByID where entry.bib.id == metadataId && entry.kind == .catalog {
-            entriesByID[id]?.catalogStatus = status
-            entriesByID[id]?.catalogHold = hold
+            var updated = entry
+            change(&updated)
+            guard updated != entry else { continue }
+            entriesByID[id] = updated
             changed = true
         }
         if changed { withAnimation { syncContent() } }
+    }
+
+    /// This list's entry for an item's hold, as the library last listed it.
+    func holdEntry(for metadataId: String) -> ListEntry? {
+        entries.first { $0.bib.id == metadataId && $0.hold != nil }
     }
 
     /// This account's hold on an item, if this list knows it.

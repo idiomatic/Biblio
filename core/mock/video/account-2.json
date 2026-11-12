@@ -1,13 +1,13 @@
 {
  "holds": [
   {
-   "bib": "S143C4294964",
+   "bib": "S143C2461462",
    "pickup": "Milu Station",
    "status": "NOT_YET_AVAILABLE",
    "position": 4
   },
   {
-   "bib": "S143C4379862",
+   "bib": "S143C2938768",
    "pickup": "Milu Station",
    "status": "NOT_YET_AVAILABLE",
    "position": 8
@@ -30,37 +30,37 @@
   {
    "bib": "S143C3920532",
    "dueDays": 2,
-   "outDays": -19,
+   "outDays": 19,
    "renewed": 1
   },
   {
    "bib": "S143C4376803",
    "dueDays": 9,
-   "outDays": -12,
+   "outDays": 12,
    "renewed": 0
   },
   {
    "bib": "S143C4374344",
    "dueDays": 16,
-   "outDays": -5,
+   "outDays": 5,
    "renewed": 0
   }
  ],
  "history": [
   {
    "bib": "S143C4200103",
-   "outDays": -60,
-   "returnedDays": -45
+   "outDays": 60,
+   "returnedDays": 45
   },
   {
    "bib": "S143C3441003",
-   "outDays": -70,
-   "returnedDays": -55
+   "outDays": 70,
+   "returnedDays": 55
   },
   {
    "bib": "S143C2816870",
-   "outDays": -80,
-   "returnedDays": -65
+   "outDays": 80,
+   "returnedDays": 65
   }
  ]
 }

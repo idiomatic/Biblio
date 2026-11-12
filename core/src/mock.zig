@@ -67,6 +67,8 @@ const Entry = struct {
     title: []const u8,
     author: []const u8,
     format: []const u8,
+    /// PHYSICAL, or DIGITAL for an eBook or downloadable audiobook, whose copies are licenses.
+    material_type: []const u8,
     held: i64,
     on_order: i64,
     is_new: bool,
@@ -180,6 +182,7 @@ const Mock = struct {
                 .title = e.get("title").str(a) orelse "",
                 .author = if (authors.len > 0) authors[0] else "",
                 .format = e.get("format").str(a) orelse "UNKNOWN",
+                .material_type = e.get("materialType").str(a) orelse "PHYSICAL",
                 .held = e.get("held").int() orelse 0,
                 .on_order = e.get("onOrder").int() orelse 0,
                 .is_new = e.get("new").boolean() orelse false,
@@ -411,8 +414,8 @@ const Mock = struct {
             }
         }
         const total: i64 = @intCast(e.copies.len);
-        try w.print("}},\"policy\":{{\"materialType\":\"PHYSICAL\",\"holdable\":true}},\"availability\":{{\"status\":\"{s}\",\"heldCopies\":{d},\"availableCopies\":{d},\"totalCopies\":{d},\"onOrderCopies\":{d}}}}}", .{
-            e.status(), e.held, e.count("AVAILABLE"), total, e.on_order,
+        try w.print("}},\"policy\":{{\"materialType\":\"{s}\",\"holdable\":true}},\"availability\":{{\"status\":\"{s}\",\"heldCopies\":{d},\"availableCopies\":{d},\"totalCopies\":{d},\"onOrderCopies\":{d}}}}}", .{
+            e.material_type, e.status(), e.held, e.count("AVAILABLE"), total, e.on_order,
         });
     }
 

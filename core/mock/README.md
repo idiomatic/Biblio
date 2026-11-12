@@ -22,11 +22,11 @@ BIBLIO_MOCK=$PWD/core/mock/books  open Biblio.app    # Murderbot and other scien
 | File | Holds |
 |---|---|
 | `shared/library.json` | name, brand color, labels, branches, and the patrons (`patron`, then `patrons`) |
-| `video/`, `books/` | a theme: `catalog.json` (titles, copies by branch, people waiting, new or on order), `account.json` and `account-2.json` (each patron's holds, checkouts, history, as day offsets from today; the two share some held titles; `perihelion`'s history includes a title held again and, in books, a held title's audiobook, for "borrowed before") |
+| `video/`, `books/` | a theme: `catalog.json` (titles, copies by branch, people waiting, new or on order), `account.json` and `account-2.json` (each patron's holds, checkouts, history, as day offsets from today; neither holds a title the other does, since a list row shows one card's chip; `perihelion`'s history includes a title held again and, in books, a held title's audiobook, for "borrowed before") |
 
-Each catalog also carries in-universe media in other formats, appended after the main titles: Murderbot audiobook CDs, the fictional serial's soundtrack (`Music CD`), and large print where the source library has it.
+Each catalog also carries in-universe media in other formats, appended after the main titles: Murderbot audiobook CDs, the fictional serial's soundtrack (`Music CD`), and large print where the source library has it. The books theme also has, as new arrivals, the formats of a library's New Titles: eBook and Downloadable Audiobook (`materialType` `DIGITAL`, their copies licenses at "Online"), Graphic Novel, Picture Book, and soundtrack Music CDs.
 
-`generate.mjs` rebuilds `video/` and `books/` from a live library's public catalog (`node generate.mjs [subdomain]`, default `wccls`), inventing the copies and the account deterministically.
+`generate.mjs` rebuilds `video/` and `books/` from a live library's public catalog (`node generate.mjs [subdomain]`, default `wccls`), inventing the copies and the account deterministically. `node generate.mjs --append` adds only the books theme's other formats to its existing catalog, leaving everything else as it is.
 
 ## Not covered
 

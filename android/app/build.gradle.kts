@@ -7,8 +7,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-/// The app version; versionCode is major × 100 + minor, so 1.8 is 108.
-val appVersion = "1.8"
+/// The app version; versionCode is major × 100 + minor, so 1.9 is 109.
+val appVersion = "1.9"
 /// ELF thread-local storage in the Zig core needs API 29; the native build targets the same level.
 val minApi = 29
 
