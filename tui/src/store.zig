@@ -2,6 +2,8 @@
 //! (or ~/.config/biblio/tui.json). Passwords are never saved: the app asks for one when it
 //! signs in and keeps it in memory only while that account is open.
 //!
+//! Each library's barcode type (Codabar or Code 128) is saved beside it, in barcodes.json.
+//!
 //! What each user borrowed before (the core's borrowed index) is a cache, kept private in
 //! $XDG_CACHE_HOME/biblio/borrowed/SUBDOMAIN/USERNAME.json (or ~/.cache/…), where backups
 //! don't look, and deleted with the user or library.
@@ -12,17 +14,24 @@ const LibraryInfo = @import("biblio").models.LibraryInfo;
 const private_dir: std.Io.File.Permissions = .fromMode(0o700);
 const private_file: std.Io.File.Permissions = .fromMode(0o600);
 
+pub const Symbology = @import("biblio").models.Symbology;
+
 pub const Store = struct {
     io: std.Io,
     /// Holds every library ever loaded or added; it only grows, and the list is small.
+    /// Temporary allocations (JSON to save, paths) use `gpa` instead.
     arena: std.heap.ArenaAllocator,
+    gpa: std.mem.Allocator,
     path: []const u8,
+    /// barcodes.json: subdomain to "codabar" or "code128".
+    barcodes_path: []const u8 = "",
+    barcodes: std.json.ArrayHashMap([]const u8) = .{},
     /// The borrowed indexes' directory.
     borrowed_dir: []const u8 = "",
     libraries: std.ArrayList(LibraryInfo) = .empty,
 
     pub fn load(io: std.Io, gpa: std.mem.Allocator, env: *const std.process.Environ.Map) Store {
-        var s: Store = .{ .io = io, .arena = .init(gpa), .path = "" };
+        var s: Store = .{ .io = io, .arena = .init(gpa), .gpa = gpa, .path = "" };
         const a = s.arena.allocator();
         s.path = if (env.get("XDG_CONFIG_HOME")) |dir|
             std.fs.path.join(a, &.{ dir, "biblio", "tui.json" }) catch ""
@@ -32,6 +41,10 @@ pub const Store = struct {
             std.fs.path.join(a, &.{ dir, "biblio", "borrowed" }) catch ""
         else
             std.fs.path.join(a, &.{ env.get("HOME") orelse ".", ".cache", "biblio", "borrowed" }) catch "";
+        if (std.fs.path.dirname(s.path)) |dir| s.barcodes_path = std.fs.path.join(a, &.{ dir, "barcodes.json" }) catch "";
+        if (std.Io.Dir.cwd().readFileAlloc(io, s.barcodes_path, a, .limited(1 << 16))) |text| {
+            s.barcodes = std.json.parseFromSliceLeaky(std.json.ArrayHashMap([]const u8), a, text, .{ .allocate = .alloc_always }) catch .{};
+        } else |_| {}
         const text = std.Io.Dir.cwd().readFileAlloc(io, s.path, a, .limited(1 << 20)) catch return s;
         const list = std.json.parseFromSliceLeaky([]LibraryInfo, a, text, .{ .ignore_unknown_fields = true, .allocate = .alloc_always }) catch return s;
         s.libraries.appendSlice(a, list) catch {};
@@ -39,10 +52,28 @@ pub const Store = struct {
     }
 
     fn save(s: *Store) void {
+        s.write(s.path, s.libraries.items);
+    }
+
+    fn write(s: *Store, path: []const u8, value: anytype) void {
+        if (path.len == 0) return;
+        const text = std.json.Stringify.valueAlloc(s.gpa, value, .{ .whitespace = .indent_2, .emit_null_optional_fields = false }) catch return;
+        defer s.gpa.free(text);
+        if (std.fs.path.dirname(path)) |dir| std.Io.Dir.cwd().createDirPath(s.io, dir) catch {};
+        std.Io.Dir.cwd().writeFile(s.io, .{ .sub_path = path, .data = text }) catch {};
+    }
+
+    /// The barcode type chosen for a library's cards; Codabar until one is chosen.
+    pub fn symbology(s: *const Store, subdomain: []const u8) Symbology {
+        const name = s.barcodes.map.get(subdomain) orelse return .codabar;
+        return if (std.mem.eql(u8, name, "code128")) .code128 else .codabar;
+    }
+
+    pub fn setSymbology(s: *Store, subdomain: []const u8, value: Symbology) void {
         const a = s.arena.allocator();
-        const text = std.json.Stringify.valueAlloc(a, s.libraries.items, .{ .whitespace = .indent_2, .emit_null_optional_fields = false }) catch return;
-        if (std.fs.path.dirname(s.path)) |dir| std.Io.Dir.cwd().createDirPath(s.io, dir) catch {};
-        std.Io.Dir.cwd().writeFile(s.io, .{ .sub_path = s.path, .data = text }) catch {};
+        const key = if (s.barcodes.map.getKey(subdomain)) |k| k else a.dupe(u8, subdomain) catch return;
+        s.barcodes.map.put(a, key, if (value == .code128) "code128" else "codabar") catch return;
+        s.write(s.barcodes_path, s.barcodes);
     }
 
     pub fn find(s: *const Store, subdomain: []const u8) ?usize {
@@ -53,7 +84,8 @@ pub const Store = struct {
     /// Adds a library from the core's `LibraryInfo` (copied), or updates it, keeping its users.
     pub fn upsert(s: *Store, info: LibraryInfo) void {
         const a = s.arena.allocator();
-        const text = std.json.Stringify.valueAlloc(a, info, .{}) catch return;
+        const text = std.json.Stringify.valueAlloc(s.gpa, info, .{}) catch return;
+        defer s.gpa.free(text);
         var copy = std.json.parseFromSliceLeaky(LibraryInfo, a, text, .{ .allocate = .alloc_always }) catch return;
         if (s.find(info.subdomain)) |i| {
             copy.users = s.libraries.items[i].users;
@@ -68,7 +100,9 @@ pub const Store = struct {
     pub fn remove(s: *Store, index: usize) void {
         const lib = s.libraries.orderedRemove(index);
         s.save();
-        const dir = std.fs.path.join(s.arena.allocator(), &.{ s.borrowed_dir, lib.subdomain }) catch return;
+        if (s.barcodes.map.orderedRemove(lib.subdomain)) s.write(s.barcodes_path, s.barcodes);
+        const dir = std.fs.path.join(s.gpa, &.{ s.borrowed_dir, lib.subdomain }) catch return;
+        defer s.gpa.free(dir);
         std.Io.Dir.cwd().deleteTree(s.io, dir) catch {};
     }
 
@@ -128,6 +162,8 @@ pub const Store = struct {
         for (lib.users) |u| if (!std.mem.eql(u8, u, username)) users.append(a, u) catch {};
         lib.users = users.items;
         s.save();
-        s.deleteBorrowed(s.borrowedPath(a, lib.subdomain, username));
+        var scratch = std.heap.ArenaAllocator.init(s.gpa);
+        defer scratch.deinit();
+        s.deleteBorrowed(s.borrowedPath(scratch.allocator(), lib.subdomain, username));
     }
 };
