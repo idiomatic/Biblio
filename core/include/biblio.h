@@ -140,6 +140,7 @@ typedef struct {
     int64_t available_copies;
     int64_t total_copies;
     int64_t on_order_copies;
+    const char *library_format; /* the library's own code; format may refine it (4K filed as Blu-ray) */
 } biblio_bib_t;
 
 typedef struct {
@@ -469,6 +470,8 @@ typedef enum {
     BIBLIO_LIST_SORT_TITLE,
     BIBLIO_LIST_SORT_DUE_DATE, /* soonest first, no date last; checkouts */
     BIBLIO_LIST_SORT_STATUS,   /* ready, in transit, not yet available, paused; holds */
+    BIBLIO_LIST_SORT_SERVER_TITLE, /* a server title sort, merged by title across logins */
+    BIBLIO_LIST_SORT_AUTHOR,   /* a server author sort, merged by author across logins */
 } biblio_list_sort;
 
 typedef enum {
@@ -490,6 +493,7 @@ typedef struct {
     bool on_order; /* waiting on copies the library hasn't received */
     int64_t due_day; /* a checkout's due date as days since 1970-01-01; 0 for none */
     uint8_t status_rank; /* a hold's place in the status sort: 0 ready, 1 in transit, 2 not yet available, 3 paused */
+    const char *author; /* the first author; "" for none */
 } biblio_list_item;
 
 /* A fetched item at a server position, or a placeholder (id NULL) for one not yet fetched. */
@@ -551,7 +555,8 @@ int64_t biblio_list_next_background_page(biblio_list *list);
 void biblio_list_end_background(biblio_list *list);
 
 void biblio_list_set_sort(biblio_list *list, biblio_list_sort sort);
-/* The format filter for account lists, applied locally; NULL for all. */
+/* The format filter, applied locally on account lists (and on searches for a refined format,
+ * which the server can't filter); NULL for all. */
 void biblio_list_set_format(biblio_list *list, const char *format);
 void biblio_list_set_hold_filter(biblio_list *list, biblio_hold_filter filter);
 /* Returns how many items were removed. */
@@ -599,6 +604,79 @@ int64_t biblio_merge_total(const biblio_merge *merge);
 int64_t biblio_merge_hold_count(const biblio_merge *merge, biblio_hold_filter filter);
 /* Valid until the next call that changes a list or the merge. */
 const biblio_merged_row *biblio_merge_rows(biblio_merge *merge, size_t *count);
+
+/* ---------------------------------------------------------------------------------------
+ * Borrowed before
+ *
+ * One login's borrowing history as an index of what the patron borrowed. No network: a sync
+ * asks for history pages (biblio_history with sort NULL), the app fetches each and hands it
+ * back, and the call returns the next page, 0 when done:
+ *
+ *     for (int64_t p = biblio_borrowed_index_begin_sync(ix); p > 0;)
+ *         p = fetched ? biblio_borrowed_index_apply_page(ix, p, page)
+ *                     : (biblio_borrowed_index_fail(ix), 0);
+ *
+ * The first sync fetches every page and resumes where it stopped; later ones fetch from page 1
+ * until a known entry, and refetch everything (noted in biblio_incidents) if history doesn't
+ * read as newest first or shrank. The app keeps the exported bytes (they are private: store
+ * them protected), deletes them on sign-out, and clears the index when the library's
+ * borrowing history is off. Use an index from one thread.
+ * ------------------------------------------------------------------------------------- */
+
+typedef struct biblio_borrowed_index biblio_borrowed_index;
+
+typedef enum {
+    BIBLIO_BORROWED_NONE = 0,
+    BIBLIO_BORROWED_SAME,         /* this record, or this work in the same format */
+    BIBLIO_BORROWED_OTHER_FORMAT, /* this work in another format */
+} biblio_borrowed_match;
+
+typedef struct {
+    biblio_borrowed_match match;
+    const char *format;        /* the borrowed format code */
+    int64_t count;             /* times borrowed (in that format) */
+    const char *last_checkout; /* YYYY-MM-DD of the latest; NULL if unknown */
+    const char *last_returned;
+} biblio_borrowed_t;
+
+typedef struct {
+    int64_t fetched; /* entries indexed */
+    int64_t total;   /* the history's size, as last reported */
+    bool complete;   /* every page fetched once; the "Not Borrowed" filter is offered */
+    bool syncing;
+} biblio_borrowed_progress_t;
+
+biblio_borrowed_index *biblio_borrowed_index_new(void);
+void biblio_borrowed_index_free(biblio_borrowed_index *index);
+/* false (leaving the index empty) if unreadable or from another version: sync afresh. */
+bool biblio_borrowed_index_import(biblio_borrowed_index *index, const unsigned char *bytes, size_t len);
+/* Free with biblio_free; NULL if out of memory. */
+unsigned char *biblio_borrowed_index_export(const biblio_borrowed_index *index, size_t *len);
+void biblio_borrowed_index_clear(biblio_borrowed_index *index);
+/* The first page to fetch, or 0 if a sync is running. */
+int64_t biblio_borrowed_index_begin_sync(biblio_borrowed_index *index);
+/* Forgets the index and fetches it all again (Refresh Borrowing History): page 1, or 0 when a
+ * running sync carries on from page 1 instead. */
+int64_t biblio_borrowed_index_rebuild(biblio_borrowed_index *index);
+/* The next page to fetch, or 0 when the sync is done. */
+int64_t biblio_borrowed_index_apply_page(biblio_borrowed_index *index, int64_t page, const biblio_list_page_t *result);
+void biblio_borrowed_index_fail(biblio_borrowed_index *index);
+biblio_borrowed_progress_t biblio_borrowed_index_progress(const biblio_borrowed_index *index);
+/* Changes whenever matches may have. */
+uint64_t biblio_borrowed_index_generation(const biblio_borrowed_index *index);
+/* Pass the bib's id, format, title, and first author (NULL for none). Strings stay valid until
+ * the index is cleared, rebuilt, or imported. */
+biblio_borrowed_t biblio_borrowed(const biblio_borrowed_index *index, const char *metadata_id,
+                                  const char *format, const char *title, const char *author);
+/* "Not Borrowed": shows only works none of the indexes borrowed in the item's format; count 0
+ * turns it off. The indexes must outlive the setting; set it again after they change. Searches
+ * then need every page (biblio_list_needs_all_pages). */
+void biblio_list_set_not_borrowed(biblio_list *list, const biblio_borrowed_index *const *indexes, size_t count);
+void biblio_merge_set_not_borrowed(biblio_merge *merge, const biblio_borrowed_index *const *indexes, size_t count);
+/* A refined format (4K Ultra HD Blu-ray where the library files it as Blu-ray). Searches ask the
+ * server for its base and filter locally, so pass it to biblio_list_set_format on search lists
+ * too; the FORMAT facet lists it after its base with count -1 (unknown). No network. */
+bool biblio_format_is_refined(const char *code);
 
 #ifdef __cplusplus
 }

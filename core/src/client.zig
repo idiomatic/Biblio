@@ -12,6 +12,7 @@ const http = @import("http.zig");
 const html = @import("html.zig");
 const json = @import("json.zig");
 const models = @import("models.zig");
+const formats = @import("formats.zig");
 const J = json.J;
 
 pub const Error = error{
@@ -46,6 +47,8 @@ pub const Client = struct {
     transport: http.Transport,
     throttle: *http.Throttle,
     sample_account: bool = false,
+    /// The format refinements this library makes itself (formats.zig).
+    native_formats: formats.Native = .init(0),
 
     /// Guards the session fields below; held for a whole login so concurrent callers join it.
     mutex: sync.Mutex = .{},
@@ -426,13 +429,19 @@ pub const Client = struct {
     pub fn search(c: *Client, a: Allocator, q: SearchQuery, failure: *Failure) Error!models.ListPage {
         var body: std.Io.Writer.Allocating = .init(a);
         var w: std.json.Stringify = .{ .writer = &body.writer };
-        writeSearchBody(&w, q, c.locale(a)) catch return error.OutOfMemory;
+        // A refined format (4K) asks for its base; the list keeps only the refined items.
+        const native = c.native_formats.load(.monotonic);
+        var server_q = q;
+        if (q.format) |f| server_q.format = formats.serverCode(f, native);
+        writeSearchBody(&w, server_q, c.locale(a), native) catch return error.OutOfMemory;
         // Signed in, the response also lists this account's holds and checkouts among the results.
         const j = try c.send(a, "POST", "bibs/search", &.{}, body.written(), !c.isGuest(), failure);
-        return models.searchPage(a, j, q.page);
+        var page = models.searchPage(a, j, q.page);
+        formats.refinePage(a, &page, &c.native_formats);
+        return page;
     }
 
-    fn writeSearchBody(w: *std.json.Stringify, q: SearchQuery, locale_: []const u8) !void {
+    fn writeSearchBody(w: *std.json.Stringify, q: SearchQuery, locale_: []const u8, native: u32) !void {
         try w.beginObject();
         try w.objectField("query");
         try w.write(q.query);
@@ -446,7 +455,7 @@ pub const Client = struct {
             var it = f.map.iterator();
             while (it.next()) |e| {
                 try w.objectField(e.key_ptr.*);
-                try w.write(e.value_ptr.*);
+                try w.write(if (std.mem.eql(u8, e.key_ptr.*, "f_FORMAT")) formats.serverCode(e.value_ptr.*, native) else e.value_ptr.*);
             }
         }
         if (q.sort) |s| {
@@ -489,7 +498,9 @@ pub const Client = struct {
             try c.send(a, "GET", path, &.{ .{ "accountId", account }, .{ "page", page_s }, .{ "sort", s } }, null, true, failure)
         else
             try c.send(a, "GET", path, &.{ .{ "accountId", account }, .{ "page", page_s } }, null, true, failure);
-        return models.borrowingPage(a, j, kind, page);
+        var result = models.borrowingPage(a, j, kind, page);
+        formats.refinePage(a, &result, &c.native_formats);
+        return result;
     }
 
     // MARK: Holds

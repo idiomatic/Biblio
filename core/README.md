@@ -44,13 +44,12 @@ The core needs Zig 0.17. From `core/`:
 | `zig build` | `zig-out/lib/libbiblio.a`, the shared library (`.dylib`, `.so` or `.dll`), `zig-out/include/biblio.h`, and the `biblio` CLI |
 | `zig build test` | Runs the unit and fixture tests |
 | `zig build -Dtarget=<triple> -Doptimize=safe` | The library for another platform, such as `x86_64-windows-gnu`, `aarch64-linux-android`, or `aarch64-linux-gnu` (Raspberry Pi) |
-| `zig build apple` | Static libraries for macOS, iOS, and the iOS simulator under `zig-out/apple/` |
 
 Each app builds the core in its own way:
 
 | App | How the core is built and linked |
 |---|---|
-| Apple | [`apple/build-core.sh`](../apple/build-core.sh) packages `BiblioCore.xcframework` with a `BiblioCore` module map. Swift code calls `import BiblioCore`. |
+| Apple | [`apple/build.zig`](../apple/build.zig) packages `apple/zig-out/BiblioCore.xcframework` with a `BiblioCore` module map; Xcode runs `zig build` there before compiling. Swift code calls `import BiblioCore`. |
 | GNOME | [`gnome/build.zig`](../gnome/build.zig) imports `core/src/root.zig` as the Zig module `biblio`. |
 | Terminal | [`tui/build.zig`](../tui/build.zig) does the same. |
 | Android | [`android/native/build.zig`](../android/native/build.zig) builds `libbiblio_jni.so` (the core plus a JNI shim) for each ABI. |
@@ -502,7 +501,7 @@ A catalog record.
 | `title` | string | `"Untitled"` if the library has none |
 | `subtitle`? | string | |
 | `authors` | string array | Primary author first |
-| `format` | string | A format code; get the display name with `biblio_format_name` |
+| `format` | string | A format code; get the display name with `biblio_format_name`. May refine `library_format` (see [Formats and works](#formats-and-works)) |
 | `publication_date`? | string | Shapes vary, such as `"2026"`, `"20261006"`, or `"c1999"` |
 | `edition`? | string | Without matching square brackets or a closing period, except one ending an abbreviation |
 | `call_number`?, `summary`? | string | |
@@ -511,6 +510,7 @@ A catalog record.
 | `holdable` | bool | |
 | `status`? | string | `AVAILABLE`, `UNAVAILABLE`, `ON_ORDER`, … |
 | `held_copies`, `available_copies`, `total_copies`, `on_order_copies` | int64 | `held_copies` is how many people are waiting |
+| `library_format` | string | The library's own format code |
 
 ### `biblio_list_entry_t`
 
@@ -599,7 +599,7 @@ Use a list from one thread (the UI thread).
 | Scroll | `biblio_list_item_appeared` returns a page to prefetch near the end of the fetched items. Count placeholders with `biblio_list_placeholder_appeared` and `_disappeared`; after about 300 ms, `biblio_list_take_visible_requests` requests the pages still on screen. |
 | Fetch the rest | After page 1 when `biblio_list_wants_all_pages` (client sorts, local filters, holds), or after a sort or filter change when `biblio_list_needs_all_pages`: `biblio_list_begin_background`, then `biblio_list_next_background_page` one page at a time until it returns 0 (at most 40 pages). `biblio_list_end_background` stops after an error. |
 | Show | `biblio_list_rows` (a placeholder's id is NULL), `biblio_list_ids` in server order, `biblio_list_formats`, `biblio_list_hold_count`, and `biblio_list_state`. They stay valid until the next call that changes the list. |
-| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally), and `biblio_list_remove` (after canceling holds). |
+| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally; searches filter only refined formats locally), `biblio_list_set_not_borrowed`, and `biblio_list_remove` (after canceling holds). |
 
 `biblio_list_is_stale` is true 15 minutes after page 1 arrived; times are milliseconds on any
 monotonic clock. Every call that returns a page to fetch has already marked it in flight.
@@ -612,8 +612,45 @@ login, which pages, goes stale, and refetches on its own, and give them to `bibl
 fetched: by server position, or by the merge's own client sort, with the login as the tie-breaker
 (`biblio_merge_set_sort`). Each `biblio_merged_row` carries its `login` (an index into the lists),
 which is also whose list to ask for a placeholder's page and whose session an action uses; ids are
-unique only within a login. `biblio_merge_set_cards` hides logins, and the format and hold filters
-are set on every list.
+unique only within a login. `biblio_merge_set_cards` hides logins, and the format, hold, and
+"Not Borrowed" filters are set on every list.
+
+---
+
+## Borrowed before
+
+A `biblio_borrowed_index` ([`borrowed.zig`](src/borrowed.zig)) holds one login's borrowing
+history as an index of what the patron borrowed, so lists and item detail can say "Borrowed
+before". Like a list, it makes no requests and is used from one thread.
+
+| Step | Calls |
+|---|---|
+| Keep | `biblio_borrowed_index_import` the bytes saved last time (false: unreadable or another version, so it syncs afresh); after each page, `biblio_borrowed_index_export` and save them, protected (they are private). Delete them on sign-out. |
+| Sync | `biblio_borrowed_index_begin_sync` returns a history page to fetch (`biblio_history`, sort NULL), or 0 if a sync is running; `biblio_borrowed_index_apply_page` returns the next, or 0 when done; `biblio_borrowed_index_fail` after an error. `biblio_borrowed_index_rebuild` forgets everything and fetches it all again (Refresh Borrowing History). |
+| Show | `biblio_borrowed` for a bib: `SAME` (this record, or this work in the same format) or `OTHER_FORMAT`, with the borrowed format, the times borrowed in it, and the latest checkout and return dates. `biblio_borrowed_index_progress` (`fetched`, `total`, `complete`, `syncing`) and `biblio_borrowed_index_generation` (changes with the matches). |
+| Filter | `biblio_list_set_not_borrowed` and `biblio_merge_set_not_borrowed` hide works any of the given indexes borrowed in the item's format. Offer it once the index is complete; set it again after the indexes change. Searches then need every page. |
+| Forget | `biblio_borrowed_index_clear` when the library's borrowing history is off. |
+
+The first sync fetches every page and resumes where it stopped. Later syncs fetch from page 1
+until an entry the index already has, assuming history is newest first. When a page's checkout
+dates increase, or the new entries don't equal the growth of the history's total (or it shrank),
+the index notes it in `biblio_incidents` (status 0, method `SYNC`) and refetches everything.
+
+### Formats and works
+
+Some libraries file a format under a broader code: WCCLS files 4K Ultra HD Blu-ray as `BLURAY`,
+with "4K Ultra HD" in the edition. Search and account lists refine such a bib's `format` to the
+BiblioCommons code it really has (`UK`), keeping `library_format`; the rules are a table in
+[`formats.zig`](src/formats.zig), skipped for a library seen to use the refined code itself.
+Searches can't ask the server for a refined code, so `biblio_search` asks for its base, the
+`FORMAT` facet lists it after the base with count -1 (unknown until fetched), and apps pass it to
+`biblio_list_set_format` on search lists, which then filter locally
+(`biblio_format_is_refined`). Filtering by the base (Blu-ray) still includes the refined items,
+as the server returns them: 4K discs are Blu-ray discs too, and excluding them would mean
+fetching every page.
+
+Matches across formats use a work key: the title without catalog qualifiers or a leading
+article, plus the first author, ignoring case, accents, and punctuation.
 
 ---
 

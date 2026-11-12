@@ -13,9 +13,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const models = @import("models.zig");
+const formats = @import("formats.zig");
+const borrowed = @import("borrowed.zig");
 
 pub const Kind = enum(c_int) { search = 0, holds, checkouts, history };
-pub const Sort = enum(c_int) { server = 0, people_waiting, title, due_date, status };
+pub const Sort = enum(c_int) { server = 0, people_waiting, title, due_date, status, server_title, author };
 pub const HoldFilter = enum(c_int) { none = 0, ready, not_ready, on_order };
 
 /// Caps background fetching for client sorts and local filters, to stay gentle with the
@@ -30,6 +32,8 @@ pub const Item = struct {
     id: []const u8,
     title: []const u8,
     format: []const u8,
+    /// The first author, as the library lists it ("Last, First"); empty for none.
+    author: []const u8 = "",
     held_copies: i64 = 0,
     server_index: i64 = 0,
     is_hold: bool = false,
@@ -41,6 +45,8 @@ pub const Item = struct {
     due_day: i64 = 0,
     /// Where a hold's status falls in the "status" sort: ready, in transit, not yet available, paused.
     status_rank: u8 = 0,
+    /// formats.workKey of the title and author; the list computes it.
+    work_key: []const u8 = "",
 
     /// The rank of a hold's status string: ready, in transit, not yet available (or anything
     /// else), paused.
@@ -63,6 +69,7 @@ pub const Item = struct {
             .id = e.id,
             .title = e.bib.title,
             .format = e.bib.format,
+            .author = if (e.bib.authors.len > 0) e.bib.authors[0] else "",
             .held_copies = e.bib.heldCopies,
             .server_index = e.serverIndex,
             .is_hold = e.hold != null,
@@ -124,6 +131,8 @@ pub const List = struct {
     sort: Sort = .server,
     format: ?[:0]u8 = null,
     hold_filter: HoldFilter = .none,
+    /// "Not Borrowed": hides works these indexes (borrowed, the app's) have in the item's format.
+    not_borrowed: []const *const borrowed.Index = &.{},
 
     /// Items by server position; null where the page hasn't been fetched yet.
     slots: std.ArrayList(?Item) = .empty,
@@ -154,6 +163,7 @@ pub const List = struct {
 
     pub fn deinit(l: *List) void {
         if (l.format) |f| l.gpa.free(f);
+        l.gpa.free(l.not_borrowed);
         l.slots.deinit(l.gpa);
         l.positions.deinit(l.gpa);
         l.loaded_pages.deinit(l.gpa);
@@ -278,6 +288,8 @@ pub const List = struct {
             it.id = try a.dupeSentinel(u8, src.id, 0);
             it.title = try a.dupe(u8, src.title);
             it.format = try a.dupeSentinel(u8, src.format, 0);
+            it.author = try a.dupe(u8, src.author);
+            it.work_key = try formats.workKey(a, src.title, src.author);
             l.slots.items[i] = it;
             try l.positions.put(l.gpa, it.id, i);
         }
@@ -340,8 +352,11 @@ pub const List = struct {
 
     // MARK: Background fetching
 
+    /// Searches filter on the server, except for refined formats (formats.zig) and "Not Borrowed".
     fn hasLocalFilter(l: *const List) bool {
-        return l.kind != .search and (l.format != null or l.hold_filter != .none);
+        if (l.not_borrowed.len > 0) return true;
+        if (l.kind == .search) return if (l.format) |f| formats.isRefined(f) else false;
+        return l.format != null or l.hold_filter != .none;
     }
 
     /// Client sorts and local filters are only correct once every page is loaded.
@@ -399,6 +414,20 @@ pub const List = struct {
         try l.rebuild();
     }
 
+    /// Shows only what none of these indexes has borrowed in the item's format; none turns the
+    /// filter off. Call again after the indexes change.
+    pub fn setNotBorrowed(l: *List, indexes: []const *const borrowed.Index) Allocator.Error!void {
+        const copy = try l.gpa.dupe(*const borrowed.Index, indexes);
+        l.gpa.free(l.not_borrowed);
+        l.not_borrowed = copy;
+        try l.rebuild();
+    }
+
+    fn passesNotBorrowed(l: *const List, it: Item) bool {
+        for (l.not_borrowed) |ix| if (ix.hasWorkInFormat(it.work_key, it.format)) return false;
+        return true;
+    }
+
     /// Removes the items with these ids (after canceling holds); returns how many.
     pub fn remove(l: *List, ids: []const []const u8) Allocator.Error!usize {
         var kept: usize = 0;
@@ -425,18 +454,20 @@ pub const List = struct {
     pub fn holdCount(l: *const List, filter: HoldFilter) i64 {
         var n: i64 = 0;
         for (l.slots.items) |slot| if (slot) |it| {
-            if (it.matches(filter) and l.passesFormat(it)) n += 1;
+            if (it.matches(filter) and l.passesFormat(it) and l.passesNotBorrowed(it)) n += 1;
         };
         return n;
     }
 
     fn passesFormat(l: *const List, it: Item) bool {
         const f = l.format orelse return true;
+        // The server filtered searches, except to refined formats.
+        if (l.kind == .search and !formats.isRefined(f)) return true;
         return std.mem.eql(u8, f, it.format);
     }
 
     fn passesLocalFilters(l: *const List, it: Item) bool {
-        return l.passesFormat(it) and (l.hold_filter == .none or it.matches(l.hold_filter));
+        return l.passesFormat(it) and (l.hold_filter == .none or it.matches(l.hold_filter)) and l.passesNotBorrowed(it);
     }
 
     /// Rebuilds the rows, ids and format counts after loading, filtering or sorting. The stale
@@ -484,7 +515,7 @@ pub const List = struct {
             .title => naturalOrder(x.title, y.title) == .lt,
             .due_date => if (x.due_day != y.due_day) dueBefore(x.due_day, y.due_day) else x.server_index < y.server_index,
             .status => if (x.status_rank != y.status_rank) x.status_rank < y.status_rank else x.server_index < y.server_index,
-            .server => a < b,
+            .server, .server_title, .author => a < b,
         };
     }
 
@@ -536,7 +567,7 @@ pub fn naturalOrder(a: []const u8, b: []const u8) std.math.Order {
 
 /// A title read one character at a time: lowercase ASCII, Latin letters without their accents,
 /// and ligatures spelled out ("Æ" reads "ae").
-const Folded = struct {
+pub const Folded = struct {
     s: []const u8,
     i: usize = 0,
     /// The second letter of a spelled-out ligature.
@@ -547,7 +578,7 @@ const Folded = struct {
     const first = "aaaaaaaceeeeiiiidnooooo ouuuuytsaaaaaaaceeeeiiiidnooooo ouuuuytyaaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiiiiijjkkkllllllllllnnnnnnnnnoooooooorrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzzs";
     const second = "      e                       hs      e                       h                                                   jj                              ee                                            ";
 
-    fn done(f: Folded) bool {
+    pub fn done(f: Folded) bool {
         return f.pending == 0 and f.i >= f.s.len;
     }
 
@@ -561,7 +592,7 @@ const Folded = struct {
         return f.s[start..f.i];
     }
 
-    fn next(f: *Folded) u21 {
+    pub fn next(f: *Folded) u21 {
         if (f.pending != 0) {
             defer f.pending = 0;
             return f.pending;
@@ -631,6 +662,11 @@ pub const Merge = struct {
         for (m.lists) |l| try l.setHoldFilter(filter);
     }
 
+    /// Every list hides what any of the cards' indexes has borrowed.
+    pub fn setNotBorrowed(m: *Merge, indexes: []const *const borrowed.Index) Allocator.Error!void {
+        for (m.lists) |l| try l.setNotBorrowed(indexes);
+    }
+
     pub fn total(m: *const Merge) i64 {
         var n: i64 = 0;
         for (m.lists, 0..) |l, i| if (m.shows(i)) {
@@ -665,11 +701,56 @@ pub const Merge = struct {
             },
             .due_date => if (x.due_day != y.due_day) return dueBefore(x.due_day, y.due_day),
             .status => if (x.status_rank != y.status_rank) return x.status_rank < y.status_rank,
-            .server => {},
+            .server, .server_title, .author => {},
         };
         if (m.sort == .people_waiting or m.sort == .due_date or m.sort == .status) if (a.item) |x| if (b.item) |y| if (x.server_index != y.server_index) return x.server_index < y.server_index;
         if (a.position != b.position and (m.sort == .server or a.item == null)) return a.position < b.position;
         return a.login < b.login;
+    }
+
+    fn keyBefore(m: *const Merge, x: Item, y: Item) bool {
+        if (m.sort == .author) {
+            // Items with no author go last.
+            if ((x.author.len == 0) != (y.author.len == 0)) return x.author.len != 0;
+            return naturalOrder(x.author, y.author) == .lt;
+        }
+        return naturalOrder(x.title, y.title) == .lt;
+    }
+
+    /// Orders `entries` (grouped by login, each in its list's server order) so each login keeps
+    /// the order the server gave it and the logins interleave by title or author. Placeholders
+    /// follow, by position.
+    fn mergeByKey(m: *const Merge, entries: *std.ArrayList(Entry)) Allocator.Error!void {
+        var merged: std.ArrayList(Entry) = .empty;
+        defer merged.deinit(m.gpa);
+        var holes: std.ArrayList(Entry) = .empty;
+        defer holes.deinit(m.gpa);
+        var queues: [64]std.ArrayList(Entry) = @splat(.empty);
+        defer for (&queues) |*q| q.deinit(m.gpa);
+        for (entries.items) |e| {
+            if (e.item == null) try holes.append(m.gpa, e) else try queues[e.login].append(m.gpa, e);
+        }
+        var heads: [64]usize = @splat(0);
+        while (true) {
+            var best: ?usize = null;
+            for (queues, 0..) |q, login| {
+                if (heads[login] >= q.items.len) continue;
+                if (best) |b| {
+                    if (m.keyBefore(q.items[heads[login]].item.?, queues[b].items[heads[b]].item.?)) best = login;
+                } else best = login;
+            }
+            const b = best orelse break;
+            try merged.append(m.gpa, queues[b].items[heads[b]]);
+            heads[b] += 1;
+        }
+        std.mem.sort(Entry, holes.items, {}, struct {
+            fn less(_: void, a: Entry, b: Entry) bool {
+                return if (a.position != b.position) a.position < b.position else a.login < b.login;
+            }
+        }.less);
+        entries.clearRetainingCapacity();
+        try entries.appendSlice(m.gpa, merged.items);
+        try entries.appendSlice(m.gpa, holes.items);
     }
 
     /// The merged rows, valid until the next call. A card still refreshing shows its stale rows.
@@ -686,7 +767,7 @@ pub const Merge = struct {
                 }
             }
         }
-        std.mem.sort(Entry, entries.items, m, lessThan);
+        if (m.sort == .server_title or m.sort == .author) try m.mergeByKey(&entries) else std.mem.sort(Entry, entries.items, m, lessThan);
         m.rows.clearRetainingCapacity();
         for (entries.items) |e| {
             try m.rows.append(m.gpa, .{
@@ -998,6 +1079,36 @@ test "merged holds in status order put every ready hold before the rest" {
     for (want, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
 }
 
+test "merged lists interleave by title or author, keeping each card's server order" {
+    var a: List = .init(testing.allocator, .holds);
+    defer a.deinit();
+    var b: List = .init(testing.allocator, .holds);
+    defer b.deinit();
+    try a.reload(false);
+    try b.reload(false);
+    // The server orders titles its own way ("The Zoo" under Z); the merge must not reorder a card.
+    var one = [_]Item{
+        .{ .id = "A1", .title = "Apple", .author = "Zed, A", .format = "BK" },
+        .{ .id = "A2", .title = "The Zoo", .author = "Yan, B", .format = "BK", .server_index = 1 },
+    };
+    var two = [_]Item{
+        .{ .id = "B1", .title = "Banana", .author = "Xu, C", .format = "BK" },
+        .{ .id = "B2", .title = "Cherry", .author = "", .format = "BK", .server_index = 1 },
+    };
+    try testing.expect(try a.apply(a.generation, 1, &one, 2, 25, 0));
+    try testing.expect(try b.apply(b.generation, 1, &two, 2, 25, 0));
+    var m: Merge = .init(testing.allocator, &.{ &a, &b });
+    defer m.deinit();
+    m.setSort(.server_title);
+    var rows = try m.buildRows();
+    const by_title = [_][]const u8{ "A1", "B1", "B2", "A2" };
+    for (by_title, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
+    m.setSort(.author);
+    rows = try m.buildRows();
+    const by_author = [_][]const u8{ "B1", "A1", "A2", "B2" };
+    for (by_author, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
+}
+
 test "merged lists order checkouts by true due date" {
     var a: List = .init(testing.allocator, .checkouts);
     defer a.deinit();
@@ -1015,4 +1126,35 @@ test "merged lists order checkouts by true due date" {
     const rows = try m.buildRows();
     const want = [_][]const u8{ "A1", "B1", "A2", "B2" };
     for (want, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
+}
+
+test "searches filter refined formats and what was borrowed locally" {
+    var ix = borrowed.Index.init(testing.allocator);
+    defer ix.deinit();
+    _ = ix.beginSync();
+    const history = [_]borrowed.Source{.{ .id = "B1", .metadata_id = "S9", .format = "DVD", .library_format = "DVD", .title = "Moana" }};
+    _ = try ix.apply(1, &history, 1, 25);
+
+    var l: List = .init(testing.allocator, .search);
+    defer l.deinit();
+    try l.reload(false);
+    var page = [_]Item{
+        .{ .id = "S1", .title = "Moana", .format = "DVD" },
+        .{ .id = "S2", .title = "Moana", .format = "UK", .server_index = 1 },
+        .{ .id = "S3", .title = "Coco", .format = "BLURAY", .server_index = 2 },
+    };
+    try testing.expect(try l.apply(l.generation, 1, &page, 3, 25, 0));
+    // A server-side format filter is the server's business.
+    try l.setFormat("DVD");
+    try testing.expectEqual(@as(usize, 3), l.rows.items.len);
+    try testing.expect(!l.needsAllPages());
+    try l.setFormat("UK");
+    try testing.expectEqual(@as(usize, 1), l.rows.items.len);
+    try testing.expect(l.needsAllPages());
+    try l.setFormat(null);
+    try l.setNotBorrowed(&.{&ix});
+    try testing.expectEqual(@as(usize, 2), l.rows.items.len);
+    try testing.expectEqualStrings("S2", std.mem.span(l.rows.items[0].id.?));
+    try l.setNotBorrowed(&.{});
+    try testing.expectEqual(@as(usize, 3), l.rows.items.len);
 }

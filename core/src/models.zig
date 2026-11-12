@@ -26,6 +26,8 @@ pub const Bib = struct {
     availableCopies: i64 = 0,
     totalCopies: i64 = 0,
     onOrderCopies: i64 = 0,
+    /// The library's own format code; `format` may refine it (see formats.zig).
+    libraryFormat: []const u8 = "UNKNOWN",
 
     /// Builds a bib from a gateway `entities.bibs[id]` value.
     pub fn parse(a: Allocator, j: J) ?Bib {
@@ -34,12 +36,14 @@ pub const Bib = struct {
         const jacket = brief.get("jacket");
         const small = jacket.get("medium").str(a) orelse jacket.get("small").str(a);
         const av = j.get("availability");
+        const format = brief.get("format").str(a) orelse "UNKNOWN";
         return .{
             .id = id,
             .title = brief.get("title").nonEmpty(a) orelse "Untitled",
             .subtitle = brief.get("subtitle").nonEmpty(a),
             .authors = brief.get("authors").strings(a),
-            .format = brief.get("format").str(a) orelse "UNKNOWN",
+            .format = format,
+            .libraryFormat = format,
             .publicationDate = brief.get("publicationDate").nonEmpty(a),
             .edition = if (brief.get("edition").nonEmpty(a)) |e| tidyEdition(a, e) else null,
             .callNumber = brief.get("callNumber").nonEmpty(a),

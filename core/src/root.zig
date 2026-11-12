@@ -20,6 +20,10 @@ pub const html = @import("html.zig");
 pub const icon = @import("icon.zig");
 /// The paged list state every app shows (`List`).
 pub const item_list = @import("list.zig");
+/// What a login borrowed before, from its borrowing history (`Index`).
+pub const borrowed = @import("borrowed.zig");
+/// Format refinements (4K Blu-ray) and work keys.
+pub const formats = @import("formats.zig");
 /// The typed C functions (`biblio_search`, `biblio_login`, …).
 pub const capi = @import("capi.zig");
 
@@ -39,6 +43,8 @@ test {
     _ = icon;
     _ = client_mod;
     _ = mock;
+    _ = @import("formats.zig");
+    _ = @import("borrowed.zig");
     _ = @import("fixtures_test.zig");
     _ = capi;
 }

@@ -244,5 +244,11 @@ for (const [theme, queries] of [["video", video], ["books", books]]) {
   }
   catalog.push(soundtrack(theme === "video" ? "S900C0010" : "S900C0011"));
   stock(catalog, theme);
-  write(theme, catalog, account(catalog.slice(0, main), theme));
+  const acct = account(catalog.slice(0, main), theme);
+  // Borrowed before: a title held again, and (books) a held title's audiobook.
+  const last = Math.max(...acct.history.map((h) => h.outDays));
+  const again = theme === "video" ? [find(catalog, "Arrival", (b) => b.format === "DVD")]
+    : [find(catalog, "Network Effect", () => true), find(catalog, "Rogue Protocol", (b) => b.format === "BOOK_CD")];
+  again.forEach((b, i) => acct.history.push({ bib: b.metadataId, outDays: last + 40 + i * 30, returnedDays: last + 28 + i * 30 }));
+  write(theme, catalog, acct);
 }

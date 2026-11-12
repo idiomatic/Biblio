@@ -22,7 +22,7 @@ BIBLIO_MOCK=$PWD/core/mock/books  open Biblio.app    # Murderbot and other scien
 | File | Holds |
 |---|---|
 | `shared/library.json` | name, brand color, labels, branches, and the patrons (`patron`, then `patrons`) |
-| `video/`, `books/` | a theme: `catalog.json` (titles, copies by branch, people waiting, new or on order), `account.json` and `account-2.json` (each patron's holds, checkouts, history, as day offsets from today; the two share some held titles) |
+| `video/`, `books/` | a theme: `catalog.json` (titles, copies by branch, people waiting, new or on order), `account.json` and `account-2.json` (each patron's holds, checkouts, history, as day offsets from today; the two share some held titles; `perihelion`'s history includes a title held again and, in books, a held title's audiobook, for "borrowed before") |
 
 Each catalog also carries in-universe media in other formats, appended after the main titles: Murderbot audiobook CDs, the fictional serial's soundtrack (`Music CD`), and large print where the source library has it.
 

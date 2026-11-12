@@ -145,6 +145,21 @@ pub const Incidents = struct {
         i.total += 1;
     }
 
+    /// Something the core noticed on its own (status 0), e.g. method "SYNC" and path
+    /// "/borrowinghistory (count)" when borrowing history didn't read as newest first.
+    pub fn note(i: *Incidents, method: []const u8, path: []const u8) void {
+        var e: Entry = .{ .at = sync.unixSeconds(), .status = 0, .in_flight = 0, .host_len = 0 };
+        e.method_len = @intCast(@min(method.len, e.method.len));
+        @memcpy(e.method[0..e.method_len], method[0..e.method_len]);
+        e.path_len = @intCast(@min(path.len, e.path.len));
+        @memcpy(e.path[0..e.path_len], path[0..e.path_len]);
+        i.mutex.lock();
+        defer i.mutex.unlock();
+        i.entries[i.next % capacity] = e;
+        i.next += 1;
+        i.total += 1;
+    }
+
     /// JSON: `{"total":N,"recent":[{"at":…,"status":…,"method":…,"host":…,"path":…,"retryAfter":…,"inFlight":…}]}`,
     /// oldest first.
     pub fn json(i: *Incidents, a: Allocator) ![]u8 {

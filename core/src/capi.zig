@@ -77,6 +77,8 @@ pub const Bib = extern struct {
     available_copies: i64,
     total_copies: i64,
     on_order_copies: i64,
+    /// The library's own code; `format` may refine it (4K Blu-ray filed as Blu-ray).
+    library_format: Str,
 };
 
 pub const Hold = extern struct {
@@ -658,6 +660,8 @@ pub const ListItem = extern struct {
     due_day: i64,
     /// A hold's place in the status sort: 0 ready, 1 in transit, 2 not yet available, 3 paused.
     status_rank: u8,
+    /// The first author, "" for none.
+    author: Str,
 };
 
 pub const ListRow = extern struct {
@@ -745,6 +749,7 @@ pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*
             .on_order = src.on_order,
             .due_day = src.due_day,
             .status_rank = src.status_rank,
+            .author = std.mem.span(src.author),
         };
     }
     return must(l.apply(generation, page, converted, total, page_size, now_ms));
@@ -767,6 +772,7 @@ pub export fn biblio_list_apply_page(l: *List, generation: u64, page: i64, resul
             .on_order = e.bib.on_order_copies > 0 or on_order_status,
             .due_day = if (e.checkout) |c| if (c.due_date) |d| item_list.dayNumber(std.mem.span(d)) else 0 else 0,
             .status_rank = if (e.hold) |h| item_list.Item.statusRank(std.mem.span(h.status)) else 0,
+            .author = if (e.bib.authors_count > 0) std.mem.span(e.bib.authors[0]) else "",
         };
     }
     return must(l.apply(generation, page, converted, result.count, result.page_size, now_ms));
@@ -893,6 +899,111 @@ pub export fn biblio_merge_rows(m: *item_list.Merge, count: *usize) [*]const Mer
     const rows = must(m.buildRows());
     count.* = rows.len;
     return @ptrCast(rows.ptr);
+}
+
+// MARK: Borrowed before
+
+const borrowed = @import("borrowed.zig");
+const Index = borrowed.Index;
+
+pub const BorrowedProgress = extern struct { fetched: i64, total: i64, complete: bool, syncing: bool };
+pub const BorrowedResult = extern struct {
+    match: borrowed.Match,
+    format: OptStr,
+    count: i64,
+    last_checkout: OptStr,
+    last_returned: OptStr,
+};
+
+pub export fn biblio_borrowed_index_new() ?*Index {
+    const ix = gpa.create(Index) catch return null;
+    ix.* = .init(gpa);
+    return ix;
+}
+
+pub export fn biblio_borrowed_index_free(ix: ?*Index) void {
+    const index = ix orelse return;
+    index.deinit();
+    gpa.destroy(index);
+}
+
+/// False (leaving the index empty) if the bytes are unreadable or from another version.
+pub export fn biblio_borrowed_index_import(ix: *Index, bytes: ?[*]const u8, len: usize) bool {
+    return must(ix.importJson(if (bytes) |b| b[0..len] else ""));
+}
+
+/// The index's bytes to keep (free with biblio_free), or NULL.
+pub export fn biblio_borrowed_index_export(ix: *const Index, len: *usize) ?[*]u8 {
+    var w = Work.init();
+    defer w.deinit();
+    const text = ix.exportJson(w.a()) catch return null;
+    const mem = root.biblio_alloc(@max(1, text.len)) orelse return null;
+    @memcpy(mem[0..text.len], text);
+    len.* = text.len;
+    return mem;
+}
+
+pub export fn biblio_borrowed_index_clear(ix: *Index) void {
+    ix.clear();
+}
+
+pub export fn biblio_borrowed_index_begin_sync(ix: *Index) i64 {
+    return ix.beginSync();
+}
+
+pub export fn biblio_borrowed_index_rebuild(ix: *Index) i64 {
+    return ix.rebuild();
+}
+
+pub export fn biblio_borrowed_index_fail(ix: *Index) void {
+    ix.fail();
+}
+
+pub export fn biblio_borrowed_index_apply_page(ix: *Index, page: i64, result: *const ListPage) i64 {
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const sources = must(arena.allocator().alloc(borrowed.Source, result.entries_count));
+    for (sources, result.entries[0..result.entries_count]) |*s, e| {
+        const h = e.history;
+        s.* = .{
+            .id = std.mem.span(if (h) |x| x.id else e.id),
+            .metadata_id = std.mem.span(if (h) |x| x.metadata_id else e.bib.id),
+            .checkout_date = if (h) |x| opt(x.checkout_date) orelse "" else "",
+            .returned_date = if (h) |x| opt(x.returned_date) orelse "" else "",
+            .format = std.mem.span(e.bib.format),
+            .library_format = std.mem.span(e.bib.library_format),
+            .title = std.mem.span(e.bib.title),
+            .author = if (e.bib.authors_count > 0) std.mem.span(e.bib.authors[0]) else "",
+        };
+    }
+    return must(ix.apply(page, sources, result.count, result.page_size));
+}
+
+pub export fn biblio_borrowed_index_progress(ix: *const Index) BorrowedProgress {
+    return .{ .fetched = @intCast(ix.entries.items.len), .total = ix.total, .complete = ix.complete, .syncing = ix.isSyncing() };
+}
+
+pub export fn biblio_borrowed_index_generation(ix: *const Index) u64 {
+    return ix.generation;
+}
+
+/// `author` may be NULL. Strings stay valid until the index is cleared, rebuilt, or imported.
+pub export fn biblio_borrowed(ix: *const Index, metadata_id: Str, format: Str, title: Str, author: OptStr) BorrowedResult {
+    const b = ix.lookup(std.mem.span(metadata_id), std.mem.span(format), std.mem.span(title), opt(author) orelse "");
+    return .{ .match = b.match, .format = b.format, .count = b.count, .last_checkout = b.last_checkout, .last_returned = b.last_returned };
+}
+
+/// Whether searches filter on this format locally (a refined one: see formats.zig).
+pub export fn biblio_format_is_refined(code: Str) bool {
+    return @import("formats.zig").isRefined(std.mem.span(code));
+}
+
+pub export fn biblio_list_set_not_borrowed(l: *List, indexes: ?[*]const *const Index, count: usize) void {
+    must(l.setNotBorrowed(if (indexes) |p| p[0..count] else &.{}));
+}
+
+pub export fn biblio_merge_set_not_borrowed(m: *item_list.Merge, indexes: ?[*]const *const Index, count: usize) void {
+    must(m.setNotBorrowed(if (indexes) |p| p[0..count] else &.{}));
 }
 
 pub export fn biblio_list_ids(l: *const List, count: *usize) [*]const Str {
