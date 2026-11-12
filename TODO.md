@@ -6,12 +6,12 @@
 - **Selected content bleeds into sidebar and detail.** On iPadOS, selecting an item has a
   detrimental visual effect on the adjacent views. Is this a Biblio bug or bad design from
   Apple?
+- **Squashed rows on a list's first visit (macOS).** Opening Borrowing History soon after
+  launch briefly shows its rows squashed, as if drawn before their heights are measured. A
+  minimum row height (`defaultMinListRowHeight`) may fix it, but it would also apply to the
+  lists' header rows (search field, filter bars); reproduce it in a macOS guest first.
 - **Lock-screen barcode.** A Lock Screen control now opens the barcode. Showing it
   automatically when in the library needs a Wallet pass (Code128, not Codabar) or similar.
-- **Rekey saved card-number logins.** New card-number sign-ins are saved under the patron's username
-  (and duplicates refused), but logins saved before that stay keyed by number, and two logins of
-  one account saved earlier still double-count in a combined window. Rekey them on first use, and
-  list a card that shares an account with another as "Same account as …".
 - **Disclose the throttling report.** Tell users, in the README and the About box or a privacy
   note, that Biblio keeps a local log of 429 and 5xx responses (time, status, method, host, masked
   path, retry delay, requests in flight), that nothing is sent unless they copy and share the

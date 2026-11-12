@@ -14,7 +14,7 @@ Auth headers on every authenticated call: `X-Session-Id`, `X-Access-Token`, `Acc
 | Place hold | `POST /holds` `{metadataId,materialType,accountId,enableSingleClickHolds,materialParams:{branchId,errorMessageLocale}}` | |
 | Cancel hold | `DELETE /holds` `{accountId,holdIds,metadataIds}` | |
 | Checkouts | `GET /checkouts?accountId&page&sort&locale` | |
-| Borrowing history | `GET /borrowinghistory?accountId&page&locale` | |
+| Borrowing history | `GET /borrowinghistory?accountId&page&locale` | assumed newest first (the borrowed-before index checks: checkout dates never increase down a page, and new entries equal the growth of `pagination.count`) |
 | Borrowing history setting | `PUT /accounts/{accountId}/settings/borrowingHistorySetting` `{enabled}` | current value: `entities.accounts[id].borrowingHistoryEnabled` in the login response |
 | Search | `POST /bibs/search` `{query,searchType,page,sort,f_FORMAT,f_on_order,...}` | `catalogSearch.results[].representative`, `entities.bibs[id].{briefInfo,availability,policy}`; `availability.heldCopies` = people waiting |
 | New titles | search with `query:"nw:[0 TO 180]", searchType:"bl", sort:"newly_acquired", f_on_order:"true"/"false"` | "Filter by" = `f_FORMAT`, `f_FICTION_TYPE`, `f_AUDIENCE`, `f_LANGUAGE` |
@@ -32,6 +32,15 @@ Account settings are Rails forms on `https://{subdomain}.bibliocommons.com` (the
 | Password | `/account/password` | `/account/change_pin` | `old_password`, `new_password`, `new_password_confirm` (4–64 alphanumeric) |
 | Pickup location | `/account/pickup_location` | `/account/preferred_branches` | `first_preference`, `second_preference`, `third_preference`, `sch_toggle` |
 | Language | `/account/language` | `/account/user_lang` | `user_lang` (e.g. `en-US`) |
+
+## Library quirks
+
+Format refinements (core/src/formats.zig) record each library seen filing a format under a broader code:
+
+| Library | Files | As | Told by |
+|---|---|---|---|
+| WCCLS | 4K Ultra HD Blu-ray (`UK`), and 4K + Blu-ray combos | `BLURAY` | "4K", "Ultra HD", or "UHD" in the edition (`briefInfo.edition`) or a bracketed title qualifier |
+| WCCLS | 4K + Blu-ray + DVD combos (`UK`) | `DVD_PBLURAY` | the same |
 
 ## Library discovery (no account)
 

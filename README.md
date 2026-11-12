@@ -121,11 +121,16 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 - Select several items in a list to place or cancel holds on all of them at once.
 - List rows are subtly tinted to show your status for each item: on hold, ready for pickup,
   checked out, or overdue.
-- Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away, or on iPhone from a
+- Items you've borrowed before are marked, using your borrowing history, and item details say
+  when. The same title in another format (the audiobook of a book you read, the DVD of a 4K
+  disc) is marked more faintly. A Not Borrowed filter hides what you've already borrowed in that
+  format. The history is kept privately on the device, and only while the library keeps it.
+- 4K Ultra HD Blu-ray is its own format, even where a library files it as Blu-ray.
+- Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away on iPhone and iPad, or from a
   Lock Screen or Control Center control. Choose the barcode type for each library in the account view; swipe between that library's logins' cards.
 - On iPhone and iPad, sign in by scanning the barcode on your physical library card with the camera.
-- Settings for email, password, pickup location, language, and borrowing history. On macOS they
-  live in the Settings window.
+- Settings for email, password, pickup location, language, and borrowing history, on each card's
+  page in the sidebar.
   - The terminal app only shows them.
 
 **App**
@@ -162,7 +167,7 @@ The core's tests: `cd core && zig build test`. Then, per platform:
 
 | Platform | Steps |
 |---|---|
-| Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, set your signing team, and build. Run `apple/build-core.sh` once after a fresh clone, so Xcode finds the core's xcframework. |
+| Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, set your signing team, and build. Xcode runs `zig build` in `apple/` (see [apple/build.zig](apple/build.zig)), which packages the core as `zig-out/BiblioCore.xcframework`; run it once after a fresh clone, so Xcode finds the framework. |
 | GNOME | `cd gnome && zig build run` |
 | Android | `cd android && gradle installDebug` |
 | Windows | `cd windows/Biblio && dotnet build -p:Platform=x64` |

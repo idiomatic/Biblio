@@ -32,7 +32,7 @@ Android and GNOME have `PLATFORM-coming-soon.png` and `-dark.png` placeholders, 
 
 ## Capture
 
-1. Build the core as Debug, since `ReleaseFast` and `ReleaseSmall` compile the mock out, then the app for the simulator: `CONFIGURATION=Debug apple/build-core.sh`, then `xcodebuild … -configuration Debug -destination id=UDID`.
+1. Build the core as Debug, since `ReleaseFast` and `ReleaseSmall` compile the mock out, then the app for the simulator: `CONFIGURATION=Debug zig build` in `apple/`, then `xcodebuild … -configuration Debug -destination id=UDID`.
 2. Set a fixed clock and full battery: `xcrun simctl status_bar UDID override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3`; clear it afterward.
 3. Launch with an absolute fixtures path: `SIMCTL_CHILD_BIBLIO_MOCK=$PWD/core/mock/video xcrun simctl launch UDID com.rbrian.Biblio`.
 4. Add the library by typing `first`, then sign in as `perihelion` (any password).
