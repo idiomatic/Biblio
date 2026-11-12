@@ -150,7 +150,7 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                     supportingContent = { Text("When on, the library keeps a list of the items you check out.") },
                     trailingContent = {
                         Switch(checked = enabled, onCheckedChange = { on ->
-                            if (on) save("Borrowing history turned on.", { setBorrowingHistory(true) })
+                            if (on) save("Borrowing history turned on.", { setBorrowingHistory(true) }) { session.borrowed?.sync() }
                             else confirmOff = true
                         })
                     },
@@ -164,12 +164,14 @@ fun AccountScreen(session: Session, onSwitch: () -> Unit) {
                             confirmOff = false
                             save("Borrowing history turned off.", { setBorrowingHistory(false) }) {
                                 session.history.reloadIfLoaded()
+                                session.borrowed?.clear()
                             }
                         }) { Text("Turn off", color = MaterialTheme.colorScheme.error) }
                     },
                     dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("Keep history") } },
                 )
             }
+            session.borrowed?.let { BorrowedRefresh(it, enabled = patron.borrowingHistoryEnabled != false) }
         }
     }
 }

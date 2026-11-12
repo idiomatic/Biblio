@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
@@ -30,6 +32,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -47,6 +50,7 @@ import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -56,14 +60,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.ListEntry
 import kotlinx.coroutines.launch
 
@@ -99,8 +104,8 @@ fun SessionScreen(session: Session, onSwitch: () -> Unit) {
                 onClick = { section = s; session.list(s)?.loadIfNeeded() },
                 icon = {
                     val count = when (s) {
-                        Section.Holds -> session.holds.page?.count
-                        Section.Checkouts -> session.checkouts.page?.count
+                        Section.Holds -> session.holds.total.takeIf { session.holds.loaded }
+                        Section.Checkouts -> session.checkouts.total.takeIf { session.checkouts.loaded }
                         else -> null
                     }
                     if (count != null && count > 0) BadgedBox(badge = { Badge { Text("$count") } }) { Icon(s.icon, null) }
@@ -137,7 +142,7 @@ private fun ListDetail(session: Session, list: ItemList, onSwitch: () -> Unit) {
         },
         detailPane = {
             AnimatedPane {
-                navigator.currentDestination?.content?.let { id -> list.entries.firstOrNull { it.id == id } }?.let { ItemDetail(session, it) }
+                navigator.currentDestination?.content?.let { id -> list.entry(id) }?.let { ItemDetail(session, it) }
                     ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Select an item", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -151,12 +156,6 @@ private fun ListDetail(session: Session, list: ItemList, onSwitch: () -> Unit) {
 private fun ItemListPane(session: Session, list: ItemList, onSwitch: () -> Unit, onSelect: (ListEntry) -> Unit) {
     val state = rememberLazyListState()
     LaunchedEffect(list) { list.loadIfNeeded() }
-    // Load the next page when the end comes into view.
-    LaunchedEffect(state, list) {
-        snapshotFlow { state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
-            if (last >= list.entries.size - 5) list.loadMore()
-        }
-    }
     Column {
         if (list.section == Section.Search) {
             var text by rememberSaveable { mutableStateOf(list.query) }
@@ -165,7 +164,7 @@ private fun ItemListPane(session: Session, list: ItemList, onSwitch: () -> Unit,
                     SearchBarDefaults.InputField(
                         query = text,
                         onQueryChange = { text = it },
-                        onSearch = { list.query = it; list.sort = null; list.format = null; list.reload() },
+                        onSearch = { list.search(it) },
                         expanded = false,
                         onExpandedChange = {},
                         placeholder = { Text("Search ${session.library.displayName}") },
@@ -179,66 +178,139 @@ private fun ItemListPane(session: Session, list: ItemList, onSwitch: () -> Unit,
             ) {}
         } else {
             TopAppBar(
-                title = {
-                    Column {
-                        Text(list.section.title)
-                        list.page?.let { Text("${it.count} items", style = MaterialTheme.typography.bodySmall) }
-                    }
-                },
+                title = { Text(list.section.title) },
                 actions = { IconButton(onClick = onSwitch) { Icon(Icons.Filled.SwitchAccount, "Switch user or library") } },
             )
         }
         Controls(session, list)
-        when {
-            list.entries.isEmpty() && list.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            list.entries.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    list.error ?: when (list.section) {
-                        Section.Search -> if (list.query.isBlank()) "Find books, movies, music, and more." else "No results."
-                        Section.Holds -> "Items you place on hold appear here."
-                        Section.Checkouts -> "Nothing checked out."
-                        Section.History -> "If borrowing history is on in Account, items you return appear here."
-                        else -> "No new titles."
-                    },
-                    color = if (list.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            else -> LazyColumn(state = state) {
-                items(list.entries, key = { it.id }) { entry -> EntryRow(session, entry) { onSelect(entry) } }
-                if (list.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        PullToRefreshBox(isRefreshing = list.refreshing, onRefresh = { list.refresh() }, modifier = Modifier.fillMaxSize()) {
+            when {
+                list.rows.isEmpty() && (list.loading || list.refreshing) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                list.rows.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        list.error ?: when (list.section) {
+                            Section.Search -> if (list.query.isBlank()) "Find books, movies, music, and more." else "No results."
+                            Section.Holds -> "Items you place on hold appear here."
+                            Section.Checkouts -> "Nothing checked out."
+                            Section.History -> "If borrowing history is on in Account, items you return appear here."
+                            else -> "No new titles."
+                        },
+                        color = if (list.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                else -> LazyColumn(state = state, modifier = Modifier.fillMaxSize().alpha(if (list.refreshing) 0.5f else 1f)) {
+                    items(list.rows, key = { it.key }) { row ->
+                        when (row) {
+                            is ItemList.Row.Item -> {
+                                // Nearing the placeholders after this item: prefetch their page.
+                                LaunchedEffect(row.entry.id) { list.itemAppeared(row.entry) }
+                                EntryRow(session, row.entry) { onSelect(row.entry) }
+                            }
+                            is ItemList.Row.Placeholder -> {
+                                // Its page is fetched once the placeholder has stayed on screen briefly.
+                                DisposableEffect(row.position) {
+                                    list.placeholderAppeared(row.position)
+                                    onDispose { list.placeholderDisappeared(row.position) }
+                                }
+                                PlaceholderRow()
+                            }
+                        }
+                    }
+                    if (list.error != null) item {
+                        Text(list.error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+                    }
+                }
             }
         }
     }
 }
 
-/** Sort menu and, for catalog lists, format chips from the server's FORMAT facet. */
+/** Sort menu, hold status filters for holds, format chips, and "Not Borrowed". */
 @Composable
 private fun Controls(session: Session, list: ItemList) {
-    val page = list.page ?: return
-    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (page.sortOptions.size > 1) {
+    if (list.rows.isEmpty() && !list.loaded) return
+    val isCatalog = list.section == Section.Search || list.section == Section.NewTitles
+    // "Not Borrowed" is offered once the whole history is indexed, so it never hides less than it says.
+    val offerNotBorrowed = (isCatalog || list.section == Section.Holds) &&
+        (session.borrowed?.state?.complete == true || list.notBorrowed)
+    Column {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             var open by remember { mutableStateOf(false) }
-            Box {
+            val sorts = list.serverSorts + SORT_PEOPLE_WAITING + (if ("title" in list.serverSorts) emptyList() else listOf(SORT_TITLE))
+            if (list.serverSorts.isNotEmpty()) Box {
                 IconButton(onClick = { open = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    for (id in page.sortOptions) DropdownMenuItem(
-                        text = { Text(session.library.sortName(id)) },
-                        onClick = { open = false; list.sort = id; list.reload() },
+                    for (id in sorts) DropdownMenuItem(
+                        text = {
+                            Text(
+                                when (id) {
+                                    SORT_PEOPLE_WAITING -> "People waiting"
+                                    SORT_TITLE -> "Title"
+                                    else -> session.library.sortName(id)
+                                },
+                            )
+                        },
+                        trailingIcon = { if (id == (list.sort ?: list.appliedSort)) Icon(Icons.Filled.Check, null) },
+                        onClick = { open = false; list.setSort(id) },
+                    )
+                }
+            }
+            val formats = if (isCatalog) list.facets else list.localFormats
+            val notBorrowedHere = offerNotBorrowed && isCatalog
+            if (formats.isNotEmpty() || list.format != null || notBorrowedHere) LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (notBorrowedHere) item(key = "notBorrowed") { NotBorrowedChip(list) }
+                items(formats, key = { it.value }) { f ->
+                    FilterChip(
+                        selected = list.format == f.value,
+                        onClick = { list.setFormat(if (list.format == f.value) null else f.value) },
+                        // A refined format's count is unknown (-1) until the core has filtered every page.
+                        label = { Text(session.library.formatName(f.value) + if (f.count >= 0) " (${f.count})" else "") },
                     )
                 }
             }
         }
-        val formats = page.facets.firstOrNull { it.id == "FORMAT" }?.values.orEmpty()
-        if (formats.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(formats, key = { it.value }) { f ->
+        if (list.section == Section.Holds) LazyRow(
+            Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val filters = listOf(
+                Core.CoreList.HoldFilter.Ready to "Ready",
+                Core.CoreList.HoldFilter.NotReady to "Not ready",
+                Core.CoreList.HoldFilter.OnOrder to "On order",
+            )
+            items(filters, key = { it.first.name }) { (filter, name) ->
                 FilterChip(
-                    selected = list.format == f.value,
-                    onClick = { list.format = if (list.format == f.value) null else f.value; list.reload() },
-                    label = { Text("${session.library.formatName(f.value)} (${f.count})") },
+                    selected = list.holdFilter == filter,
+                    onClick = { list.setHoldFilter(if (list.holdFilter == filter) Core.CoreList.HoldFilter.None else filter) },
+                    label = { Text("$name (${list.holdCounts[filter.ordinal]})") },
                 )
             }
+            if (offerNotBorrowed) item(key = "notBorrowed") { NotBorrowedChip(list) }
         }
     }
+}
+
+/** The "Not Borrowed" filter: shows only what this account hasn't borrowed in that format. */
+@Composable
+private fun NotBorrowedChip(list: ItemList) {
+    FilterChip(
+        selected = list.notBorrowed,
+        onClick = { list.setNotBorrowed(!list.notBorrowed) },
+        label = { Text("Not Borrowed") },
+        leadingIcon = {
+            Icon(if (list.notBorrowed) Icons.Filled.Check else Icons.Filled.History, null, Modifier.size(FilterChipDefaults.IconSize))
+        },
+    )
+}
+
+/** Stands in for an item that hasn't been fetched yet. */
+@Composable
+private fun PlaceholderRow() {
+    ListItem(
+        modifier = Modifier.height(96.dp),
+        leadingContent = { Box(Modifier.size(width = 48.dp, height = 72.dp)) },
+        headlineContent = { Text("") },
+    )
 }
 
 @Composable
@@ -256,8 +328,12 @@ private fun EntryRow(session: Session, entry: ListEntry, onClick: () -> Unit) {
         supportingContent = {
             Column {
                 bib.authors.firstOrNull()?.let { Text(it, maxLines = 1) }
-                Text(listOfNotNull(session.library.formatName(bib.format), bib.year).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(listOfNotNull(session.library.formatName(bib.format), bib.year).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Catalog and hold rows only: checkouts and history are borrowed by definition.
+                    if (entry.kind == "catalog" || entry.kind == "hold") session.borrowed?.match(bib)?.let { BorrowedMark(it, session.library) }
+                }
                 StatusLine(entry)
             }
         },

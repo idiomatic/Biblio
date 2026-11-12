@@ -48,7 +48,7 @@ import com.rbrian.biblio.core.CopyAvailability
 import com.rbrian.biblio.core.DetailField
 import com.rbrian.biblio.core.ListEntry
 
-/** Jacket, title, holds, availability by location (color-coded, always worded) and the full record. */
+/** Jacket, title, holds, borrowed before, availability by location (color-coded, always worded) and the full record. */
 @Composable
 fun ItemDetail(session: Session, entry: ListEntry) {
     val bib = entry.bib
@@ -82,6 +82,7 @@ fun ItemDetail(session: Session, entry: ListEntry) {
             }
         }
         HoldActions(session, entry)
+        session.borrowed?.match(bib)?.let { BorrowedLine(it, session.library) }
         bib.summary?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
 
         Text("Availability by location", style = MaterialTheme.typography.titleMedium)

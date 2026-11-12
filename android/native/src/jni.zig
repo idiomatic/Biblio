@@ -43,6 +43,8 @@ const NewByteArray = 176;
 const NewIntArray = 179;
 const NewDoubleArray = 182;
 const GetByteArrayRegion = 200;
+const GetIntArrayRegion = 203;
+const GetLongArrayRegion = 204;
 const SetByteArrayRegion = 208;
 const SetIntArrayRegion = 211;
 const SetDoubleArrayRegion = 214;
@@ -191,6 +193,28 @@ const Call = struct {
         const s = call.strings(array);
         const out = call.a().alloc(capi.Pair, s.len / 2) catch return &.{};
         for (out, 0..) |*p, i| p.* = .{ .key = s[2 * i], .value = s[2 * i + 1] };
+        return out;
+    }
+
+    /// An int[]'s elements; null for null.
+    fn intsFrom(call: *Call, array: jarray) ?[]const i32 {
+        if (array == null) return null;
+        const env = call.env;
+        const len = slot(env, GetArrayLength, *const fn (JNIEnv, jarray) callconv(.c) jint)(env, array);
+        const out = call.a().alloc(i32, @intCast(len)) catch return null;
+        slot(env, GetIntArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]i32) callconv(.c) void)(env, array, 0, len, out.ptr);
+        return out;
+    }
+
+    /// Borrowed-before indexes from a LongArray of their handles.
+    fn indexes(call: *Call, array: jarray) []const *const biblio.borrowed.Index {
+        if (array == null) return &.{};
+        const env = call.env;
+        const len = slot(env, GetArrayLength, *const fn (JNIEnv, jarray) callconv(.c) jint)(env, array);
+        const handles = call.a().alloc(i64, @intCast(len)) catch return &.{};
+        slot(env, GetLongArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]i64) callconv(.c) void)(env, array, 0, len, handles.ptr);
+        const out = call.a().alloc(*const biblio.borrowed.Index, handles.len) catch return &.{};
+        for (out, handles) |*o, h| o.* = @ptrFromInt(@as(usize, @intCast(h)));
         return out;
     }
 
@@ -382,7 +406,24 @@ const Call = struct {
         defer for (locals) |l| call.deleteLocal(l);
         return call.new(call.method(className(T), "<init>", constructor(T), false), &args);
     }
+
+    /// A `Borrowed(sameFormat, format, count, lastCheckout, lastReturned)` for a match (copying
+    /// the strings, which the index owns).
+    fn borrowed(call: *Call, b: capi.BorrowedResult) jobject {
+        var args = [_]jvalue{
+            .{ .z = @intFromBool(b.match == .same) },
+            .{ .l = call.string(if (b.format) |f| std.mem.span(f) else "") },
+            .{ .i = @intCast(b.count) },
+            .{ .l = call.optString(b.last_checkout) },
+            .{ .l = call.optString(b.last_returned) },
+        };
+        defer for ([_]usize{ 1, 3, 4 }) |i| call.deleteLocal(args[i].l);
+        return call.new(call.method("com/rbrian/biblio/core/Borrowed", "<init>", borrowed_constructor, false), &args);
+    }
 };
+
+/// The JVM signature of `Borrowed`'s primary constructor.
+const borrowed_constructor = "(ZLjava/lang/String;ILjava/lang/String;Ljava/lang/String;)V";
 
 /// The Kotlin model class (in com.rbrian.biblio.core) for each libbiblio struct.
 fn className(comptime T: type) [:0]const u8 {
@@ -509,6 +550,13 @@ export fn Java_com_rbrian_biblio_core_Core_nativeSortName(env: JNIEnv, _: jclass
     return call.taken(capi.biblio_sort_name(call.str(id), pairs.ptr, pairs.len));
 }
 
+/// Core.nativeFormatIsRefined(code: String): Boolean — a format searches filter on locally.
+export fn Java_com_rbrian_biblio_core_Core_nativeFormatIsRefined(env: JNIEnv, _: jclass, code: jstring) jboolean {
+    var call = Call.init(env);
+    defer call.deinit();
+    return @intFromBool(capi.biblio_format_is_refined(call.str(code)));
+}
+
 /// Core.nativeBarcode(value: String, code128: Boolean): DoubleArray?
 export fn Java_com_rbrian_biblio_core_Core_nativeBarcode(env: JNIEnv, _: jclass, value: jstring, code128: jboolean) jarray {
     var call = Call.init(env);
@@ -561,6 +609,349 @@ export fn Java_com_rbrian_biblio_core_Core_nativeLogoBounds(env: JNIEnv, _: jcla
     var b: [4]usize = undefined;
     if (!capi.biblio_logo_bounds(p.ptr, w, h, st, ch, &b)) return null;
     return call.ints(&.{ @intCast(b[0]), @intCast(b[1]), @intCast(b[2]), @intCast(b[3]) });
+}
+
+// MARK: Item lists
+
+/// The core's item list (`biblio_list_*`): paging, sorting and filtering, shared with the other
+/// apps. The Kotlin side owns a list's handle and uses it from one thread (the main thread), as
+/// the core requires; pages are fetched elsewhere and handed to `nativeListApply`.
+const List = biblio.item_list.List;
+
+fn listOf(handle: jlong) *List {
+    return @ptrFromInt(@as(usize, @intCast(handle)));
+}
+
+/// Core.nativeListNew(kind: Int): Long — 0 search, 1 holds, 2 checkouts, 3 history.
+export fn Java_com_rbrian_biblio_core_Core_nativeListNew(_: JNIEnv, _: jclass, kind: jint) jlong {
+    const list = capi.biblio_list_new(@fromBackingInt(@intCast(kind))) orelse return 0;
+    return @intCast(@intFromPtr(list));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListFree(_: JNIEnv, _: jclass, list: jlong) void {
+    if (list != 0) capi.biblio_list_free(listOf(list));
+}
+
+/// Core.nativeListState(list: Long): IntArray — total, pages, loaded, hasMore, loading,
+/// refreshing, background (the last five 0 or 1).
+export fn Java_com_rbrian_biblio_core_Core_nativeListState(env: JNIEnv, _: jclass, list: jlong) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    const s = capi.biblio_list_state(listOf(list));
+    return call.ints(&.{
+        @intCast(s.total),
+        @intCast(s.pages),
+        @intFromBool(s.loaded),
+        @intFromBool(s.has_more),
+        @intFromBool(s.loading),
+        @intFromBool(s.refreshing),
+        @intFromBool(s.background),
+    });
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListGeneration(_: JNIEnv, _: jclass, list: jlong) jlong {
+    return @bitCast(capi.biblio_list_state(listOf(list)).generation);
+}
+
+/// Core.nativeListReload(list: Long, keepContent: Boolean): Long — the new generation.
+export fn Java_com_rbrian_biblio_core_Core_nativeListReload(_: JNIEnv, _: jclass, list: jlong, keep_content: jboolean) jlong {
+    return @bitCast(capi.biblio_list_reload(listOf(list), keep_content != 0));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListBeginRefresh(_: JNIEnv, _: jclass, list: jlong) void {
+    capi.biblio_list_begin_refresh(listOf(list));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListClear(_: JNIEnv, _: jclass, list: jlong) void {
+    capi.biblio_list_clear(listOf(list));
+}
+
+/// Core.nativeListApply(list, generation, page, ids, titles, formats, authors, holdStatuses,
+/// dueDates, numbers, total, pageSize, nowMs): Boolean — `authors` holds each item's first
+/// author, `holdStatuses` its hold's status and `dueDates` its checkout's due date ("" for none);
+/// `numbers` holds three ints per item: held copies, server index, and flags (1 hold, 2 ready for
+/// pickup, 4 on order).
+export fn Java_com_rbrian_biblio_core_Core_nativeListApply(
+    env: JNIEnv,
+    _: jclass,
+    list: jlong,
+    generation: jlong,
+    page: jint,
+    ids: jarray,
+    titles: jarray,
+    formats: jarray,
+    authors: jarray,
+    hold_statuses: jarray,
+    due_dates: jarray,
+    numbers: jarray,
+    total: jint,
+    page_size: jint,
+    now_ms: jlong,
+) jboolean {
+    var call = Call.init(env);
+    defer call.deinit();
+    const id_s = call.strings(ids);
+    const title_s = call.strings(titles);
+    const format_s = call.strings(formats);
+    const author_s = call.strings(authors);
+    const status_s = call.strings(hold_statuses);
+    const due_s = call.strings(due_dates);
+    const num = call.intsFrom(numbers) orelse return 0;
+    const n = id_s.len;
+    if (title_s.len != n or format_s.len != n or author_s.len != n or status_s.len != n or due_s.len != n or num.len != 3 * n) return 0;
+    const items = call.a().alloc(capi.ListItem, n) catch return 0;
+    for (items, 0..) |*it, i| {
+        const is_hold = num[3 * i + 2] & 1 != 0;
+        it.* = .{
+            .id = id_s[i],
+            .title = title_s[i],
+            .format = format_s[i],
+            .held_copies = num[3 * i],
+            .server_index = num[3 * i + 1],
+            .is_hold = is_hold,
+            .ready = num[3 * i + 2] & 2 != 0,
+            .on_order = num[3 * i + 2] & 4 != 0,
+            .due_day = biblio.item_list.dayNumber(std.mem.span(due_s[i])),
+            .status_rank = if (is_hold) biblio.item_list.Item.statusRank(std.mem.span(status_s[i])) else 0,
+            .author = author_s[i],
+        };
+    }
+    return @intFromBool(capi.biblio_list_apply(listOf(list), @bitCast(generation), page, items.ptr, n, total, page_size, now_ms));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListFail(_: JNIEnv, _: jclass, list: jlong, generation: jlong, page: jint) jboolean {
+    return @intFromBool(capi.biblio_list_fail(listOf(list), @bitCast(generation), page));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListRequest(_: JNIEnv, _: jclass, list: jlong, page: jint) jboolean {
+    return @intFromBool(capi.biblio_list_request(listOf(list), page));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListIsStale(_: JNIEnv, _: jclass, list: jlong, now_ms: jlong) jboolean {
+    return @intFromBool(capi.biblio_list_is_stale(listOf(list), now_ms));
+}
+
+/// Core.nativeListItemAppeared(list, position): Int — a page to prefetch, or 0.
+export fn Java_com_rbrian_biblio_core_Core_nativeListItemAppeared(_: JNIEnv, _: jclass, list: jlong, position: jint) jint {
+    return @intCast(capi.biblio_list_item_appeared(listOf(list), position));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListPlaceholderAppeared(_: JNIEnv, _: jclass, list: jlong, position: jint) void {
+    capi.biblio_list_placeholder_appeared(listOf(list), position);
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListPlaceholderDisappeared(_: JNIEnv, _: jclass, list: jlong, position: jint) void {
+    capi.biblio_list_placeholder_disappeared(listOf(list), position);
+}
+
+/// Core.nativeListTakeVisibleRequests(list): IntArray — pages to fetch now.
+export fn Java_com_rbrian_biblio_core_Core_nativeListTakeVisibleRequests(env: JNIEnv, _: jclass, list: jlong) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    var pages: [64]i64 = undefined;
+    const n = capi.biblio_list_take_visible_requests(listOf(list), &pages, pages.len);
+    const out = call.a().alloc(i32, n) catch return null;
+    for (out, pages[0..n]) |*o, p| o.* = @intCast(p);
+    return call.ints(out);
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListNeedsAllPages(_: JNIEnv, _: jclass, list: jlong) jboolean {
+    return @intFromBool(capi.biblio_list_needs_all_pages(listOf(list)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListWantsAllPages(_: JNIEnv, _: jclass, list: jlong) jboolean {
+    return @intFromBool(capi.biblio_list_wants_all_pages(listOf(list)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListBeginBackground(_: JNIEnv, _: jclass, list: jlong) jboolean {
+    return @intFromBool(capi.biblio_list_begin_background(listOf(list)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListNextBackgroundPage(_: JNIEnv, _: jclass, list: jlong) jint {
+    return @intCast(capi.biblio_list_next_background_page(listOf(list)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListEndBackground(_: JNIEnv, _: jclass, list: jlong) void {
+    capi.biblio_list_end_background(listOf(list));
+}
+
+/// Core.nativeListSetSort(list, sort): 0 server, 1 people waiting, 2 title.
+export fn Java_com_rbrian_biblio_core_Core_nativeListSetSort(_: JNIEnv, _: jclass, list: jlong, sort: jint) void {
+    capi.biblio_list_set_sort(listOf(list), @fromBackingInt(@intCast(sort)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListSetFormat(env: JNIEnv, _: jclass, list: jlong, format: jstring) void {
+    var call = Call.init(env);
+    defer call.deinit();
+    capi.biblio_list_set_format(listOf(list), call.optStr(format));
+}
+
+/// Core.nativeListSetHoldFilter(list, filter): 0 none, 1 ready, 2 not ready, 3 on order.
+export fn Java_com_rbrian_biblio_core_Core_nativeListSetHoldFilter(_: JNIEnv, _: jclass, list: jlong, filter: jint) void {
+    capi.biblio_list_set_hold_filter(listOf(list), @fromBackingInt(@intCast(filter)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListRemove(env: JNIEnv, _: jclass, list: jlong, ids: jarray) jint {
+    var call = Call.init(env);
+    defer call.deinit();
+    const s = call.strings(ids);
+    if (s.len == 0) return 0;
+    return @intCast(capi.biblio_list_remove(listOf(list), s.ptr, s.len));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeListHoldCount(_: JNIEnv, _: jclass, list: jlong, filter: jint) jint {
+    return @intCast(capi.biblio_list_hold_count(listOf(list), @fromBackingInt(@intCast(filter))));
+}
+
+/// Core.nativeListRowPositions(list): IntArray — each row's server position.
+export fn Java_com_rbrian_biblio_core_Core_nativeListRowPositions(env: JNIEnv, _: jclass, list: jlong) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    var n: usize = 0;
+    const rows = capi.biblio_list_rows(listOf(list), &n);
+    const out = call.a().alloc(i32, n) catch return null;
+    for (out, rows[0..n]) |*o, r| o.* = @intCast(r.position);
+    return call.ints(out);
+}
+
+/// Core.nativeListRowIds(list): String — each row's item id on its own line, empty for a
+/// placeholder (ids hold no line breaks).
+export fn Java_com_rbrian_biblio_core_Core_nativeListRowIds(env: JNIEnv, _: jclass, list: jlong) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    var n: usize = 0;
+    const rows = capi.biblio_list_rows(listOf(list), &n);
+    var text: std.ArrayList(u8) = .empty;
+    for (rows[0..n]) |r| {
+        if (r.id) |id| text.appendSlice(call.a(), std.mem.span(id)) catch return null;
+        text.append(call.a(), '\n') catch return null;
+    }
+    return call.string(text.items);
+}
+
+/// Core.nativeListFormats(list): String — a line "format<TAB>count" per format, most common first.
+export fn Java_com_rbrian_biblio_core_Core_nativeListFormats(env: JNIEnv, _: jclass, list: jlong) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    var n: usize = 0;
+    const formats = capi.biblio_list_formats(listOf(list), &n);
+    var text: std.ArrayList(u8) = .empty;
+    for (formats[0..n]) |f| {
+        const line = std.fmt.allocPrint(call.a(), "{s}\t{d}\n", .{ std.mem.span(f.format), f.count }) catch return null;
+        text.appendSlice(call.a(), line) catch return null;
+    }
+    return call.string(text.items);
+}
+
+/// Core.nativeListSetNotBorrowed(list, indexes: LongArray): the "Not Borrowed" filter; empty turns it off.
+export fn Java_com_rbrian_biblio_core_Core_nativeListSetNotBorrowed(env: JNIEnv, _: jclass, list: jlong, indexes: jarray) void {
+    var call = Call.init(env);
+    defer call.deinit();
+    const ix = call.indexes(indexes);
+    capi.biblio_list_set_not_borrowed(listOf(list), ix.ptr, ix.len);
+}
+
+// MARK: Borrowed before
+
+/// The core's index of what one login borrowed before (`biblio_borrowed_*`). Like a list, the
+/// Kotlin side owns it and uses it from the main thread; history pages are fetched elsewhere
+/// (`nativeHistoryPage`) and handed to `nativeBorrowedApplyPage`.
+const Index = biblio.borrowed.Index;
+
+fn indexOf(handle: jlong) *Index {
+    return @ptrFromInt(@as(usize, @intCast(handle)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedNew(_: JNIEnv, _: jclass) jlong {
+    const ix = capi.biblio_borrowed_index_new() orelse return 0;
+    return @intCast(@intFromPtr(ix));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedFree(_: JNIEnv, _: jclass, index: jlong) void {
+    if (index != 0) capi.biblio_borrowed_index_free(indexOf(index));
+}
+
+/// Core.nativeBorrowedImport(index, bytes: ByteArray): Boolean — false if unreadable or from another version.
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedImport(env: JNIEnv, _: jclass, index: jlong, bytes: jarray) jboolean {
+    var call = Call.init(env);
+    defer call.deinit();
+    const b = bytesFromJava(env, bytes, call.a()) orelse return 0;
+    return @intFromBool(capi.biblio_borrowed_index_import(indexOf(index), b.ptr, b.len));
+}
+
+/// Core.nativeBorrowedExport(index): ByteArray? — the bytes to save.
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedExport(env: JNIEnv, _: jclass, index: jlong) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    var len: usize = 0;
+    const data = capi.biblio_borrowed_index_export(indexOf(index), &len) orelse return null;
+    defer biblio.biblio_free(data);
+    return call.bytes(data[0..len]);
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedClear(_: JNIEnv, _: jclass, index: jlong) void {
+    capi.biblio_borrowed_index_clear(indexOf(index));
+}
+
+/// Core.nativeBorrowedBeginSync(index): Int — the first page to fetch, or 0 if a sync is running.
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedBeginSync(_: JNIEnv, _: jclass, index: jlong) jint {
+    return @intCast(capi.biblio_borrowed_index_begin_sync(indexOf(index)));
+}
+
+/// Core.nativeBorrowedRebuild(index): Int — page 1, or 0 when a running sync starts over instead.
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedRebuild(_: JNIEnv, _: jclass, index: jlong) jint {
+    return @intCast(capi.biblio_borrowed_index_rebuild(indexOf(index)));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedFail(_: JNIEnv, _: jclass, index: jlong) void {
+    capi.biblio_borrowed_index_fail(indexOf(index));
+}
+
+/// Core.nativeBorrowedApplyPage(index, page, result): Int — hands the index a page from
+/// `nativeHistoryPage`, which it frees; the next page to fetch, or 0 when done.
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedApplyPage(_: JNIEnv, _: jclass, index: jlong, page: jint, result: jlong) jint {
+    const p: *capi.ListPage = @ptrFromInt(@as(usize, @intCast(result)));
+    defer capi.free(@as(?*capi.ListPage, p));
+    return @intCast(capi.biblio_borrowed_index_apply_page(indexOf(index), page, p));
+}
+
+/// Core.nativeBorrowedProgress(index): IntArray — fetched, total, complete, syncing (the last two 0 or 1).
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedProgress(env: JNIEnv, _: jclass, index: jlong) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    const p = capi.biblio_borrowed_index_progress(indexOf(index));
+    return call.ints(&.{ @intCast(p.fetched), @intCast(p.total), @intFromBool(p.complete), @intFromBool(p.syncing) });
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedGeneration(_: JNIEnv, _: jclass, index: jlong) jlong {
+    return @bitCast(capi.biblio_borrowed_index_generation(indexOf(index)));
+}
+
+/// Core.nativeBorrowed(index, metadataId, format, title, author: String?): Borrowed? — null if
+/// the patron didn't borrow it.
+export fn Java_com_rbrian_biblio_core_Core_nativeBorrowed(env: JNIEnv, _: jclass, index: jlong, metadata_id: jstring, format: jstring, title: jstring, author: jstring) jobject {
+    var call = Call.init(env);
+    defer call.deinit();
+    const b = capi.biblio_borrowed(indexOf(index), call.str(metadata_id), call.str(format), call.str(title), call.optStr(author));
+    if (b.match == .none) return null;
+    return call.borrowed(b);
+}
+
+/// Core.nativeHistoryPage(client: Long, page: Int): Long — a borrowing history page as the
+/// core's own struct, for `nativeBorrowedApplyPage` (or `nativeFreePage`).
+export fn Java_com_rbrian_biblio_core_Core_nativeHistoryPage(env: JNIEnv, _: jclass, client: jlong, page: jint) jlong {
+    var call = Call.init(env);
+    defer call.deinit();
+    var out: ?*capi.ListPage = null;
+    if (!call.check(capi.biblio_history(handleOf(client), page, null, &out, &call.err))) {
+        capi.free(out);
+        return 0;
+    }
+    return @intCast(@intFromPtr(out orelse return 0));
+}
+
+export fn Java_com_rbrian_biblio_core_Core_nativeFreePage(_: JNIEnv, _: jclass, result: jlong) void {
+    if (result != 0) capi.free(@as(?*capi.ListPage, @ptrFromInt(@as(usize, @intCast(result)))));
 }
 
 // MARK: Client operations
@@ -703,7 +1094,7 @@ test "constructor signatures match the Kotlin models" {
     const L = "Ljava/util/List;";
     const I = "Ljava/lang/Integer;";
     const expect = std.testing.expectEqualStrings;
-    try expect("(" ++ S ++ S ++ S ++ L ++ S ++ S ++ S ++ S ++ S ++ S ++ S ++ S ++ "Z" ++ S ++ "IIII)V", comptime constructor(capi.Bib));
+    try expect("(" ++ S ++ S ++ S ++ L ++ S ++ S ++ S ++ S ++ S ++ S ++ S ++ S ++ "Z" ++ S ++ "IIII" ++ S ++ ")V", comptime constructor(capi.Bib));
     try expect("(" ++ S ++ S ++ S ++ I ++ S ++ S ++ S ++ S ++ "Z)V", comptime constructor(capi.Hold));
     try expect("(" ++ S ++ S ++ S ++ S ++ S ++ I ++ ")V", comptime constructor(capi.Checkout));
     try expect("(" ++ S ++ "Z" ++ I ++ S ++ ")V", comptime constructor(capi.AccountStatus));
@@ -711,7 +1102,7 @@ test "constructor signatures match the Kotlin models" {
         "Lcom/rbrian/biblio/core/HistoryEntry;Lcom/rbrian/biblio/core/AccountStatus;)V", comptime constructor(capi.ListEntry));
     try expect("(" ++ L ++ "IIII" ++ L ++ L ++ S ++ ")V", comptime constructor(capi.ListPage));
     try expect("(" ++ S ++ S ++ S ++ "Z" ++ S ++ S ++ S ++ "Z" ++ S ++ ")V", comptime constructor(capi.Copy));
-    try expect("(JJ" ++ S ++ S ++ S ++ S ++ S ++ "Ljava/lang/Boolean;)V", comptime constructor(capi.Patron));
+    try expect("(JJ" ++ S ++ S ++ S ++ S ++ S ++ "Ljava/lang/Boolean;" ++ S ++ ")V", comptime constructor(capi.Patron));
     try expect("(" ++ S ++ S ++ S ++ S ++ S ++ "Ljava/util/Map;" ++ L ++ L ++ ")V", comptime constructor(capi.LibraryInfo));
     try expect("(" ++ L ++ S ++ ")V", comptime constructor(capi.DirectoryPage));
     try expect("(" ++ S ++ "I)V", comptime constructor(capi.FacetValue));
@@ -838,17 +1229,19 @@ test "builds Kotlin models from C structs" {
         .checkout = null,
         .history = null,
         .account_status = &status,
-        .bib = .{ .id = "b1", .title = "Dune 🏜", .subtitle = null, .authors = &authors, .authors_count = 1, .format = "BK", .publication_date = "1965", .edition = null, .call_number = null, .summary = null, .jacket_small = null, .jacket_large = null, .material_type = "PHYSICAL", .holdable = true, .status = null, .held_copies = 1, .available_copies = 0, .total_copies = 2, .on_order_copies = 0 },
+        .bib = .{ .id = "b1", .title = "Dune 🏜", .subtitle = null, .authors = &authors, .authors_count = 1, .format = "BK", .publication_date = "1965", .edition = null, .call_number = null, .summary = null, .jacket_small = null, .jacket_large = null, .material_type = "PHYSICAL", .holdable = true, .status = null, .held_copies = 1, .available_copies = 0, .total_copies = 2, .on_order_copies = 0, .library_format = "BK" },
     };
     try std.testing.expectEqualStrings(
-        "ListEntry(\"e1\", Bib(\"b1\", \"Dune 🏜\", null, [\"Herbert, Frank\"], \"BK\", \"1965\", null, null, null, null, null, \"PHYSICAL\", true, null, 1, 0, 2, 0), " ++
+        "ListEntry(\"e1\", Bib(\"b1\", \"Dune 🏜\", null, [\"Herbert, Frank\"], \"BK\", \"1965\", null, null, null, null, null, \"PHYSICAL\", true, null, 1, 0, 2, 0, \"BK\"), " ++
             "\"hold\", 2, Hold(\"h1\", \"m1\", \"READY_FOR_PICKUP\", 3, \"Main\", null, null, null, true), null, null, AccountStatus(\"onHold\", true, null, null))",
         FakeJvm.render(call.object(entry)),
     );
-    const patron: capi.Patron = .{ .owner = null, .user_id = 1234567890123, .account_id = 7, .name = "Pat", .email = null, .language = "en", .barcode = "2", .preferred_pickup = null, .has_borrowing_history_enabled = true, .borrowing_history_enabled = false };
-    try std.testing.expectEqualStrings("Patron(1234567890123L, 7L, \"Pat\", null, \"en\", \"2\", null, false)", FakeJvm.render(call.object(patron)));
+    const patron: capi.Patron = .{ .owner = null, .user_id = 1234567890123, .account_id = 7, .name = "Pat", .email = null, .language = "en", .barcode = "2", .preferred_pickup = null, .has_borrowing_history_enabled = true, .borrowing_history_enabled = false, .first_name = "Pat" };
+    try std.testing.expectEqualStrings("Patron(1234567890123L, 7L, \"Pat\", null, \"en\", \"2\", null, false, \"Pat\")", FakeJvm.render(call.object(patron)));
     const labels = [_]capi.Pair{.{ .key = "FORMAT.bk", .value = "Book" }};
     const none = [_][*:0]const u8{};
     const info: capi.LibraryInfo = .{ .owner = null, .subdomain = "wccls", .name = "WCCLS", .short_name = null, .primary_color = null, .website = null, .labels = &labels, .labels_count = 1, .languages = &none, .languages_count = 0, .users = &none, .users_count = 0 };
     try std.testing.expectEqualStrings("LibraryInfo(\"wccls\", \"WCCLS\", null, null, null, [\"FORMAT.bk\"=\"Book\"], [], [])", FakeJvm.render(call.object(info)));
+    const match: capi.BorrowedResult = .{ .match = .other_format, .format = "DVD", .count = 2, .last_checkout = "2024-03-01", .last_returned = null };
+    try std.testing.expectEqualStrings("Borrowed(false, \"DVD\", 2, \"2024-03-01\", null)", FakeJvm.render(call.borrowed(match)));
 }

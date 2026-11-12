@@ -3,11 +3,14 @@ package com.rbrian.biblio.data
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.AtomicFile
 import android.util.Base64
 import androidx.compose.runtime.mutableStateListOf
 import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.LibraryInfo
+import java.io.File
 import java.security.KeyStore
+import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -16,11 +19,13 @@ import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * Added libraries and their usernames (in shared preferences), with each user's password
- * encrypted by a device-bound Android Keystore key that never leaves secure hardware.
+ * encrypted by a device-bound Android Keystore key that never leaves secure hardware, and each
+ * user's borrowed-before index in a private file (not backed up).
  */
 class LibraryStore(context: Context) {
     private val prefs = context.getSharedPreferences("libraries", Context.MODE_PRIVATE)
     private val secrets = context.getSharedPreferences("passwords", Context.MODE_PRIVATE)
+    private val borrowedDir = File(context.filesDir, "borrowed")
 
     val libraries = mutableStateListOf<LibraryInfo>().apply {
         prefs.getString("libraries.v1", null)?.let { text ->
@@ -37,7 +42,7 @@ class LibraryStore(context: Context) {
     }
 
     fun remove(subdomain: String) {
-        library(subdomain)?.users?.forEach { deletePassword(subdomain, it) }
+        library(subdomain)?.users?.forEach { deletePassword(subdomain, it); deleteBorrowed(subdomain, it) }
         libraries.removeAll { it.subdomain == subdomain }
         save()
     }
@@ -52,6 +57,7 @@ class LibraryStore(context: Context) {
     fun removeUser(subdomain: String, username: String) {
         val i = libraries.indexOfFirst { it.subdomain == subdomain }.takeIf { it >= 0 } ?: return
         deletePassword(subdomain, username)
+        deleteBorrowed(subdomain, username)
         libraries[i] = libraries[i].copy(users = libraries[i].users - username)
         save()
     }
@@ -96,6 +102,33 @@ class LibraryStore(context: Context) {
 
     fun deletePassword(subdomain: String, username: String) {
         secrets.edit().remove(account(subdomain, username)).apply()
+    }
+
+    // Borrowed-before indexes (Core.BorrowedIndex's bytes), one file per user, named by a hash so
+    // the name doesn't say whose it is.
+
+    private fun borrowedFile(subdomain: String, username: String): AtomicFile {
+        val digest = MessageDigest.getInstance("SHA-256").digest(account(subdomain, username).encodeToByteArray())
+        return AtomicFile(File(borrowedDir, digest.take(16).joinToString("") { "%02x".format(it) } + ".json"))
+    }
+
+    fun loadBorrowed(subdomain: String, username: String): ByteArray? =
+        runCatching { borrowedFile(subdomain, username).readFully() }.getOrNull()
+
+    fun saveBorrowed(subdomain: String, username: String, bytes: ByteArray) {
+        borrowedDir.mkdirs()
+        val file = borrowedFile(subdomain, username)
+        val out = runCatching { file.startWrite() }.getOrNull() ?: return
+        try {
+            out.write(bytes)
+            file.finishWrite(out)
+        } catch (e: java.io.IOException) {
+            file.failWrite(out)
+        }
+    }
+
+    fun deleteBorrowed(subdomain: String, username: String) {
+        borrowedFile(subdomain, username).delete()
     }
 
     private companion object {

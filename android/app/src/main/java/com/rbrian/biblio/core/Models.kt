@@ -27,6 +27,8 @@ data class Bib(
     val availableCopies: Int = 0,
     val totalCopies: Int = 0,
     val onOrderCopies: Int = 0,
+    /** The library's own format code; [format] may refine it (4K Ultra HD Blu-ray filed as Blu-ray). */
+    val libraryFormat: String = format,
 ) {
     /** "2026" from "2026", "20261006" or "03/23/2027". */
     val year: String?
@@ -122,6 +124,7 @@ data class Patron(
     val barcode: String? = null,
     val preferredPickup: String? = null,
     val borrowingHistoryEnabled: Boolean? = null,
+    val firstName: String? = null,
 )
 
 @Serializable
@@ -149,6 +152,20 @@ fun String.prettified(): String = replace('_', ' ').lowercase().replaceFirstChar
 data class DirectoryEntry(val name: String, val website: String? = null, val region: String? = null, val logo: String? = null)
 
 data class DirectoryPage(val entries: List<DirectoryEntry>, val next: String? = null)
+
+/**
+ * The patron borrowed this item, or the same work in another format ([sameFormat] false), from
+ * the borrowing history; dates are YYYY-MM-DD.
+ */
+data class Borrowed(
+    val sameFormat: Boolean,
+    /** The borrowed format's code. */
+    val format: String,
+    /** Times borrowed in that format. */
+    val count: Int,
+    val lastCheckout: String? = null,
+    val lastReturned: String? = null,
+)
 
 /** A hold the library declined to cancel. */
 data class Refusal(val holdId: String, val reason: String)
