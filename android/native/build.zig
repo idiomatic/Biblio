@@ -1,13 +1,15 @@
 const std = @import("std");
 
 /// Builds libbiblio_jni.so for each Android ABI into ../app/src/main/jniLibs, which Gradle
-/// packages. Gradle runs this before each build (see app/build.gradle.kts).
+/// packages. Gradle runs this before each build (see app/build.gradle.kts), passing its minSdk as
+/// -Dapi.
 /// `zig build test` tests the shim on this machine.
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .safe });
+    const api = b.option(u32, "api", "Android API level to target (default 29, Gradle's minSdk)") orelse 29;
     const abis = [_]struct { abi: []const u8, query: std.Target.Query }{
-        .{ .abi = "arm64-v8a", .query = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .android, .android_api_level = 29 } },
-        .{ .abi = "x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .android, .android_api_level = 29 } },
+        .{ .abi = "arm64-v8a", .query = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .android, .android_api_level = api } },
+        .{ .abi = "x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .android, .android_api_level = api } },
     };
     for (abis) |t| {
         const target = b.resolveTargetQuery(t.query);

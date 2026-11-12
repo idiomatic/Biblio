@@ -3,24 +3,25 @@
 //
 //   swift tools/coming-soon.swift OUT_DIR
 //
-// Writes windows-coming-soon.png, gnome-coming-soon.png, and android-coming-soon.png, each
-// with a -dark variant.
+// Writes gnome-coming-soon.png (1400×875) and android-coming-soon.png (600×1300), each with a
+// -dark variant, the sizes of the checked-in placeholders in docs/screenshots.
 
 import AppKit
 
 struct Sketch {
     let file: String
     let name: String
+    /// The canvas the sketch is drawn on, scaled down to `output` when written.
     let size: CGSize
+    let output: CGSize
     let accent: NSColor
     let style: Style
-    enum Style { case windows, gnome, android }
+    enum Style { case gnome, android }
 }
 
 let sketches = [
-    Sketch(file: "windows-coming-soon", name: "Windows", size: CGSize(width: 1600, height: 1000), accent: NSColor(srgbRed: 0.0, green: 0.45, blue: 0.85, alpha: 1), style: .windows),
-    Sketch(file: "gnome-coming-soon", name: "GNOME", size: CGSize(width: 1600, height: 1000), accent: NSColor(srgbRed: 0.55, green: 0.3, blue: 0.75, alpha: 1), style: .gnome),
-    Sketch(file: "android-coming-soon", name: "Android", size: CGSize(width: 1080, height: 2340), accent: NSColor(srgbRed: 0.2, green: 0.6, blue: 0.35, alpha: 1), style: .android),
+    Sketch(file: "gnome-coming-soon", name: "GNOME", size: CGSize(width: 1600, height: 1000), output: CGSize(width: 1400, height: 875), accent: NSColor(srgbRed: 0.55, green: 0.3, blue: 0.75, alpha: 1), style: .gnome),
+    Sketch(file: "android-coming-soon", name: "Android", size: CGSize(width: 1080, height: 2340), output: CGSize(width: 600, height: 1300), accent: NSColor(srgbRed: 0.2, green: 0.6, blue: 0.35, alpha: 1), style: .android),
 ]
 
 /// A repeatable pseudo-random stream, so reruns draw the same sketch.
@@ -109,22 +110,14 @@ func draw(_ s: Sketch, dark: Bool) -> Data? {
     let pen = Pen(ctx, ink: ink)
 
     switch s.style {
-    case .windows, .gnome:
+    case .gnome:
         let frame = CGRect(x: 60, y: 60, width: CGFloat(w) - 120, height: CGFloat(h) - 120)
-        pen.rect(frame, radius: s.style == .gnome ? 40 : 6, width: 6)
+        pen.rect(frame, radius: 40, width: 6)
         // Title bar and window controls.
         let barY = frame.maxY - 80
         pen.line(CGPoint(x: frame.minX, y: barY), CGPoint(x: frame.maxX, y: barY), width: 4)
-        if s.style == .windows {
-            pen.text("Biblio", at: CGPoint(x: frame.minX + 40, y: barY + 24), size: 30, color: faint)
-            pen.line(CGPoint(x: frame.maxX - 220, y: barY + 40), CGPoint(x: frame.maxX - 190, y: barY + 40), width: 4)
-            pen.rect(CGRect(x: frame.maxX - 150, y: barY + 25, width: 28, height: 28), width: 4)
-            pen.line(CGPoint(x: frame.maxX - 80, y: barY + 26), CGPoint(x: frame.maxX - 52, y: barY + 54), width: 4)
-            pen.line(CGPoint(x: frame.maxX - 80, y: barY + 54), CGPoint(x: frame.maxX - 52, y: barY + 26), width: 4)
-        } else {
-            pen.text("Biblio", at: CGPoint(x: frame.midX, y: barY + 24), size: 30, color: faint, centered: true)
-            pen.circle(CGPoint(x: frame.maxX - 60, y: barY + 40), radius: 18, width: 4)
-        }
+        pen.text("Biblio", at: CGPoint(x: frame.midX, y: barY + 24), size: 30, color: faint, centered: true)
+        pen.circle(CGPoint(x: frame.maxX - 60, y: barY + 40), radius: 18, width: 4)
         // Sidebar, list, and inspector.
         let body = CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: barY - frame.minY)
         let sideX = body.minX + 330
@@ -173,8 +166,13 @@ func draw(_ s: Sketch, dark: Bool) -> Data? {
         pen.text("coming soon", at: CGPoint(x: phone.midX, y: phone.midY - 115), size: 62, color: s.accent, centered: true)
     }
 
-    guard let image = ctx.makeImage() else { return nil }
-    return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+    let ow = Int(s.output.width), oh = Int(s.output.height)
+    guard let image = ctx.makeImage(),
+          let small = CGContext(data: nil, width: ow, height: oh, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    small.interpolationQuality = .high
+    small.draw(image, in: CGRect(origin: .zero, size: s.output))
+    guard let scaled = small.makeImage() else { return nil }
+    return NSBitmapImageRep(cgImage: scaled).representation(using: .png, properties: [:])
 }
 
 let out = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? ".")

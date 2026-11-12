@@ -20,7 +20,7 @@ Files are `DEVICE-NN-slug.png`.
 
 Skip a step on a device where another frame already shows it; the README never repeats a step on the same device.
 
-Android and GNOME have `PLATFORM-coming-soon.png` and `-dark.png` placeholders, matching the real frames' size and aspect ratio. Generate them with [tools/coming-soon.swift](../../tools/coming-soon.swift), and replace each with its real frame when that app can be captured.
+Android and GNOME have `PLATFORM-coming-soon.png` and `-dark.png` placeholders, as wide as the real frames: Android's 600×1300 like the iPhone's 600×1304, and GNOME's 1400×875 like the iPad's 1400 px. Generate them with [tools/coming-soon.swift](../../tools/coming-soon.swift), and replace each with its real frame when that app can be captured.
 
 ## Devices and data
 
@@ -32,7 +32,7 @@ Android and GNOME have `PLATFORM-coming-soon.png` and `-dark.png` placeholders, 
 
 ## Capture
 
-1. Build the core as Debug, since `ReleaseFast` and `ReleaseSmall` compile the mock out, then the app for the simulator: `CONFIGURATION=Debug zig build` in `apple/`, then `xcodebuild … -configuration Debug -destination id=UDID`.
+1. Build the core with `CONFIGURATION=Debug zig build` in `apple/`, which builds it ReleaseSafe (ReleaseFast and ReleaseSmall compile the mock out), then the app for the simulator: `xcodebuild … -configuration Debug -destination id=UDID`.
 2. Set a fixed clock and full battery: `xcrun simctl status_bar UDID override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3`; clear it afterward.
 3. Launch with an absolute fixtures path: `SIMCTL_CHILD_BIBLIO_MOCK=$PWD/core/mock/video xcrun simctl launch UDID com.rbrian.Biblio`.
 4. Add the library by typing `first`, then sign in as `perihelion` (any password).
@@ -41,7 +41,7 @@ Android and GNOME have `PLATFORM-coming-soon.png` and `-dark.png` placeholders, 
 
 Holds, settings, and history change in memory, so relaunch to reset. Step 5's placed hold makes the sidebar's Holds badge one higher in later iPhone frames.
 
-Raw captures go in `raw/`, which Git ignores. Blur any frame that leaks real details with [tools/blur.swift](../../tools/blur.swift); mock data needs none.
+Raw captures go in `raw/`, which Git ignores. Blur any frame that leaks real details with [tools/blur.swift](../../tools/blur.swift): `swift tools/blur.swift IN OUT POINT_WIDTH x,y,w,h…` blurs each rectangle, given in points from the top left of an image POINT_WIDTH points wide, and writes OUT as PNG, JPEG, or HEIC by its extension. Mock data needs none.
 
 ## Pending
 

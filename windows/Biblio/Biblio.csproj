@@ -18,8 +18,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationTitle>Biblio</ApplicationTitle>
+    <!-- The app version, which the exe's file and product versions follow. -->
+    <Version>1.8</Version>
     <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>1.8</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
   </PropertyGroup>
 
   <ItemGroup>

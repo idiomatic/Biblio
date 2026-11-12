@@ -20,7 +20,9 @@
 * item detail fetches "Availability by Location" in the background (collection and call number optional), with a colored symbol per copy status.
 * item detail has "Hold" with a pickup location menu (defaulting to the preferred location), or "Cancel Hold" for held items.
 * dragging part of item detail onto any window's holds places a hold, or onto its search field searches for it; no drag hints.
-* the barcode is the everyday control: on iOS/iPadOS a toolbar button, never inside a menu (macOS has none: nobody brings a Mac to checkout), and the account view show the library card as a scannable barcode, Codabar or Code 128; the account view alone chooses the type, a sticky choice per library that the toolbar button follows; on iOS, a Lock Screen and Control Center control opens it for the most recently used login (`biblio://card`), and swiping left or right rotates between that library's logins' cards.
+* the barcode is the everyday control: on iOS/iPadOS a toolbar button, never inside a menu (macOS has none: nobody brings a Mac to checkout), and the account view shows the library card as a scannable barcode, Codabar or Code 128.
+* the account view alone chooses the barcode type, a sticky choice per library that the toolbar button follows.
+* on iOS, a Lock Screen and Control Center control opens the barcode for the most recently used login (`biblio://card`), and swiping left or right rotates between that library's logins' cards.
 * the app version shows subtly at the foot of the sidebar and opens the About box, which says in everyday words that people made Biblio with AI assistants, and that BiblioCommons and the library didn't, and has a Copy Diagnostic Log button (on Mac, in Help) for the local log of server throttling and failures.
 * a bottom status bar shows the latest request as `TITLE [SIZE KiB]` (URL on hover), fading after 2 seconds of inactivity.
 ## settings
@@ -77,11 +79,11 @@
 * [NOTES-API.md](NOTES-API.md): the BiblioCommons gateway endpoints the app uses.
 * [CHANGELOG.md](CHANGELOG.md): user-facing changes per version, tagged `vX.Y` at each version bump.
 * [docs/specifications/](docs/specifications/README.md): external specifications.
-* [docs/screenshots/](docs/screenshots): the README's screenshots, one patron's visit from first launch to returns, captured against the fictional mock library (`BIBLIO_MOCK`, [core/mock/](core/mock/README.md)); draw placeholders for apps not yet captured with [tools/coming-soon.swift](tools/coming-soon.swift); blur any private details with [tools/blur.swift](tools/blur.swift) (`swift tools/blur.swift IN OUT POINT_WIDTH x,y,w,h…`); never capture the host Mac's screen.
+* [docs/screenshots/](docs/screenshots): the README's screenshots, one patron's visit from first launch to returns, captured against the fictional mock library (`BIBLIO_MOCK`, [core/mock/](core/mock/README.md)); draw placeholders for apps not yet captured with [tools/coming-soon.swift](tools/coming-soon.swift); blur any private details with [tools/blur.swift](tools/blur.swift); never capture the host Mac's screen.
 ## cross-platform builds and testing
 * root [build.zig](build.zig): `zig build cross`.
 * CI: [.github/workflows/ci.yml](.github/workflows/ci.yml).
-* Apple apps build only on macOS; [apple/build.zig](apple/build.zig) packages the core as `apple/zig-out/BiblioCore.xcframework`, which Xcode builds with `zig build` before compiling.
+* Apple apps build only on macOS; [apple/build.zig](apple/build.zig) builds the core as `apple/zig-out/lib/PLATFORM/libbiblio.a` and the `BiblioCore` module in `apple/zig-out/include`, which Xcode builds with `zig build` before compiling, so a clean build needs no prior step.
 * run Linux, Windows, and macOS guests with `terrarium` (the Mac app runs ephemeral from the shared layer `macos-27.2-quiet`, on `macos-27.2-base`, with `--memory 4096`; put the app and mock in with `put`, as the mock README says); avoid emulation and keep retained images small; guests are ephemeral, so [windows/README.md](windows/README.md) says how to rebuild the Windows one.
 * test the GNOME, Android, Windows, and terminal apps, and capture their screenshots against `BIBLIO_MOCK`, in a guest.
 ## miscellaneous

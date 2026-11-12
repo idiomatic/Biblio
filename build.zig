@@ -1,21 +1,25 @@
 const std = @import("std");
 
-/// zig build cross          cross-compile the core for Linux, Windows, and Android, plus the GNOME app for Linux
+/// zig build cross          cross-compile the core for Linux, Windows, and Android, plus the GNOME app for Linux,
+///                          into zig-out/cross
 /// -Dsysroots=DIR           where cross builds keep Debian sysroots, relative to here (default .zig-cache/sysroots)
 pub fn build(b: *std.Build) void {
     const sysroots = b.option([]const u8, "sysroots", "Directory for Debian sysroots") orelse ".zig-cache/sysroots";
-    const optimize = b.option([]const u8, "optimize", "Optimize mode for cross builds (default ReleaseSmall)") orelse "ReleaseSmall";
-    const opt = b.fmt("-Doptimize={s}", .{optimize});
+    const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimize mode for cross builds (default small)") orelse .small;
+    const opt = b.fmt("-Doptimize={t}", .{optimize});
+    const sysroots_path = if (std.fs.path.isAbsolute(sysroots)) b.graph.cwdRelativePath(sysroots) else b.path(sysroots);
 
-    // Cross-compile: Zig links for every target from any host, so no VM is needed.
-    // Each command runs from the project root; paths are relative to it.
+    // Cross-compile: Zig links for every target from any host, so no VM is needed. Fetching the
+    // GNOME app's Debian sysroots needs a POSIX shell.
     const cross = b.step("cross", "Cross-compile the core and the GNOME app for other platforms");
     const core_targets = [_][]const u8{
         "aarch64-linux-gnu",  "x86_64-linux-gnu",      "aarch64-windows-gnu",
         "x86_64-windows-gnu", "aarch64-linux-android",
     };
     for (core_targets) |t| {
-        const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt("R=$PWD; cd core && '{s}' build -Dtarget={s} {s} --prefix \"$R/zig-out/cross/core-{s}\"", .{ b.graph.zig_exe, t, opt, t }) });
+        const run = b.addSystemCommand(&.{ b.graph.zig_exe, "build", b.fmt("-Dtarget={s}", .{t}), opt, "--prefix" });
+        run.addDirectoryArg2(b.graph.path(.install_prefix, b.fmt("cross/core-{s}", .{t})), .{});
+        run.setCwd(b.path("core"));
         cross.dependOn(&run.step);
     }
     const linux_arches = [_]struct { zig: []const u8, deb: []const u8 }{
@@ -23,9 +27,19 @@ pub fn build(b: *std.Build) void {
         .{ .zig = "x86_64", .deb = "amd64" },
     };
     for (linux_arches) |a| {
-        const root = b.fmt("{s}/{s}", .{ sysroots, a.deb });
-        const fetch = b.addSystemCommand(&.{ "sh", "-c", b.fmt("[ -d '{s}/root/usr/include' ] || sh gnome/debian-sysroot.sh {s} '{s}' >/dev/null", .{ root, a.deb, root }) });
-        const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt("R=$PWD; cd gnome && '{s}' build -Dtarget={s}-linux-gnu -Dsysroot=\"$R/{s}/root\" {s} --prefix \"$R/zig-out/cross/gnome-{s}-linux-gnu\"", .{ b.graph.zig_exe, a.zig, root, opt, a.zig }) });
+        const root = sysroots_path.path(b, a.deb);
+        // The script returns at once when an earlier run finished (it leaves a `complete` file).
+        const fetch = b.addSystemCommand(&.{"sh"});
+        fetch.addFileArg(b.path("gnome/debian-sysroot.sh"));
+        fetch.addArg(a.deb);
+        fetch.addDirectoryArg2(root, .{});
+        fetch.expectExitCode(0);
+        fetch.has_side_effects = true;
+        const run = b.addSystemCommand(&.{ b.graph.zig_exe, "build", b.fmt("-Dtarget={s}-linux-gnu", .{a.zig}), opt });
+        run.addDirectoryArg2(root.path(b, "root"), .{ .prefix = "-Dsysroot=" });
+        run.addArg("--prefix");
+        run.addDirectoryArg2(b.graph.path(.install_prefix, b.fmt("cross/gnome-{s}-linux-gnu", .{a.zig})), .{});
+        run.setCwd(b.path("gnome"));
         run.step.dependOn(&fetch.step);
         cross.dependOn(&run.step);
     }

@@ -107,8 +107,10 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 **Catalog**
 - Search and advanced search (keyword, title, author, subject, …), with filters for format,
   availability location, audience, content, language, publication date, and date added.
-  - The terminal app has neither advanced search nor facets yet.
+  - The GNOME, Android, Windows, and terminal apps have no advanced search yet, and filter
+    only by format.
 - Explore New Titles: Just Arrived and On Order, with the library's "Filter by" options.
+  - The terminal app shows Just Arrived only.
 - Infinite scrolling. The scroll bar starts at the full list length, and only the pages you
   actually scroll to are fetched.
 - Sort orders, including by number of people waiting, and by title, ignoring case and accents
@@ -128,10 +130,11 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 - 4K Ultra HD Blu-ray is its own format, even where a library files it as Blu-ray.
 - Your library card as a scannable Codabar or Code 128 barcode, one toolbar button away on iPhone and iPad, or from a
   Lock Screen or Control Center control. Choose the barcode type for each library in the account view; swipe between that library's logins' cards.
+  - The terminal app draws it in text on its Account tab.
 - On iPhone and iPad, sign in by scanning the barcode on your physical library card with the camera.
 - Settings for email, password, pickup location, language, and borrowing history, on each card's
   page in the sidebar.
-  - The terminal app only shows them.
+  - The terminal app has them on its Account tab.
 
 **App**
 - Multiple windows, each with its own session: different libraries, different accounts, or
@@ -146,6 +149,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 - Guest browsing without an account.
 - Pull to refresh on iOS and iPadOS; View ▸ Refresh (⌘R) on macOS.
 - The version at the foot of the sidebar opens the About box (also Biblio ▸ About Biblio on macOS).
+  - The terminal app has no About box.
 - Drag an item's cover onto Holds to place a hold, or onto a search field to search for it.
   On macOS this also works across windows.
   - The terminal app has no drag and drop.
@@ -157,7 +161,7 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 | All | Zig 0.17 |
 | macOS, iOS, iPadOS | Xcode 26 or later; runs on macOS 15 or later, or iOS / iPadOS 18 or later |
 | GNOME | GTK 4, libadwaita 1.6 or later, libsecret |
-| Android | The Android SDK and a JDK |
+| Android | The Android SDK (API 36) and JDK 17 or later; the Gradle wrapper fetches Gradle |
 | Windows | The .NET 10 SDK and the Windows App SDK |
 | Terminal | Nothing more; any xterm-256color terminal on macOS or Linux |
 
@@ -167,15 +171,16 @@ The core's tests: `cd core && zig build test`. Then, per platform:
 
 | Platform | Steps |
 |---|---|
-| Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, set your signing team, and build. Xcode runs `zig build` in `apple/` (see [apple/build.zig](apple/build.zig)), which packages the core as `zig-out/BiblioCore.xcframework`; run it once after a fresh clone, so Xcode finds the framework. |
+| Apple | Open `apple/Biblio.xcodeproj`, choose the **Biblio** scheme, put your signing team in `apple/Local.xcconfig` (one line, `DEVELOPMENT_TEAM = <team ID>`; Git ignores it), and build. Xcode runs `zig build` in `apple/` (see [apple/build.zig](apple/build.zig)), which builds the core as `zig-out/lib/PLATFORM/libbiblio.a` with its `BiblioCore` module in `zig-out/include`, before compiling, even after a clean. |
 | GNOME | `cd gnome && zig build run` |
-| Android | `cd android && gradle installDebug` |
+| Android | `cd android && ./gradlew installDebug` |
 | Windows | `cd windows/Biblio && dotnet build -p:Platform=x64` |
 | Terminal | `cd tui && zig build run` |
 
 `zig build cross` at the root cross-compiles the core for Linux, Windows, and Android, plus
-the GNOME app for Linux. The GNOME app builds against Debian sysroots that
-`gnome/debian-sysroot.sh` downloads, so it also targets 64-bit Raspberry Pi OS.
+the GNOME app for Linux, into `zig-out/cross`. The GNOME app builds against Debian sysroots that
+[gnome/debian-sysroot.sh](gnome/debian-sysroot.sh) downloads (it needs a POSIX shell, curl, xz,
+and zstd), so it also targets 64-bit Raspberry Pi OS.
 
 To try it, add a library such as `wccls` or `multcolib`, then sign in with a library card and
 PIN, or choose **Browse as Guest**.
@@ -188,10 +193,10 @@ PIN, or choose **Browse as Guest**.
 | `apple` | The SwiftUI app for macOS, iOS, and iPadOS |
 | `gnome` | The GTK 4 and libadwaita app, in Zig |
 | `android` | The Jetpack Compose app, and its Zig JNI shim |
-| `windows` | The WinUI 3 app, in C# |
+| `windows` | The WinUI 3 app, in C#, and [how to build and test it](windows/README.md) |
 | `tui` | The terminal app, in Zig |
-| `docs` | Screenshots and external specifications |
-| `tools` | Developer tools: `blur.swift` blurs private details in screenshots, and `coming-soon.swift` draws the placeholder sketches |
+| `docs` | [Screenshots](docs/screenshots/README.md) and [external specifications](docs/specifications/README.md) |
+| `tools` | Developer tools: [blur.swift](tools/blur.swift) blurs private details in screenshots, and [coming-soon.swift](tools/coming-soon.swift) draws the placeholder sketches |
 
 Inside the Apple app:
 

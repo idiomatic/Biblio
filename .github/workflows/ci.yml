@@ -13,19 +13,28 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ZIG_VERSION: 0.17.0
+  ZIG_VERSION: 0.17.1
 
 jobs:
   core:
     timeout-minutes: 20
-    name: Core and terminal (Linux)
-    runs-on: ubuntu-latest
+    name: Core and terminal (Linux ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: ${{ env.ZIG_VERSION }}
       - run: zig build test --summary all
+        working-directory: core
+      - name: Test the core against musl
+        run: zig build test -Dtarget=${{ matrix.arch }}-linux-musl --summary all
         working-directory: core
       - run: zig build --summary all
         working-directory: core
@@ -42,11 +51,59 @@ jobs:
         working-directory: tui
       - run: zig build --summary all
         working-directory: tui
+      - uses: actions/upload-artifact@v7
+        with:
+          name: terminal-linux-${{ matrix.arch }}
+          path: tui/zig-out/bin/
+          retention-days: 7
+
+  distros:
+    timeout-minutes: 20
+    name: Core (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "alpine:3.24", setup: "apk add --no-cache git tar xz" }
+          - { image: "debian:13", setup: "apt-get update && apt-get install -y --no-install-recommends git ca-certificates xz-utils" }
+          - { image: "ubuntu:24.04", setup: "apt-get update && apt-get install -y --no-install-recommends git ca-certificates xz-utils" }
+    steps:
+      - run: ${{ matrix.setup }}
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: zig build test --summary all
+        working-directory: core
+
+  cross:
+    timeout-minutes: 30
+    name: Cross builds (zig build cross)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: sudo apt-get install -y --no-install-recommends zstd
+      # The Debian sysroots for the GNOME app; the script refreshes a stale package index itself.
+      - uses: actions/cache@v6
+        with:
+          path: .zig-cache/sysroots
+          key: sysroots-${{ hashFiles('gnome/debian-sysroot.sh') }}
+      - run: zig build cross --summary all
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cross
+          path: zig-out/cross/
+          retention-days: 7
 
   gnome:
     timeout-minutes: 30
     name: GNOME (Fedora)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: fedora:45
     steps:
       - run: >
@@ -60,34 +117,47 @@ jobs:
         working-directory: core
       - run: zig build --summary all
         working-directory: gnome
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gnome-fedora-x86_64
+          path: gnome/zig-out/
+          retention-days: 7
 
   apple:
     timeout-minutes: 45
     name: Apple (macOS, iOS Simulator)
-    runs-on: macos-latest
+    # macOS 26 with Xcode 26, which the README requires.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: ${{ env.ZIG_VERSION }}
-      - run: zig build
-        working-directory: apple
+      - run: xcodebuild -version
       - name: Build for macOS
         run: >
           xcodebuild -project apple/Biblio.xcodeproj
           -scheme Biblio -destination 'generic/platform=macOS'
+          -derivedDataPath build/DerivedData
           CODE_SIGNING_ALLOWED=NO build
       - name: Build for the iOS Simulator
         run: >
           xcodebuild -project apple/Biblio.xcodeproj
           -scheme Biblio
           -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build/DerivedData
           CODE_SIGNING_ALLOWED=NO build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apple-unsigned
+          path: |
+            build/DerivedData/Build/Products/*/Biblio.app
+          retention-days: 7
 
   android:
     timeout-minutes: 45
     name: Android
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
@@ -99,9 +169,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      # Validates the wrapper and caches what it downloads.
       - uses: gradle/actions/setup-gradle@v6
-      - run: gradle assembleDebug
+      - run: ./gradlew assembleDebug
         working-directory: android
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
 
   windows:
     timeout-minutes: 45
@@ -123,3 +199,8 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet build -p:Platform=${{ matrix.platform }}
         working-directory: windows/Biblio
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-${{ matrix.platform }}
+          path: windows/Biblio/bin/${{ matrix.platform }}/Debug/
+          retention-days: 7

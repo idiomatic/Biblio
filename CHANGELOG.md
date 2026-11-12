@@ -19,8 +19,6 @@ the core and are not yet released.
 - On iPhone in landscape, the library card barcode is larger.
 - Sorting by title ignores accents and ligatures, so "Émile" sorts with "Emile" instead of
   after "Zoolander".
-- The Windows app moves to .NET 10 and Windows App SDK 1.8, as .NET 8 support ends November 10,
-  2026.
 - In advanced search, 4K Ultra HD Blu-ray sorts with the other formats in the Format menu.
 
 ## 1.6 — 2026-11-04
