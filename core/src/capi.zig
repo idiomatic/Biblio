@@ -176,6 +176,8 @@ pub const Patron = extern struct {
     preferred_pickup: OptStr,
     has_borrowing_history_enabled: bool,
     borrowing_history_enabled: bool,
+    /// Last, so apps built against the earlier layout keep working.
+    first_name: OptStr = null,
 };
 
 pub const LibraryInfo = extern struct {
@@ -652,6 +654,10 @@ pub const ListItem = extern struct {
     is_hold: bool,
     ready: bool,
     on_order: bool,
+    /// A checkout's due date as days since 1970-01-01; 0 for none.
+    due_day: i64,
+    /// A hold's place in the status sort: 0 ready, 1 in transit, 2 not yet available, 3 paused.
+    status_rank: u8,
 };
 
 pub const ListRow = extern struct {
@@ -737,6 +743,8 @@ pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*
             .is_hold = src.is_hold,
             .ready = src.ready,
             .on_order = src.on_order,
+            .due_day = src.due_day,
+            .status_rank = src.status_rank,
         };
     }
     return must(l.apply(generation, page, converted, total, page_size, now_ms));
@@ -757,6 +765,8 @@ pub export fn biblio_list_apply_page(l: *List, generation: u64, page: i64, resul
             .is_hold = e.hold != null,
             .ready = if (e.hold) |h| std.mem.eql(u8, std.mem.span(h.status), "READY_FOR_PICKUP") else false,
             .on_order = e.bib.on_order_copies > 0 or on_order_status,
+            .due_day = if (e.checkout) |c| if (c.due_date) |d| item_list.dayNumber(std.mem.span(d)) else 0 else 0,
+            .status_rank = if (e.hold) |h| item_list.Item.statusRank(std.mem.span(h.status)) else 0,
         };
     }
     return must(l.apply(generation, page, converted, result.count, result.page_size, now_ms));
@@ -833,6 +843,56 @@ pub export fn biblio_list_is_stale(l: *const List, now_ms: i64) bool {
 pub export fn biblio_list_rows(l: *const List, count: *usize) [*]const ListRow {
     count.* = l.rows.items.len;
     return @ptrCast(l.rows.items.ptr);
+}
+
+/// A merged row: a list row tagged with the index of its login's list.
+pub const MergedListRow = extern struct { login: u32, position: i64, id: ?[*:0]const u8 };
+
+pub export fn biblio_merge_new(lists: [*]const *List, count: usize) ?*item_list.Merge {
+    const m = gpa.create(item_list.Merge) catch return null;
+    const owned = gpa.dupe(*List, lists[0..count]) catch {
+        gpa.destroy(m);
+        return null;
+    };
+    m.* = .init(gpa, owned);
+    return m;
+}
+
+pub export fn biblio_merge_free(m: ?*item_list.Merge) void {
+    const merge = m orelse return;
+    gpa.free(merge.lists);
+    merge.deinit();
+    gpa.destroy(merge);
+}
+
+pub export fn biblio_merge_set_sort(m: *item_list.Merge, sort: item_list.Sort) void {
+    m.setSort(sort);
+}
+
+pub export fn biblio_merge_set_cards(m: *item_list.Merge, mask: u64) void {
+    m.setCards(mask);
+}
+
+pub export fn biblio_merge_set_format(m: *item_list.Merge, format: ?[*:0]const u8) void {
+    must(m.setFormat(if (format) |f| std.mem.span(f) else null));
+}
+
+pub export fn biblio_merge_set_hold_filter(m: *item_list.Merge, filter: item_list.HoldFilter) void {
+    must(m.setHoldFilter(filter));
+}
+
+pub export fn biblio_merge_total(m: *const item_list.Merge) i64 {
+    return m.total();
+}
+
+pub export fn biblio_merge_hold_count(m: *const item_list.Merge, filter: item_list.HoldFilter) i64 {
+    return m.holdCount(filter);
+}
+
+pub export fn biblio_merge_rows(m: *item_list.Merge, count: *usize) [*]const MergedListRow {
+    const rows = must(m.buildRows());
+    count.* = rows.len;
+    return @ptrCast(rows.ptr);
 }
 
 pub export fn biblio_list_ids(l: *const List, count: *usize) [*]const Str {

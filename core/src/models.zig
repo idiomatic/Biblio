@@ -429,6 +429,8 @@ pub const Patron = struct {
     userId: i64,
     accountId: i64,
     name: []const u8,
+    /// The patron's own first name from the library's contact record, if it has one.
+    firstName: ?[]const u8 = null,
     email: ?[]const u8 = null,
     language: []const u8,
     barcode: ?[]const u8 = null,
@@ -440,6 +442,7 @@ pub const Patron = struct {
     pub fn clone(self: Patron, gpa: Allocator) !Patron {
         var out = self;
         out.name = try gpa.dupe(u8, self.name);
+        out.firstName = if (self.firstName) |s| try gpa.dupe(u8, s) else null;
         out.email = if (self.email) |s| try gpa.dupe(u8, s) else null;
         out.language = try gpa.dupe(u8, self.language);
         out.barcode = if (self.barcode) |s| try gpa.dupe(u8, s) else null;
@@ -449,6 +452,7 @@ pub const Patron = struct {
 
     pub fn free(self: Patron, gpa: Allocator) void {
         gpa.free(self.name);
+        if (self.firstName) |s| gpa.free(s);
         if (self.email) |s| gpa.free(s);
         gpa.free(self.language);
         if (self.barcode) |s| gpa.free(s);

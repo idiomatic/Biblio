@@ -97,13 +97,23 @@ on the UI thread.
 
 All clients share one throttle, so the apps stay gentle with library sites. At most
 **3 requests** are in flight at a time, and each request starts at least **250 ms** after the
-one before. Library lookups and image fetches go through the same throttle.
+one before. Library lookups and image fetches go through the same throttle. These limits are
+conservative choices, not measured server limits; the throttle is shared by every login, so
+several cards load in parallel within it.
+
+**`biblio_incidents`** returns, as JSON, how often servers answered 429 or any 5xx since launch and
+the latest 16 (time, status, method, host, path with ids masked, `Retry-After`, requests in flight). It
+names no account. The Apple app keeps these across launches (`ThrottleLog`) and copies a report
+with About's Copy Diagnostic Log button or, on Mac, Help ▸ Copy Diagnostic Log; nothing is sent.
 
 ### Sessions and signing in
 
 - Account operations sign in first if needed, by calling the app's password callback.
 - If the gateway rejects a request with 401 or 403, or with an error message about the
-  session, the core signs in again once and retries the request.
+  session, or answers an authenticated read with a 500 (which a session ended by the same card
+  signing in elsewhere can produce), the core signs in again once and retries the request. A
+  500 to a change (placing a hold) is not retried, since the library may have done it first;
+  the app checks the holds list instead.
 - Pages on the library's website (used for account settings) are retried the same way when
   they redirect to `/user/login`.
 
@@ -593,6 +603,17 @@ Use a list from one thread (the UI thread).
 
 `biblio_list_is_stale` is true 15 minutes after page 1 arrived; times are milliseconds on any
 monotonic clock. Every call that returns a page to fetch has already marked it in flight.
+
+### Merged lists
+
+A combined window shows several logins of one library as one list. Keep one `biblio_list` per
+login, which pages, goes stale, and refetches on its own, and give them to `biblio_merge_new`
+(at most 64, borrowed, freed after the merge). `biblio_merge_rows` interlaces what they have
+fetched: by server position, or by the merge's own client sort, with the login as the tie-breaker
+(`biblio_merge_set_sort`). Each `biblio_merged_row` carries its `login` (an index into the lists),
+which is also whose list to ask for a placeholder's page and whose session an action uses; ids are
+unique only within a login. `biblio_merge_set_cards` hides logins, and the format and hold filters
+are set on every list.
 
 ---
 

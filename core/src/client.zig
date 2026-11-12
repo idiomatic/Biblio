@@ -234,6 +234,7 @@ pub const Client = struct {
             .userId = uid.?,
             .accountId = account_id orelse 0,
             .name = user.get("name").str(a) orelse c.username,
+            .firstName = user.path("userContact.firstName").nonEmpty(a),
             .email = user.path("userContact.email").nonEmpty(a),
             .language = language,
             .barcode = account.get("barcode").str(a),

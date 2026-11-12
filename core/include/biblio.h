@@ -271,6 +271,7 @@ typedef struct {
     const char *preferred_pickup;
     bool has_borrowing_history_enabled; /* false when the library doesn't say */
     bool borrowing_history_enabled;
+    const char *first_name; /* the library's contact first name; NULL if none */
 } biblio_patron_t;
 
 typedef struct {
@@ -466,6 +467,8 @@ typedef enum {
     BIBLIO_LIST_SORT_SERVER = 0,
     BIBLIO_LIST_SORT_PEOPLE_WAITING,
     BIBLIO_LIST_SORT_TITLE,
+    BIBLIO_LIST_SORT_DUE_DATE, /* soonest first, no date last; checkouts */
+    BIBLIO_LIST_SORT_STATUS,   /* ready, in transit, not yet available, paused; holds */
 } biblio_list_sort;
 
 typedef enum {
@@ -485,6 +488,8 @@ typedef struct {
     bool is_hold;
     bool ready;    /* a hold ready for pickup */
     bool on_order; /* waiting on copies the library hasn't received */
+    int64_t due_day; /* a checkout's due date as days since 1970-01-01; 0 for none */
+    uint8_t status_rank; /* a hold's place in the status sort: 0 ready, 1 in transit, 2 not yet available, 3 paused */
 } biblio_list_item;
 
 /* A fetched item at a server position, or a placeholder (id NULL) for one not yet fetched. */
@@ -558,6 +563,42 @@ const biblio_list_row *biblio_list_rows(const biblio_list *list, size_t *count);
 const char *const *biblio_list_ids(const biblio_list *list, size_t *count);
 /* The items' formats, most common first. */
 const biblio_format_count *biblio_list_formats(const biblio_list *list, size_t *count);
+
+/* ---------------------------------------------------------------------------------------
+ * Merged lists
+ *
+ * Interlaces the lists of several logins of one library (the cards of a combined window).
+ * Each list stays the app's: it pages, goes stale (15 minutes), and refetches on its own, and
+ * a row's login says which list's page to fetch for its placeholder. The merge only orders
+ * what the lists hold. Free it before the lists.
+ * ------------------------------------------------------------------------------------- */
+
+typedef struct biblio_merge biblio_merge;
+
+/* A list row, tagged with the index of its login's list. Ids are unique only within a login. */
+typedef struct {
+    uint32_t login;
+    int64_t position;
+    const char *id;
+} biblio_merged_row;
+
+/* Borrows the lists, at most 64, which must outlive the merge. */
+biblio_merge *biblio_merge_new(biblio_list *const *lists, size_t count);
+void biblio_merge_free(biblio_merge *merge);
+/* SERVER interleaves by server position, the login breaking ties; the others sort across
+ * logins with the login as the secondary key. DUE_DATE merges checkouts by true due date (the
+ * lists keep the server's due-date order). Fetched items come before placeholders. */
+void biblio_merge_set_sort(biblio_merge *merge, biblio_list_sort sort);
+/* Which logins show, one bit each (bit 0: the first list). All by default. */
+void biblio_merge_set_cards(biblio_merge *merge, uint64_t mask);
+/* Set on every list, because their counts and background fetching depend on them. */
+void biblio_merge_set_format(biblio_merge *merge, const char *format);
+void biblio_merge_set_hold_filter(biblio_merge *merge, biblio_hold_filter filter);
+/* Totals over the shown logins. */
+int64_t biblio_merge_total(const biblio_merge *merge);
+int64_t biblio_merge_hold_count(const biblio_merge *merge, biblio_hold_filter filter);
+/* Valid until the next call that changes a list or the merge. */
+const biblio_merged_row *biblio_merge_rows(biblio_merge *merge, size_t *count);
 
 #ifdef __cplusplus
 }

@@ -58,6 +58,21 @@
   "barcode": "21168012345678",
   "pickup": "PRE",
   "language": "en-US",
-  "history": true
- }
+  "history": true,
+  "username": "perihelion"
+ },
+ "patrons": [
+  {
+   "username": "gurathin",
+   "userId": 4043,
+   "accountId": 7082,
+   "name": "Ratthi Gurathin",
+   "email": "gurathin@example.com",
+   "barcode": "21168087654321",
+   "pickup": "MIH",
+   "language": "en-US",
+   "history": true,
+   "account": "account-2.json"
+  }
+ ]
 }

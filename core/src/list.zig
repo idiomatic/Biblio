@@ -15,7 +15,7 @@ const Allocator = std.mem.Allocator;
 const models = @import("models.zig");
 
 pub const Kind = enum(c_int) { search = 0, holds, checkouts, history };
-pub const Sort = enum(c_int) { server = 0, people_waiting, title };
+pub const Sort = enum(c_int) { server = 0, people_waiting, title, due_date, status };
 pub const HoldFilter = enum(c_int) { none = 0, ready, not_ready, on_order };
 
 /// Caps background fetching for client sorts and local filters, to stay gentle with the
@@ -37,6 +37,26 @@ pub const Item = struct {
     ready: bool = false,
     /// Waiting on copies the library hasn't received yet.
     on_order: bool = false,
+    /// The due date of a checkout as days since 1970-01-01; 0 when there is none.
+    due_day: i64 = 0,
+    /// Where a hold's status falls in the "status" sort: ready, in transit, not yet available, paused.
+    status_rank: u8 = 0,
+
+    /// The rank of a hold's status string: ready, in transit, not yet available (or anything
+    /// else), paused.
+    pub fn statusRank(status: []const u8) u8 {
+        const ready = [_][]const u8{ "READY_FOR_PICKUP", "READY" };
+        const moving = [_][]const u8{ "IN_TRANSIT", "SHIPPED", "READY_SOON" };
+        const paused = [_][]const u8{ "SUSPENDED", "INACTIVE" };
+        for (ready) |s| if (std.mem.eql(u8, status, s)) return 0;
+        for (moving) |s| if (std.mem.eql(u8, status, s)) return 1;
+        for (paused) |s| if (std.mem.eql(u8, status, s)) return 3;
+        return 2;
+    }
+
+    fn holdRank(h: models.Hold) u8 {
+        return if (h.isReady()) 0 else statusRank(h.status);
+    }
 
     pub fn from(e: models.ListEntry) Item {
         return .{
@@ -49,6 +69,8 @@ pub const Item = struct {
             .ready = if (e.hold) |h| h.isReady() else false,
             .on_order = e.bib.onOrderCopies > 0 or
                 (if (e.bib.status) |s| std.mem.eql(u8, s, "ON_ORDER") else false),
+            .due_day = if (e.checkout) |c| if (c.dueDate) |d| dayNumber(d) else 0 else 0,
+            .status_rank = if (e.hold) |h| holdRank(h) else 0,
         };
     }
 
@@ -62,6 +84,23 @@ pub const Item = struct {
         };
     }
 };
+
+/// Days since 1970-01-01 of a "YYYY-MM-DD" date (anything after those ten characters is
+/// ignored); 0 if it isn't one.
+pub fn dayNumber(date: []const u8) i64 {
+    if (date.len < 10 or date[4] != '-' or date[7] != '-') return 0;
+    const y = std.fmt.parseInt(i64, date[0..4], 10) catch return 0;
+    const m = std.fmt.parseInt(i64, date[5..7], 10) catch return 0;
+    const d = std.fmt.parseInt(i64, date[8..10], 10) catch return 0;
+    if (m < 1 or m > 12 or d < 1 or d > 31) return 0;
+    // Days from civil (Howard Hinnant).
+    const yy = if (m <= 2) y - 1 else y;
+    const era = @divFloor(yy, 400);
+    const yoe = yy - era * 400;
+    const doy = @divFloor(153 * (if (m > 2) m - 3 else m + 9) + 2, 5) + d - 1;
+    const doe = yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy;
+    return era * 146097 + doe - 719468;
+}
 
 /// A displayed row: a fetched item, or a stand-in for the item at a server position.
 pub const Row = extern struct {
@@ -443,6 +482,8 @@ pub const List = struct {
         return switch (l.sort) {
             .people_waiting => if (x.held_copies != y.held_copies) x.held_copies > y.held_copies else x.server_index < y.server_index,
             .title => naturalOrder(x.title, y.title) == .lt,
+            .due_date => if (x.due_day != y.due_day) dueBefore(x.due_day, y.due_day) else x.server_index < y.server_index,
+            .status => if (x.status_rank != y.status_rank) x.status_rank < y.status_rank else x.server_index < y.server_index,
             .server => a < b,
         };
     }
@@ -465,6 +506,12 @@ pub const List = struct {
         }.f);
     }
 };
+
+/// Earlier due dates first, with items that have none last.
+fn dueBefore(a: i64, b: i64) bool {
+    if (a == 0 or b == 0) return a != 0;
+    return a < b;
+}
 
 /// Orders titles as people expect: ignoring case and accents, with runs of digits compared as
 /// numbers ("Book 2" before "Book 10", "Émile" before "Zoolander"). Other characters compare by
@@ -529,6 +576,126 @@ const Folded = struct {
         if (cp < 0xC0 or cp >= 0x180 or first[cp - 0xC0] == ' ') return cp;
         if (second[cp - 0xC0] != ' ') f.pending = second[cp - 0xC0];
         return first[cp - 0xC0];
+    }
+};
+
+// MARK: Merging
+
+/// A displayed row of a merged list: a `Row` of the login's own list, tagged with the login.
+pub const MergedRow = extern struct {
+    /// The index of the login's list in the merge.
+    login: u32,
+    position: i64,
+    /// The item's id, which is only unique within its login; null for a placeholder.
+    id: ?[*:0]const u8,
+};
+
+/// Interlaces the lists of several logins of one library into one. The lists stay the app's:
+/// each pages, goes stale, and refetches on its own, so a card's pages are fetched only when
+/// that card's rows are viewed. The merge only orders what they have fetched.
+///
+/// Rows interleave by server position (card breaking ties), or by the sort with the card as
+/// the secondary key. `due_date` merges a server sort by due date, which each list already has. Placeholders of every card keep the scroll bar's length.
+pub const Merge = struct {
+    gpa: Allocator,
+    /// Borrowed; they must outlive the merge.
+    lists: []const *List,
+    sort: Sort = .server,
+    /// Which logins show, by bit.
+    cards: u64 = std.math.maxInt(u64),
+    rows: std.ArrayList(MergedRow) = .empty,
+
+    pub fn init(gpa: Allocator, lists: []const *List) Merge {
+        return .{ .gpa = gpa, .lists = lists };
+    }
+
+    pub fn deinit(m: *Merge) void {
+        m.rows.deinit(m.gpa);
+    }
+
+    /// Sorts the merged rows only; the lists keep the order the server gives.
+    pub fn setSort(m: *Merge, sort: Sort) void {
+        m.sort = sort;
+    }
+
+    pub fn setCards(m: *Merge, mask: u64) void {
+        m.cards = mask;
+    }
+
+    /// The filters belong to the lists, because their counts and background fetching do.
+    pub fn setFormat(m: *Merge, format: ?[]const u8) Allocator.Error!void {
+        for (m.lists) |l| try l.setFormat(format);
+    }
+
+    pub fn setHoldFilter(m: *Merge, filter: HoldFilter) Allocator.Error!void {
+        for (m.lists) |l| try l.setHoldFilter(filter);
+    }
+
+    pub fn total(m: *const Merge) i64 {
+        var n: i64 = 0;
+        for (m.lists, 0..) |l, i| if (m.shows(i)) {
+            n += l.total;
+        };
+        return n;
+    }
+
+    pub fn holdCount(m: *const Merge, filter: HoldFilter) i64 {
+        var n: i64 = 0;
+        for (m.lists, 0..) |l, i| if (m.shows(i)) {
+            n += l.holdCount(filter);
+        };
+        return n;
+    }
+
+    fn shows(m: *const Merge, login: usize) bool {
+        return login < 64 and (m.cards >> @intCast(login)) & 1 == 1;
+    }
+
+    const Entry = struct { login: u32, position: usize, item: ?Item };
+
+    fn lessThan(m: *const Merge, a: Entry, b: Entry) bool {
+        // Fetched items come before placeholders, which keep server order among themselves.
+        if ((a.item == null) != (b.item == null)) return a.item != null;
+        if (a.item) |x| if (b.item) |y| switch (m.sort) {
+            .people_waiting => if (x.held_copies != y.held_copies) return x.held_copies > y.held_copies,
+            .title => switch (naturalOrder(x.title, y.title)) {
+                .lt => return true,
+                .gt => return false,
+                .eq => {},
+            },
+            .due_date => if (x.due_day != y.due_day) return dueBefore(x.due_day, y.due_day),
+            .status => if (x.status_rank != y.status_rank) return x.status_rank < y.status_rank,
+            .server => {},
+        };
+        if (m.sort == .people_waiting or m.sort == .due_date or m.sort == .status) if (a.item) |x| if (b.item) |y| if (x.server_index != y.server_index) return x.server_index < y.server_index;
+        if (a.position != b.position and (m.sort == .server or a.item == null)) return a.position < b.position;
+        return a.login < b.login;
+    }
+
+    /// The merged rows, valid until the next call. A card still refreshing shows its stale rows.
+    pub fn buildRows(m: *Merge) Allocator.Error![]const MergedRow {
+        var entries: std.ArrayList(Entry) = .empty;
+        defer entries.deinit(m.gpa);
+        for (m.lists, 0..) |l, login| {
+            if (!m.shows(login)) continue;
+            for (l.slots.items, 0..) |slot, i| {
+                if (slot) |it| {
+                    if (!l.hasLocalFilter() or l.passesLocalFilters(it)) try entries.append(m.gpa, .{ .login = @intCast(login), .position = i, .item = it });
+                } else if (!l.hasLocalFilter() and !l.loaded_pages.contains(l.pageOf(@intCast(i)))) {
+                    try entries.append(m.gpa, .{ .login = @intCast(login), .position = i, .item = null });
+                }
+            }
+        }
+        std.mem.sort(Entry, entries.items, m, lessThan);
+        m.rows.clearRetainingCapacity();
+        for (entries.items) |e| {
+            try m.rows.append(m.gpa, .{
+                .login = e.login,
+                .position = @intCast(e.position),
+                .id = if (e.item) |it| z(it.id) else null,
+            });
+        }
+        return m.rows.items;
     }
 };
 
@@ -723,4 +890,129 @@ test "natural order" {
     try testing.expectEqual(std.math.Order.gt, naturalOrder("Straße", "Strass"));
     try testing.expectEqual(std.math.Order.gt, naturalOrder("日本", "Zoo"));
     try testing.expectEqual(std.math.Order.lt, naturalOrder("a\xff", "a\xffb"));
+}
+
+fn named(buf: *[8][8]u8, prefix: u8, n: usize, held: i64) []Item {
+    const S = struct {
+        var items: [8]Item = undefined;
+    };
+    for (0..n) |i| {
+        const id = std.fmt.bufPrint(&buf[i], "{c}{d}", .{ prefix, i }) catch unreachable;
+        S.items[i] = .{ .id = id, .title = id, .format = "BK", .held_copies = held - @as(i64, @intCast(i)), .server_index = @intCast(i) };
+    }
+    return S.items[0..n];
+}
+
+fn idAt(rows: []const MergedRow, i: usize) []const u8 {
+    return std.mem.span(rows[i].id.?);
+}
+
+test "merged lists interlace by position, with placeholders for unfetched cards" {
+    var a: List = .init(testing.allocator, .holds);
+    defer a.deinit();
+    var b: List = .init(testing.allocator, .holds);
+    defer b.deinit();
+    try a.reload(false);
+    try b.reload(false);
+    var bufa: [8][8]u8 = undefined;
+    var bufb: [8][8]u8 = undefined;
+    try testing.expect(try a.apply(a.generation, 1, named(&bufa, 'a', 3, 9), 3, 25, 0));
+    // The second card has only fetched 2 of 30 items.
+    try testing.expect(try b.apply(b.generation, 1, named(&bufb, 'b', 2, 9), 30, 2, 0));
+
+    var m: Merge = .init(testing.allocator, &.{ &a, &b });
+    defer m.deinit();
+    const rows = try m.buildRows();
+    try testing.expectEqual(@as(usize, 33), rows.len);
+    try testing.expectEqual(@as(i64, 33), m.total());
+    try testing.expectEqualStrings("a0", idAt(rows, 0));
+    try testing.expectEqualStrings("b0", idAt(rows, 1));
+    try testing.expectEqualStrings("a1", idAt(rows, 2));
+    try testing.expectEqual(@as(u32, 1), rows[3].login);
+    try testing.expectEqualStrings("b1", idAt(rows, 3));
+    try testing.expectEqualStrings("a2", idAt(rows, 4));
+    try testing.expect(rows[5].id == null and rows[5].login == 1);
+
+    // Hiding a card drops its rows.
+    m.setCards(0b01);
+    try testing.expectEqual(@as(usize, 3), (try m.buildRows()).len);
+}
+
+test "merged lists sort across cards with the card as the secondary key" {
+    var a: List = .init(testing.allocator, .holds);
+    defer a.deinit();
+    var b: List = .init(testing.allocator, .holds);
+    defer b.deinit();
+    try a.reload(false);
+    try b.reload(false);
+    // Both cards hold a title with the same name: it sorts once per card, the first card first.
+    var one = [_]Item{.{ .id = "H1", .title = "Dune", .format = "BK", .held_copies = 2 }};
+    var two = [_]Item{ .{ .id = "H9", .title = "Dune", .format = "BK", .held_copies = 2 }, .{ .id = "H8", .title = "Arrival", .format = "BK", .held_copies = 7 } };
+    try testing.expect(try a.apply(a.generation, 1, &one, 1, 25, 0));
+    try testing.expect(try b.apply(b.generation, 1, &two, 2, 25, 0));
+
+    var m: Merge = .init(testing.allocator, &.{ &a, &b });
+    defer m.deinit();
+    m.setSort(.title);
+    var rows = try m.buildRows();
+    try testing.expectEqualStrings("H8", idAt(rows, 0));
+    try testing.expectEqualStrings("H1", idAt(rows, 1));
+    try testing.expectEqualStrings("H9", idAt(rows, 2));
+
+    m.setSort(.people_waiting);
+    rows = try m.buildRows();
+    try testing.expectEqualStrings("H8", idAt(rows, 0));
+    try testing.expectEqual(@as(u32, 0), rows[1].login);
+}
+
+test "day numbers" {
+    try testing.expectEqual(@as(i64, 0), dayNumber("1970-01-01"));
+    try testing.expectEqual(@as(i64, 19723), dayNumber("2024-01-01T00:00:00"));
+    try testing.expectEqual(@as(i64, 0), dayNumber("soon"));
+}
+
+test "merged holds in status order put every ready hold before the rest" {
+    var a: List = .init(testing.allocator, .holds);
+    defer a.deinit();
+    var b: List = .init(testing.allocator, .holds);
+    defer b.deinit();
+    try a.reload(false);
+    try b.reload(false);
+    // Each card's own list is in status order; interlacing by position would put A2 (ready)
+    // after B1 (not yet available).
+    var one = [_]Item{
+        .{ .id = "A1", .title = "x", .format = "BK", .is_hold = true, .status_rank = 0 },
+        .{ .id = "A2", .title = "x", .format = "BK", .server_index = 1, .is_hold = true, .status_rank = 0 },
+    };
+    var two = [_]Item{
+        .{ .id = "B1", .title = "x", .format = "BK", .is_hold = true, .status_rank = 2 },
+        .{ .id = "B2", .title = "x", .format = "BK", .server_index = 1, .is_hold = true, .status_rank = 2 },
+    };
+    try testing.expect(try a.apply(a.generation, 1, &one, 2, 25, 0));
+    try testing.expect(try b.apply(b.generation, 1, &two, 2, 25, 0));
+    var m: Merge = .init(testing.allocator, &.{ &a, &b });
+    defer m.deinit();
+    m.setSort(.status);
+    const rows = try m.buildRows();
+    const want = [_][]const u8{ "A1", "A2", "B1", "B2" };
+    for (want, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
+}
+
+test "merged lists order checkouts by true due date" {
+    var a: List = .init(testing.allocator, .checkouts);
+    defer a.deinit();
+    var b: List = .init(testing.allocator, .checkouts);
+    defer b.deinit();
+    try a.reload(false);
+    try b.reload(false);
+    var one = [_]Item{ .{ .id = "A1", .title = "x", .format = "BK", .due_day = 100 }, .{ .id = "A2", .title = "x", .format = "BK", .server_index = 1, .due_day = 130 } };
+    var two = [_]Item{ .{ .id = "B1", .title = "x", .format = "BK", .due_day = 110 }, .{ .id = "B2", .title = "x", .format = "BK", .server_index = 1, .due_day = 0 } };
+    try testing.expect(try a.apply(a.generation, 1, &one, 2, 25, 0));
+    try testing.expect(try b.apply(b.generation, 1, &two, 2, 25, 0));
+    var m: Merge = .init(testing.allocator, &.{ &a, &b });
+    defer m.deinit();
+    m.setSort(.due_date);
+    const rows = try m.buildRows();
+    const want = [_][]const u8{ "A1", "B1", "A2", "B2" };
+    for (want, 0..) |id, i| try testing.expectEqualStrings(id, idAt(rows, i));
 }

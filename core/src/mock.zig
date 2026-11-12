@@ -98,6 +98,22 @@ const HistoryRecord = struct { bib: []const u8, out_days: i64, returned_days: i6
 
 const Branch = struct { id: []const u8, name: []const u8 };
 
+/// One patron's account; requests act on the one their access token names.
+const Account = struct {
+    username: []const u8,
+    patron: J,
+    holds: std.ArrayList(HoldRecord) = .empty,
+    checkouts: []CheckoutRecord = &.{},
+    history: []HistoryRecord = &.{},
+    email: []const u8,
+    pickup: []const u8,
+    language: []const u8,
+    history_enabled: bool,
+    /// Signed in with the password `boom` (or launched with `BIBLIO_MOCK_BOOM` set): holds are
+    /// placed, then answered with a 500, as a real library has been seen to do.
+    boom: bool = false,
+};
+
 const Mock = struct {
     arena: std.heap.ArenaAllocator,
     mutex: sync.Mutex = .{},
@@ -107,16 +123,11 @@ const Mock = struct {
     subdomain: []const u8,
     branches: []const Branch,
     catalog: []Entry,
-    holds: std.ArrayList(HoldRecord) = .empty,
-    checkouts: []CheckoutRecord,
-    history: []HistoryRecord,
+    accounts: []Account,
+    /// The account of the request being served.
+    acct: *Account,
     next_hold: u32 = 9000,
     today: i64,
-
-    email: []const u8,
-    pickup: []const u8,
-    language: []const u8,
-    history_enabled: bool,
 
     fn load(dir: []const u8) !*Mock {
         const m = try sync.allocator.create(Mock);
@@ -124,7 +135,6 @@ const Mock = struct {
         m.* = undefined;
         m.arena = .init(sync.allocator);
         m.mutex = .{};
-        m.holds = .empty;
         m.next_hold = 9000;
         const a = m.arena.allocator();
 
@@ -136,12 +146,6 @@ const Mock = struct {
             try branches.append(a, .{ .id = J.of(b).get("id").str(a) orelse continue, .name = J.of(b).get("name").str(a) orelse continue });
         }
         m.branches = branches.items;
-        const patron = lib.get("patron");
-        m.email = patron.get("email").str(a) orelse "";
-        m.pickup = patron.get("pickup").str(a) orelse "";
-        m.language = patron.get("language").str(a) orelse "en-US";
-        m.history_enabled = patron.get("history").boolean() orelse true;
-
         m.today = @divFloor(unixSeconds(), 86400);
 
         const cat = try readJson(a, dir, "catalog.json");
@@ -176,10 +180,32 @@ const Mock = struct {
         }
         m.catalog = entries.items;
 
-        const acct = try readJson(a, dir, "account.json");
-        for (acct.get("holds").items()) |h| {
+        // The first patron is `patron` with `account.json`; `patrons` adds more, each with its
+        // own `username` and `account` file. Sign-in takes a username or a card number; anything else fails.
+        var accounts: std.ArrayList(Account) = .empty;
+        try accounts.append(a, try m.loadAccount(a, dir, lib.get("patron"), "account.json"));
+        for (lib.get("patrons").items()) |p| {
+            const pj = J.of(p);
+            try accounts.append(a, try m.loadAccount(a, dir, pj, pj.get("account").str(a) orelse continue));
+        }
+        m.accounts = accounts.items;
+        m.acct = &m.accounts[0];
+        return m;
+    }
+
+    fn loadAccount(m: *Mock, a: Allocator, dir: []const u8, patron: J, file: []const u8) !Account {
+        var acct: Account = .{
+            .username = patron.get("username").str(a) orelse "perihelion",
+            .patron = patron,
+            .email = patron.get("email").str(a) orelse "",
+            .pickup = patron.get("pickup").str(a) orelse "",
+            .language = patron.get("language").str(a) orelse "en-US",
+            .history_enabled = patron.get("history").boolean() orelse true,
+        };
+        const data = try readJson(a, dir, file);
+        for (data.get("holds").items()) |h| {
             const hj = J.of(h);
-            try m.holds.append(a, .{
+            try acct.holds.append(a, .{
                 .id = try std.fmt.allocPrint(a, "H{d}", .{m.next_hold}),
                 .bib = hj.get("bib").str(a) orelse continue,
                 .status = hj.get("status").str(a) orelse "NOT_YET_AVAILABLE",
@@ -190,7 +216,7 @@ const Mock = struct {
             m.next_hold += 1;
         }
         var checkouts: std.ArrayList(CheckoutRecord) = .empty;
-        for (acct.get("checkouts").items()) |c| {
+        for (data.get("checkouts").items()) |c| {
             const cj = J.of(c);
             try checkouts.append(a, .{
                 .bib = cj.get("bib").str(a) orelse continue,
@@ -199,9 +225,9 @@ const Mock = struct {
                 .renewed = cj.get("renewed").int() orelse 0,
             });
         }
-        m.checkouts = checkouts.items;
+        acct.checkouts = checkouts.items;
         var history: std.ArrayList(HistoryRecord) = .empty;
-        for (acct.get("history").items()) |h| {
+        for (data.get("history").items()) |h| {
             const hj = J.of(h);
             try history.append(a, .{
                 .bib = hj.get("bib").str(a) orelse continue,
@@ -209,8 +235,8 @@ const Mock = struct {
                 .returned_days = hj.get("returnedDays").int() orelse 0,
             });
         }
-        m.history = history.items;
-        return m;
+        acct.history = history.items;
+        return acct;
     }
 
     fn entry(m: *Mock, id: []const u8) ?*Entry {
@@ -236,6 +262,7 @@ const Mock = struct {
     fn route(m: *Mock, a: Allocator, req: http.Request) !?http.Response {
         const host = http.hostOf(req.url);
         const path = html.urlPath(req.url);
+        m.selectAccount(req);
         if (std.mem.eql(u8, host, "gateway.bibliocommons.com")) {
             const prefix = try std.fmt.allocPrint(a, "/v2/libraries/{s}/", .{m.subdomain});
             if (!std.mem.startsWith(u8, path, prefix)) return null;
@@ -247,6 +274,16 @@ const Mock = struct {
             return try m.directory(a);
         }
         return null;
+    }
+
+    /// The account named by the `MOCK<n>` access token; website requests, which carry none,
+    /// act on the last one signed in.
+    fn selectAccount(m: *Mock, req: http.Request) void {
+        for (req.headers) |h| {
+            if (!std.ascii.eqlIgnoreCase(h.name, "X-Access-Token") or !std.mem.startsWith(u8, h.value, "MOCK")) continue;
+            const n = std.fmt.parseInt(usize, h.value["MOCK".len..], 10) catch return;
+            if (n < m.accounts.len) m.acct = &m.accounts[n];
+        }
     }
 
     fn gateway(m: *Mock, a: Allocator, req: http.Request, rest: []const u8) !http.Response {
@@ -267,7 +304,7 @@ const Mock = struct {
         if (get and std.mem.eql(u8, rest, "borrowinghistory")) return m.borrowing(a, req, .history);
         if (std.mem.endsWith(u8, rest, "/settings/borrowingHistorySetting")) {
             const body = json.parse(a, req.body orelse "");
-            m.history_enabled = body.get("enabled").boolean() orelse m.history_enabled;
+            m.acct.history_enabled = body.get("enabled").boolean() orelse m.acct.history_enabled;
             return reply(a, 200, "{}");
         }
         return reply(a, 404, "{\"message\":\"Not found\"}");
@@ -300,20 +337,33 @@ const Mock = struct {
         if (username.len == 0 or password.len == 0 or std.mem.eql(u8, password, "wrong")) {
             return reply(a, 401, "{\"error\":{\"message\":\"The username or PIN was not recognized.\"}}");
         }
-        const p = m.library.get("patron");
+        // A patron signs in by username or by card number; anyone else isn't recognized.
+        var found: ?usize = null;
+        for (m.accounts, 0..) |acct, i| {
+            if (std.ascii.eqlIgnoreCase(acct.username, username) or std.mem.eql(u8, acct.patron.get("barcode").str(a) orelse "", username)) found = i;
+        }
+        const index = found orelse return reply(a, 401, "{\"error\":{\"message\":\"The username or PIN was not recognized.\"}}");
+        m.acct = &m.accounts[index];
+        var env: [8]u8 = undefined;
+        m.acct.boom = std.mem.eql(u8, password, "boom") or envValue("BIBLIO_MOCK_BOOM", &env) != null;
+        const p = m.acct.patron;
         var w: std.Io.Writer.Allocating = .init(a);
-        try w.writer.print("{{\"auth\":{{\"sessionId\":\"MOCK\",\"authToken\":\"MOCK\",\"currentUserId\":{d}}},", .{p.get("userId").int() orelse 1});
+        try w.writer.print("{{\"auth\":{{\"sessionId\":\"MOCK{d}\",\"authToken\":\"MOCK{d}\",\"currentUserId\":{d}}},", .{ index, index, p.get("userId").int() orelse 1 });
         try w.writer.print("\"entities\":{{\"users\":{{\"{d}\":{{\"name\":", .{p.get("userId").int() orelse 1});
         try str(&w.writer, p.get("name").str(a) orelse username);
-        try w.writer.print(",\"accounts\":[{d}],\"userContact\":{{\"email\":", .{p.get("accountId").int() orelse 1});
-        try str(&w.writer, m.email);
+        try w.writer.print(",\"accounts\":[{d}],\"userContact\":{{\"firstName\":", .{p.get("accountId").int() orelse 1});
+        // The first word of the name, as a real contact record has.
+        const full = p.get("name").str(a) orelse username;
+        try str(&w.writer, full[0 .. std.mem.indexOfScalar(u8, full, ' ') orelse full.len]);
+        try w.writer.writeAll(",\"email\":");
+        try str(&w.writer, m.acct.email);
         try w.writer.writeAll("},\"preferences\":{\"language\":");
-        try str(&w.writer, m.language);
+        try str(&w.writer, m.acct.language);
         try w.writer.print("}}}}}},\"accounts\":{{\"{d}\":{{\"barcode\":", .{p.get("accountId").int() orelse 1});
         try str(&w.writer, p.get("barcode").str(a) orelse "");
         try w.writer.writeAll(",\"preferredLocations\":[");
-        try str(&w.writer, m.pickup);
-        try w.writer.print("],\"borrowingHistoryEnabled\":{s}}}}}}}}}", .{if (m.history_enabled) "true" else "false"});
+        try str(&w.writer, m.acct.pickup);
+        try w.writer.print("],\"borrowingHistoryEnabled\":{s}}}}}}}}}", .{if (m.acct.history_enabled) "true" else "false"});
         return reply(a, 200, w.written());
     }
 
@@ -455,7 +505,7 @@ const Mock = struct {
         if (signed_in) {
             try w.writer.writeAll(",\"holds\":{");
             var first = true;
-            for (m.holds.items) |h| {
+            for (m.acct.holds.items) |h| {
                 if (!contains(shown, h.bib)) continue;
                 if (!first) try w.writer.writeByte(',');
                 first = false;
@@ -465,7 +515,7 @@ const Mock = struct {
             }
             try w.writer.writeAll("},\"checkouts\":{");
             first = true;
-            for (m.checkouts, 0..) |c, i| {
+            for (m.acct.checkouts, 0..) |c, i| {
                 if (!contains(shown, c.bib)) continue;
                 if (!first) try w.writer.writeByte(',');
                 first = false;
@@ -583,15 +633,15 @@ const Mock = struct {
         const Row = struct { index: usize, bib: *Entry };
         var rows: std.ArrayList(Row) = .empty;
         const total: usize = switch (kind) {
-            .holds => m.holds.items.len,
-            .checkouts => m.checkouts.len,
-            .history => if (m.history_enabled) m.history.len else 0,
+            .holds => m.acct.holds.items.len,
+            .checkouts => m.acct.checkouts.len,
+            .history => if (m.acct.history_enabled) m.acct.history.len else 0,
         };
         for (0..total) |i| {
             const bib_id = switch (kind) {
-                .holds => m.holds.items[i].bib,
-                .checkouts => m.checkouts[i].bib,
-                .history => m.history[i].bib,
+                .holds => m.acct.holds.items[i].bib,
+                .checkouts => m.acct.checkouts[i].bib,
+                .history => m.acct.history[i].bib,
             };
             try rows.append(a, .{ .index = i, .bib = m.entry(bib_id) orelse continue });
         }
@@ -610,19 +660,19 @@ const Mock = struct {
                     const o = std.ascii.orderIgnoreCase(x.bib.author, y.bib.author);
                     if (o != .eq) return o == .lt;
                 } else if (c.kind == .holds and std.mem.eql(u8, s, "status")) {
-                    const hx = c.m.holds.items[x.index];
-                    const hy = c.m.holds.items[y.index];
+                    const hx = c.m.acct.holds.items[x.index];
+                    const hy = c.m.acct.holds.items[y.index];
                     const rx = holdRank(hx.status);
                     const ry = holdRank(hy.status);
                     if (rx != ry) return rx < ry;
                     if (hx.position != hy.position) return hx.position < hy.position;
                 } else if (c.kind == .checkouts and std.mem.eql(u8, s, "due_date")) {
-                    const dx = c.m.checkouts[x.index].due_days;
-                    const dy = c.m.checkouts[y.index].due_days;
+                    const dx = c.m.acct.checkouts[x.index].due_days;
+                    const dy = c.m.acct.checkouts[y.index].due_days;
                     if (dx != dy) return dx < dy;
                 } else if (c.kind == .history) {
-                    const rx = c.m.history[x.index].returned_days;
-                    const ry = c.m.history[y.index].returned_days;
+                    const rx = c.m.acct.history[x.index].returned_days;
+                    const ry = c.m.acct.history[y.index].returned_days;
                     if (rx != ry) return rx < ry;
                 }
                 return x.index < y.index;
@@ -668,10 +718,10 @@ const Mock = struct {
             if (i > 0) try w.writer.writeByte(',');
             try w.writer.print("\"{s}{d}\":", .{ entity_key[0..1], r.index });
             switch (kind) {
-                .holds => try m.writeHold(a, &w.writer, m.holds.items[r.index]),
-                .checkouts => try m.writeCheckout(a, &w.writer, r.index, m.checkouts[r.index]),
+                .holds => try m.writeHold(a, &w.writer, m.acct.holds.items[r.index]),
+                .checkouts => try m.writeCheckout(a, &w.writer, r.index, m.acct.checkouts[r.index]),
                 .history => {
-                    const h = m.history[r.index];
+                    const h = m.acct.history[r.index];
                     try w.writer.print("{{\"borrowingHistoryId\":\"B{d}\",\"metadataId\":", .{r.index + 1});
                     try str(&w.writer, h.bib);
                     try w.writer.writeAll(",\"checkedoutDate\":");
@@ -701,12 +751,12 @@ const Mock = struct {
         const body = json.parse(a, req.body orelse "");
         const id = body.get("metadataId").str(a) orelse "";
         const e = m.entry(id) orelse return reply(a, 200, "{\"failures\":[{\"message\":\"This item can’t be found.\"}]}");
-        for (m.holds.items) |h| if (std.mem.eql(u8, h.bib, id)) {
+        for (m.acct.holds.items) |h| if (std.mem.eql(u8, h.bib, id)) {
             return reply(a, 200, "{\"failures\":[{\"message\":\"You already have a hold on this item.\"}]}");
         };
-        const branch = body.path("materialParams.branchId").str(a) orelse m.pickup;
+        const branch = body.path("materialParams.branchId").str(a) orelse m.acct.pickup;
         e.held += 1;
-        try m.holds.append(m.arena.allocator(), .{
+        try m.acct.holds.append(m.arena.allocator(), .{
             .id = try std.fmt.allocPrint(m.arena.allocator(), "H{d}", .{m.next_hold}),
             .bib = e.id,
             .status = "NOT_YET_AVAILABLE",
@@ -715,6 +765,7 @@ const Mock = struct {
             .pickup_by_days = null,
         });
         m.next_hold += 1;
+        if (m.acct.boom) return reply(a, 500, "{\"message\":\"Internal Server Error\"}");
         return reply(a, 200, "{}");
     }
 
@@ -724,7 +775,7 @@ const Mock = struct {
         try w.writer.writeAll("{\"failures\":[");
         var first = true;
         for (body.get("holdIds").strings(a)) |id| {
-            for (m.holds.items, 0..) |h, i| {
+            for (m.acct.holds.items, 0..) |h, i| {
                 if (!std.mem.eql(u8, h.id, id)) continue;
                 if (std.mem.eql(u8, h.status, "READY_FOR_PICKUP")) {
                     if (!first) try w.writer.writeByte(',');
@@ -734,7 +785,7 @@ const Mock = struct {
                     try w.writer.writeAll(",\"message\":\"This hold is ready for pickup and can’t be cancelled online.\"}");
                 } else {
                     if (m.entry(h.bib)) |e| e.held = @max(0, e.held - 1);
-                    _ = m.holds.orderedRemove(i);
+                    _ = m.acct.holds.orderedRemove(i);
                 }
                 break;
             }
@@ -783,7 +834,7 @@ const Mock = struct {
             return page(a, w.written());
         }
         const post = std.mem.eql(u8, req.method, "POST");
-        if (std.mem.eql(u8, path, "/account/email")) return m.form(a, "/account/contact_information", try std.fmt.allocPrint(a, "<input type=\"email\" name=\"user_email\" value=\"{s}\">", .{m.email}));
+        if (std.mem.eql(u8, path, "/account/email")) return m.form(a, "/account/contact_information", try std.fmt.allocPrint(a, "<input type=\"email\" name=\"user_email\" value=\"{s}\">", .{m.acct.email}));
         if (std.mem.eql(u8, path, "/account/password")) {
             return m.form(a, "/account/change_pin", "<input type=\"password\" name=\"old_password\"><input type=\"password\" name=\"new_password\"><input type=\"password\" name=\"new_password_confirm\">");
         }
@@ -791,7 +842,7 @@ const Mock = struct {
             var options: std.Io.Writer.Allocating = .init(a);
             try options.writer.writeAll("<select name=\"first_preference\">");
             for (m.branches) |b| {
-                try options.writer.print("<option value=\"{s}\"{s}>{s}</option>", .{ b.id, if (std.mem.eql(u8, b.id, m.pickup)) " selected" else "", b.name });
+                try options.writer.print("<option value=\"{s}\"{s}>{s}</option>", .{ b.id, if (std.mem.eql(u8, b.id, m.acct.pickup)) " selected" else "", b.name });
             }
             try options.writer.writeAll("</select><select name=\"second_preference\"><option value=\"\" selected>None</option></select>");
             return m.form(a, "/account/preferred_branches", options.written());
@@ -800,7 +851,7 @@ const Mock = struct {
             var options: std.Io.Writer.Allocating = .init(a);
             try options.writer.writeAll("<select name=\"user_lang\">");
             for (lib.get("languages").strings(a)) |code| {
-                try options.writer.print("<option value=\"{s}\"{s}>{s}</option>", .{ code, if (std.mem.eql(u8, code, m.language)) " selected" else "", code });
+                try options.writer.print("<option value=\"{s}\"{s}>{s}</option>", .{ code, if (std.mem.eql(u8, code, m.acct.language)) " selected" else "", code });
             }
             try options.writer.writeAll("</select>");
             return m.form(a, "/account/user_lang", options.written());
@@ -808,15 +859,15 @@ const Mock = struct {
         if (post) {
             const body = req.body orelse "";
             if (std.mem.eql(u8, path, "/account/contact_information")) {
-                if (formField(a, body, "user_email")) |v| m.email = try m.arena.allocator().dupe(u8, v);
+                if (formField(a, body, "user_email")) |v| m.acct.email = try m.arena.allocator().dupe(u8, v);
                 return redirect(a, "/account/email");
             }
             if (std.mem.eql(u8, path, "/account/preferred_branches")) {
-                if (formField(a, body, "first_preference")) |v| m.pickup = try m.arena.allocator().dupe(u8, v);
+                if (formField(a, body, "first_preference")) |v| m.acct.pickup = try m.arena.allocator().dupe(u8, v);
                 return redirect(a, "/account/pickup_location");
             }
             if (std.mem.eql(u8, path, "/account/user_lang")) {
-                if (formField(a, body, "user_lang")) |v| m.language = try m.arena.allocator().dupe(u8, v);
+                if (formField(a, body, "user_lang")) |v| m.acct.language = try m.arena.allocator().dupe(u8, v);
                 return redirect(a, "/account/language");
             }
             if (std.mem.eql(u8, path, "/account/change_pin")) return redirect(a, "/account/password");
@@ -927,12 +978,17 @@ const win = struct {
 
 /// The value of `BIBLIO_MOCK`, copied into `buf`.
 fn fixturesDir(buf: []u8) ?[]const u8 {
+    return envValue("BIBLIO_MOCK", buf);
+}
+
+/// An environment variable's value, copied into `buf`; null if unset.
+fn envValue(name: [:0]const u8, buf: []u8) ?[]const u8 {
     if (builtin.os.tag == .windows) {
-        const n = win.GetEnvironmentVariableA("BIBLIO_MOCK", buf.ptr, @intCast(buf.len));
+        const n = win.GetEnvironmentVariableA(name.ptr, buf.ptr, @intCast(buf.len));
         return if (n == 0 or n >= buf.len) null else buf[0..n];
     }
-    const dir = std.c.getenv("BIBLIO_MOCK") orelse return null;
-    return std.mem.span(dir);
+    const value = std.c.getenv(name.ptr) orelse return null;
+    return std.mem.span(value);
 }
 
 fn writeStderr(message: []const u8) void {
@@ -1006,15 +1062,63 @@ test "mock library serves search, holds, and settings" {
     // A ready hold can't be cancelled; a waiting one can.
     var ready: ?[]const u8 = null;
     var waiting: ?[]const u8 = null;
-    for (m.holds.items) |h| {
+    for (m.acct.holds.items) |h| {
         if (std.mem.eql(u8, h.status, "READY_FOR_PICKUP")) ready = h.id else if (std.mem.eql(u8, h.status, "NOT_YET_AVAILABLE")) waiting = h.id;
     }
     const body = try std.fmt.allocPrint(a, "{{\"holdIds\":[\"{s}\",\"{s}\"]}}", .{ ready.?, waiting.? });
-    const before = m.holds.items.len;
+    const before = m.acct.holds.items.len;
     const cancelled = (try m.route(a, .{ .method = "DELETE", .url = "https://gateway.bibliocommons.com/v2/libraries/firstlanding/holds", .body = body })).?;
-    try std.testing.expectEqual(before - 1, m.holds.items.len);
+    try std.testing.expectEqual(before - 1, m.acct.holds.items.len);
     try std.testing.expectEqual(@as(usize, 1), json.parse(a, cancelled.body).get("failures").items().len);
 
     // Other libraries go to the real transport.
     try std.testing.expect((try m.route(a, .{ .method = "GET", .url = "https://gateway.bibliocommons.com/v2/libraries/wccls/locations" })) == null);
+}
+
+test "mock library keeps a second patron's account apart" {
+    if (!available) return error.SkipZigTest;
+    const m = Mock.load("mock/video") catch return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = "https://gateway.bibliocommons.com/v2/libraries/firstlanding/";
+
+    const login = (try m.route(a, .{ .method = "POST", .url = base ++ "sessions", .body = "{\"username\":\"gurathin\",\"password\":\"x\"}" })).?;
+    try std.testing.expectEqualStrings("MOCK1", json.parse(a, login.body).path("auth.authToken").str(a).?);
+    try std.testing.expectEqualStrings("Ratthi Gurathin", json.parse(a, login.body).path("entities.users.4043.name").str(a).?);
+
+    // A card number signs in as its patron; an unknown username (a typo) is refused.
+    const by_number = (try m.route(a, .{ .method = "POST", .url = base ++ "sessions", .body = "{\"username\":\"21168087654321\",\"password\":\"x\"}" })).?;
+    try std.testing.expectEqualStrings("MOCK1", json.parse(a, by_number.body).path("auth.authToken").str(a).?);
+    const typo = (try m.route(a, .{ .method = "POST", .url = base ++ "sessions", .body = "{\"username\":\"gurathim\",\"password\":\"x\"}" })).?;
+    try std.testing.expectEqual(@as(u16, 401), typo.status);
+
+    const second = m.accounts[1].holds.items.len;
+    const first = m.accounts[0].holds.items.len;
+    try std.testing.expect(second != first);
+    const token = [_]http.Header{.{ .name = "X-Access-Token", .value = "MOCK0" }};
+    _ = (try m.route(a, .{ .method = "GET", .url = base ++ "holds", .headers = &token })).?;
+    try std.testing.expect(m.acct == &m.accounts[0]);
+}
+
+test "mock library places a hold and then fails it when signed in as boom" {
+    if (!available) return error.SkipZigTest;
+    const m = Mock.load("mock/video") catch return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = "https://gateway.bibliocommons.com/v2/libraries/firstlanding/";
+    _ = (try m.route(a, .{ .method = "POST", .url = base ++ "sessions", .body = "{\"username\":\"perihelion\",\"password\":\"boom\"}" })).?;
+    const before = m.acct.holds.items.len;
+    var id: []const u8 = "";
+    for (m.catalog) |e| if (m.entry(e.id) != null and for (m.acct.holds.items) |h| {
+        if (std.mem.eql(u8, h.bib, e.id)) break false;
+    } else true) {
+        id = e.id;
+        break;
+    };
+    const body = try std.fmt.allocPrint(a, "{{\"metadataId\":\"{s}\"}}", .{id});
+    const res = (try m.route(a, .{ .method = "POST", .url = base ++ "holds", .body = body })).?;
+    try std.testing.expectEqual(@as(u16, 500), res.status);
+    try std.testing.expectEqual(before + 1, m.acct.holds.items.len);
 }
