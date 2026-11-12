@@ -21,14 +21,3 @@ AGENTS?*.md
 
 # Unblurred screenshots
 docs/screenshots/raw
-
-# local Argent
-package*.json
-node_modules/
-.argent
-.agents
-.claude
-.opencode
-.mcp.json
-opencode.json
-skills*.json

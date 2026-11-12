@@ -156,8 +156,6 @@ One patron's visit, from first launch to checking on returns, in the Apple apps.
 | Windows | The .NET 10 SDK and the Windows App SDK |
 | Terminal | Nothing more; any xterm-256color terminal on macOS or Linux |
 
-The GNOME and terminal apps also cross-compile for 64-bit Raspberry Pi OS.
-
 ## Building
 
 The core's tests: `cd core && zig build test`. Then, per platform:
@@ -198,6 +196,8 @@ Inside the Apple app:
 | `apple/Biblio/Net` | `BiblioClient` (an actor that handles sign-in and re-authentication), the gateway API calls, account-settings form handling, request throttling, and the library directory |
 | `apple/Biblio/Store` | Keychain access, and the saved libraries with their branding |
 | `apple/Biblio/Views` | SwiftUI views |
+| `apple/Shared` | Code shared by the app and its Lock Screen control |
+| `apple/BiblioControls` | The iOS Lock Screen and Control Center control that opens the library card |
 
 The app uses the same gateway API as the BiblioCommons web app. Account settings go through
 the website's own forms. [NOTES-API.md](NOTES-API.md) lists the endpoints. Requests are

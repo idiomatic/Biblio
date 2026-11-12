@@ -32,3 +32,12 @@ Account settings are Rails forms on `https://{subdomain}.bibliocommons.com` (the
 | Password | `/account/password` | `/account/change_pin` | `old_password`, `new_password`, `new_password_confirm` (4–64 alphanumeric) |
 | Pickup location | `/account/pickup_location` | `/account/preferred_branches` | `first_preference`, `second_preference`, `third_preference`, `sch_toggle` |
 | Language | `/account/language` | `/account/user_lang` | `user_lang` (e.g. `en-US`) |
+
+## Library discovery (no account)
+
+| Purpose | Method / path | Notes |
+|---|---|---|
+| Does the library exist | `GET https://gateway.bibliocommons.com/v2/libraries/{subdomain}/locations?limit=1` | 200 means it does |
+| Name, color, languages, labels | `GET https://{subdomain}.bibliocommons.com/v2/search?query=library&searchType=keyword` | the host must stay on `{subdomain}.`; the page state JSON gives `branding` and `localization.messages` |
+| Libraries using BiblioCommons | `GET https://www.bibliocommons.com/libraries-we-work-with`, then each page's "Next" link | the partner directory: name, website, region, and a wide logo |
+| Library icon | the library website's `rel="icon"` and `apple-touch-icon` links, then `/apple-touch-icon.png` and `/favicon.ico` | the largest square of the first three candidates |

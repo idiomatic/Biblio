@@ -22,6 +22,7 @@ goes in this directory when one is saved.
 | JNI | <https://docs.oracle.com/en/java/javase/17/docs/specs/jni/> | The Android core shim |
 | Fluent / WinUI 3 | <https://learn.microsoft.com/windows/apps/winui/winui3/> | Windows app design and UI |
 | P/Invoke | <https://learn.microsoft.com/dotnet/standard/native-interop/pinvoke> | The Windows core binding |
+| Windows Credential Locker | <https://learn.microsoft.com/windows/apps/develop/security/credential-locker> | Windows credential storage |
 | Debian package archive | <https://deb.debian.org/debian/> | Sysroots for cross-building GNOME |
 | Zig language reference | <https://ziglang.org/documentation/0.17.0/> | The core, GNOME, and terminal apps |
 | GitHub Actions workflow syntax | <https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax> | [CI](../../.github/workflows/ci.yml) |

@@ -5,11 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   ZIG_VERSION: 0.17.0
 
 jobs:
   core:
+    timeout-minutes: 20
     name: Core and terminal (Linux)
     runs-on: ubuntu-latest
     steps:
@@ -19,12 +27,24 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
       - run: zig build test --summary all
         working-directory: core
+      - run: zig build --summary all
+        working-directory: core
+      # The core for each Linux target and mode: the mock library needs libc in Debug and Safe builds.
+      - name: Cross-compile the core for Linux
+        run: |
+          for target in x86_64-linux-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl; do
+            for mode in Debug ReleaseSafe; do
+              zig build -Dtarget=$target -Doptimize=$mode --summary failures
+            done
+          done
+        working-directory: core
       - run: zig build test --summary all
         working-directory: tui
       - run: zig build --summary all
         working-directory: tui
 
   gnome:
+    timeout-minutes: 30
     name: GNOME (Fedora)
     runs-on: ubuntu-latest
     container: fedora:45
@@ -42,6 +62,7 @@ jobs:
         working-directory: gnome
 
   apple:
+    timeout-minutes: 45
     name: Apple (macOS, iOS Simulator)
     runs-on: macos-latest
     steps:
@@ -63,6 +84,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO build
 
   android:
+    timeout-minutes: 45
     name: Android
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +103,7 @@ jobs:
         working-directory: android
 
   windows:
+    timeout-minutes: 45
     name: Windows (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     strategy:
