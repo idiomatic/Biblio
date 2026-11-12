@@ -256,8 +256,9 @@ pub const CookieJar = struct {
             } else if (std.ascii.eqlIgnoreCase(key, "max-age")) {
                 if ((std.fmt.parseInt(i64, val, 10) catch 1) <= 0) expired = true;
             } else if (std.ascii.eqlIgnoreCase(key, "expires")) {
-                // Rails and the gateway delete cookies with an expiry in 1970.
-                if (std.mem.find(u8, val, "1970") != null) expired = true;
+                if (cookieDate(val)) |at| if (at <= sync.unixSeconds()) {
+                    expired = true;
+                };
             }
         }
 
@@ -281,6 +282,55 @@ pub const CookieJar = struct {
         j.cookies.append(j.gpa, c) catch j.freeCookie(c);
     }
 };
+
+/// Seconds since 1970 of a cookie's `Expires` date ("Thu, 01 Jan 1970 00:00:00 GMT",
+/// "Thursday, 01-Jan-70 00:00:00 GMT", "Thu Jan  1 00:00:00 1970"), read the way RFC 6265
+/// section 5.1.1 does; null if it isn't one.
+pub fn cookieDate(text: []const u8) ?i64 {
+    const months = [_][]const u8{ "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec" };
+    var time: ?[3]i64 = null;
+    var day: ?i64 = null;
+    var month: ?i64 = null;
+    var year: ?i64 = null;
+    var tokens = std.mem.tokenizeAny(u8, text, " \t,;-/");
+    while (tokens.next()) |t| {
+        if (time == null and std.mem.countScalar(u8, t, ':') == 2) {
+            var parts = std.mem.splitScalar(u8, t, ':');
+            var hms: [3]i64 = undefined;
+            time = for (&hms) |*v| {
+                v.* = std.fmt.parseInt(i64, parts.next().?, 10) catch break null;
+            } else hms;
+            continue;
+        }
+        const digits = std.mem.findNone(u8, t, "0123456789") orelse t.len;
+        if (digits > 0 and digits <= 2 and day == null and digits == t.len) {
+            day = std.fmt.parseInt(i64, t, 10) catch null;
+            continue;
+        }
+        if (t.len >= 3 and month == null) {
+            for (months, 1..) |m, i| if (std.ascii.eqlIgnoreCase(t[0..3], m)) {
+                month = @intCast(i);
+            };
+            if (month != null) continue;
+        }
+        if ((digits == 2 or digits == 4) and year == null) {
+            const y = std.fmt.parseInt(i64, t[0..digits], 10) catch continue;
+            year = if (digits == 4) y else if (y < 70) 2000 + y else 1900 + y;
+        }
+    }
+    const hms = time orelse return null;
+    const d = day orelse return null;
+    const m = month orelse return null;
+    const y = year orelse return null;
+    if (d < 1 or d > 31 or y < 1601 or hms[0] > 23 or hms[1] > 59 or hms[2] > 59) return null;
+    // Days from civil (Howard Hinnant).
+    const yy = if (m <= 2) y - 1 else y;
+    const era = @divFloor(yy, 400);
+    const yoe = yy - era * 400;
+    const doy = @divFloor(153 * (if (m > 2) m - 3 else m + 9) + 2, 5) + d - 1;
+    const days = era * 146097 + yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy - 719468;
+    return days * 86400 + hms[0] * 3600 + hms[1] * 60 + hms[2];
+}
 
 fn domainMatches(host: []const u8, domain: []const u8, host_only: bool) bool {
     if (std.ascii.eqlIgnoreCase(host, domain)) return true;
@@ -450,7 +500,7 @@ pub const StdTransport = if (!sync.has_std_io) void else struct {
         while (it.next()) |h| {
             try headers.append(arena, .{ .name = try arena.dupe(u8, h.name), .value = try arena.dupe(u8, h.value) });
         }
-        const status: u16 = @intFromEnum(response.head.status);
+        const status: u16 = @backingInt(response.head.status);
 
         const decompress_buffer: []u8 = switch (response.head.content_encoding) {
             .identity => &.{},
@@ -458,7 +508,7 @@ pub const StdTransport = if (!sync.has_std_io) void else struct {
             .deflate, .gzip => try arena.alloc(u8, std.compress.flate.max_window_len),
             .compress => return error.UnsupportedCompressionMethod,
         };
-        var transfer_buffer: [64]u8 = undefined;
+        var transfer_buffer: [16 * 1024]u8 = undefined;
         var decompress: std.http.Decompress = undefined;
         const reader = response.readerDecompressing(&transfer_buffer, &decompress, decompress_buffer);
         var body: Io.Writer.Allocating = .init(arena);
@@ -484,6 +534,18 @@ test "cookie jar" {
     jar.store("wccls.bibliocommons.com", "session=; expires=Thu, 01 Jan 1970 00:00:00 GMT");
     try std.testing.expectEqualStrings("bc_access_token=t1", jar.header(a, "wccls.bibliocommons.com").?);
     try std.testing.expectEqualStrings("wccls.bibliocommons.com", hostOf("https://wccls.bibliocommons.com/v2/x"));
+    // Any past expiry deletes, not only 1970's; a future one keeps the cookie.
+    jar.store("wccls.bibliocommons.com", "a=1; Expires=Wed, 21 Oct 2015 07:28:00 GMT");
+    jar.store("wccls.bibliocommons.com", "b=2; expires=Fri, 01-Jan-2100 00:00:00 GMT");
+    try std.testing.expectEqualStrings("bc_access_token=t1; b=2", jar.header(a, "wccls.bibliocommons.com").?);
+}
+
+test "cookie dates" {
+    try std.testing.expectEqual(@as(?i64, 0), cookieDate("Thu, 01 Jan 1970 00:00:00 GMT"));
+    try std.testing.expectEqual(@as(?i64, 1445412480), cookieDate("Wed, 21 Oct 2015 07:28:00 GMT"));
+    try std.testing.expectEqual(@as(?i64, 1445412480), cookieDate("Wednesday, 21-Oct-15 07:28:00 GMT"));
+    try std.testing.expectEqual(@as(?i64, 0), cookieDate("Thu Jan  1 00:00:00 1970"));
+    try std.testing.expectEqual(@as(?i64, null), cookieDate("tomorrow"));
 }
 
 test "incidents record throttling without ids" {

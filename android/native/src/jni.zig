@@ -501,6 +501,7 @@ fn kindName(result: capi.Result) []const u8 {
         .not_a_library => "notALibrary",
         .bad_request => "badRequest",
         .out_of_memory => "outOfMemory",
+        .hold_limit => "holdLimit",
     };
 }
 

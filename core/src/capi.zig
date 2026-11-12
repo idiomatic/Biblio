@@ -33,13 +33,16 @@ pub const Result = enum(c_int) {
     not_a_library,
     bad_request,
     out_of_memory,
+    /// The library refused a hold because the account has as many as it allows.
+    hold_limit,
 
     fn fromKind(kind: []const u8) Result {
         const map = std.StaticStringMap(Result).initComptime(.{
             .{ "signInRequired", .sign_in_required }, .{ "missingCredentials", .missing_credentials },
-            .{ "loginFailed", .login_failed },         .{ "http", .http },
-            .{ "network", .network },                  .{ "notALibrary", .not_a_library },
-            .{ "badRequest", .bad_request },           .{ "outOfMemory", .out_of_memory },
+            .{ "loginFailed", .login_failed },        .{ "http", .http },
+            .{ "network", .network },                 .{ "notALibrary", .not_a_library },
+            .{ "badRequest", .bad_request },          .{ "outOfMemory", .out_of_memory },
+            .{ "holdLimit", .hold_limit },
         });
         return map.get(kind) orelse .unexpected;
     }
@@ -162,7 +165,14 @@ pub const Copy = extern struct {
 pub const CopyList = extern struct { owner: ?*anyopaque, items: [*]const Copy, items_count: usize };
 
 pub const DetailField = extern struct { label: Str, values: [*]const Str, values_count: usize };
-pub const DetailList = extern struct { owner: ?*anyopaque, items: [*]const DetailField, items_count: usize };
+pub const DetailList = extern struct {
+    owner: ?*anyopaque,
+    items: [*]const DetailField,
+    items_count: usize,
+    /// The Edition field's index in `items`, or -1. Last, so apps built against the earlier
+    /// layout keep working.
+    edition_index: i64 = -1,
+};
 
 pub const Location = extern struct { id: Str, name: Str };
 pub const LocationList = extern struct { owner: ?*anyopaque, items: [*]const Location, items_count: usize };
@@ -466,6 +476,29 @@ pub export fn biblio_barcode(value_: Str, symbology: models.Symbology, count: *u
     return out;
 }
 
+/// Where a hold's status falls: ready, in transit, waiting, or paused (the status sort's order).
+pub const HoldRank = enum(c_int) { ready = 0, in_transit, waiting, paused };
+
+pub export fn biblio_hold_status_rank(status: OptStr) HoldRank {
+    return @fromBackingInt(@intCast(item_list.Item.statusRank(opt(status) orelse "")));
+}
+
+/// "Ready for pickup", "In transit", "On hold", or "Paused". Static; don't free.
+pub export fn biblio_hold_status_name(status: OptStr) [*:0]const u8 {
+    return switch (biblio_hold_status_rank(status)) {
+        .ready => "Ready for pickup",
+        .in_transit => "In transit",
+        .waiting => "On hold",
+        .paused => "Paused",
+    };
+}
+
+/// The year in a publication date ("2019", "c2019.", "[2019?]", "20190312"), or the date as
+/// given if it names none; NULL if `date` is. Free with biblio_free.
+pub export fn biblio_year(date: OptStr) ?[*:0]u8 {
+    return root.hostString(models.year(opt(date) orelse return null));
+}
+
 /// A scanned card number without Codabar start and stop characters, or NULL if it isn't one.
 /// Free with biblio_free.
 pub export fn biblio_card_normalize(scanned: Str) ?[*:0]u8 {
@@ -517,7 +550,8 @@ fn fetch(comptime Ext: type, h: ?*Handle, out: ?*?*Ext, err: ?*Error, comptime m
     const c = clientOf(h, err) orelse return .bad_request;
     var w = Work.init();
     defer w.deinit();
-    const result = @call(.auto, method, .{ c, w.a() } ++ args ++ .{&w.failure}) catch return fail(err, w.failure);
+    const result = @call(.auto, method, .{ c, w.a() } ++ args ++ .{&w.failure}) catch |e|
+        return if (e == error.OutOfMemory) outOfMemory(err) else fail(err, w.failure);
     return if (Ext == void) .ok else deliver(Ext, result, out, err);
 }
 
@@ -529,7 +563,7 @@ fn perform(h: ?*Handle, err: ?*Error, comptime method: anytype, args: anytype) R
 pub export fn biblio_configure(h: ?*Handle, language: OptStr, sample_account: c_int) void {
     const c = (h orelse return).client;
     if (opt(language)) |l| c.setLanguage(l);
-    if (sample_account >= 0) c.sample_account = sample_account != 0;
+    if (sample_account >= 0) c.sample_account.store(sample_account != 0, .monotonic);
 }
 
 pub export fn biblio_status(h: ?*Handle, out: ?*?*FetchStatus, err: ?*Error) Result {
@@ -583,7 +617,12 @@ pub export fn biblio_availability(h: ?*Handle, metadata_id: Str, out: ?*?*CopyLi
 }
 
 pub export fn biblio_details(h: ?*Handle, metadata_id: Str, out: ?*?*DetailList, err: ?*Error) Result {
-    return fetch(DetailList, h, out, err, Client.detailFields, .{std.mem.span(metadata_id)});
+    const c = clientOf(h, err) orelse return .bad_request;
+    var w = Work.init();
+    defer w.deinit();
+    const fields = c.detailFields(w.a(), std.mem.span(metadata_id), &w.failure) catch |e|
+        return if (e == error.OutOfMemory) outOfMemory(err) else fail(err, w.failure);
+    return deliver(DetailList, .{ .items = fields, .editionIndex = models.editionIndex(fields) }, out, err);
 }
 
 pub export fn biblio_locations(h: ?*Handle, out: ?*?*LocationList, err: ?*Error) Result {
@@ -609,10 +648,12 @@ pub export fn biblio_place_hold(h: ?*Handle, metadata_id: Str, material_type: Op
 }
 
 /// On success `*refused` lists the holds the library declined to cancel (often empty).
-pub export fn biblio_cancel_holds(h: ?*Handle, holds: [*]const HoldRef, count: usize, refused: ?*?*RefusalList, err: ?*Error) Result {
+/// `holds` may be NULL when `count` is 0.
+pub export fn biblio_cancel_holds(h: ?*Handle, holds: ?[*]const HoldRef, count: usize, refused: ?*?*RefusalList, err: ?*Error) Result {
+    const given = if (holds) |p| p[0..count] else if (count == 0) &[_]HoldRef{} else return badRequest(err, "Canceling holds needs the holds.");
     const refs = gpa.alloc(Client.HoldRef, count) catch return outOfMemory(err);
     defer gpa.free(refs);
-    for (refs, holds[0..count]) |*r, ref| r.* = .{ .id = std.mem.span(ref.id), .metadataId = std.mem.span(ref.metadata_id) };
+    for (refs, given) |*r, ref| r.* = .{ .id = std.mem.span(ref.id), .metadataId = std.mem.span(ref.metadata_id) };
     return fetch(RefusalList, h, refused, err, Client.cancelHolds, .{refs});
 }
 
@@ -730,12 +771,10 @@ pub export fn biblio_list_request(l: *List, page: i64) bool {
     return must(l.request(page));
 }
 
-pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*]const ListItem, count: usize,
-    total: i64, page_size: i64, now_ms: i64) bool
-{
+pub export fn biblio_list_apply(l: *List, generation: u64, page: i64, items: ?[*]const ListItem, count: usize, total: i64, page_size: i64, now_ms: i64) bool {
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
-    const converted = must(arena.allocator().alloc(item_list.Item, count));
+    const converted = must(arena.allocator().alloc(item_list.Item, if (items == null) 0 else count));
     for (converted, 0..) |*it, i| {
         const src = items.?[i];
         it.* = .{
@@ -830,11 +869,13 @@ pub export fn biblio_list_set_hold_filter(l: *List, filter: item_list.HoldFilter
     must(l.setHoldFilter(filter));
 }
 
-pub export fn biblio_list_remove(l: *List, ids: [*]const Str, count: usize) usize {
+/// `ids` may be NULL when `count` is 0.
+pub export fn biblio_list_remove(l: *List, ids: ?[*]const Str, count: usize) usize {
+    const given = (ids orelse return 0)[0..count];
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
     const spans = must(arena.allocator().alloc([]const u8, count));
-    for (spans, ids[0..count]) |*s, id| s.* = std.mem.span(id);
+    for (spans, given) |*s, id| s.* = std.mem.span(id);
     return must(l.remove(spans));
 }
 
@@ -1037,9 +1078,9 @@ pub export fn biblio_error_clear(err: ?*Error) void {
 
 comptime {
     const results = .{
-        .{ "library_info", LibraryInfo },     .{ "directory_page", DirectoryPage }, .{ "fetch_status", FetchStatus },
-        .{ "patron", Patron },                .{ "list_page", ListPage },           .{ "copy_list", CopyList },
-        .{ "detail_list", DetailList },       .{ "location_list", LocationList },   .{ "refusal_list", RefusalList },
+        .{ "library_info", LibraryInfo },         .{ "directory_page", DirectoryPage }, .{ "fetch_status", FetchStatus },
+        .{ "patron", Patron },                    .{ "list_page", ListPage },           .{ "copy_list", CopyList },
+        .{ "detail_list", DetailList },           .{ "location_list", LocationList },   .{ "refusal_list", RefusalList },
         .{ "account_settings", AccountSettings },
     };
     for (results) |r| {
@@ -1136,7 +1177,7 @@ test "library helpers" {
     defer root.biblio_free(widths);
     try std.testing.expectEqual(@as(usize, 23), count);
     try std.testing.expectEqual(@as(f64, 2.5), widths[2]);
-    try std.testing.expect(biblio_barcode("1", @enumFromInt(7), &count) == null);
+    try std.testing.expect(biblio_barcode("1", @fromBackingInt(@intCast(7)), &count) == null);
     const card = biblio_card_normalize(" A2900012345B\n").?;
     defer root.biblio_free(card);
     try std.testing.expectEqualStrings("2900012345", std.mem.span(card));
@@ -1145,6 +1186,17 @@ test "library helpers" {
     try std.testing.expectEqualStrings("2900012345", std.mem.span(plain));
     try std.testing.expect(biblio_card_normalize("  ") == null);
     try std.testing.expect(biblio_card_normalize("12 34") == null);
+    try std.testing.expectEqual(HoldRank.ready, biblio_hold_status_rank("READY_FOR_PICKUP"));
+    try std.testing.expectEqual(HoldRank.in_transit, biblio_hold_status_rank("SHIPPED"));
+    try std.testing.expectEqual(HoldRank.waiting, biblio_hold_status_rank("NOT_YET_AVAILABLE"));
+    try std.testing.expectEqual(HoldRank.paused, biblio_hold_status_rank("SUSPENDED"));
+    try std.testing.expectEqual(HoldRank.waiting, biblio_hold_status_rank(null));
+    try std.testing.expectEqualStrings("Paused", std.mem.span(biblio_hold_status_name("INACTIVE")));
+    try std.testing.expectEqualStrings("Ready for pickup", std.mem.span(biblio_hold_status_name("READY_FOR_PICKUP")));
+    const y = biblio_year("c2019.").?;
+    defer root.biblio_free(y);
+    try std.testing.expectEqualStrings("2019", std.mem.span(y));
+    try std.testing.expect(biblio_year(null) == null);
     const codes = biblio_format_codes(&count);
     try std.testing.expect(count > 30);
     try std.testing.expectEqualStrings("BK", std.mem.span(codes[0]));
@@ -1161,10 +1213,8 @@ test "item lists through the C interface" {
     try std.testing.expect(biblio_list_state(l).loading);
     const page: models.ListPage = .{
         .entries = &.{
-            .{ .id = "hold-H1", .bib = .{ .id = "S1", .title = "Dune", .format = "BK" }, .kind = "hold", .serverIndex = 0,
-                .hold = .{ .id = "H1", .metadataId = "S1", .status = "READY_FOR_PICKUP" } },
-            .{ .id = "hold-H2", .bib = .{ .id = "S2", .title = "Emma", .format = "DVD", .onOrderCopies = 2 }, .kind = "hold", .serverIndex = 1,
-                .hold = .{ .id = "H2", .metadataId = "S2", .status = "NOT_YET_AVAILABLE" } },
+            .{ .id = "hold-H1", .bib = .{ .id = "S1", .title = "Dune", .format = "BK" }, .kind = "hold", .serverIndex = 0, .hold = .{ .id = "H1", .metadataId = "S1", .status = "READY_FOR_PICKUP" } },
+            .{ .id = "hold-H2", .bib = .{ .id = "S2", .title = "Emma", .format = "DVD", .onOrderCopies = 2 }, .kind = "hold", .serverIndex = 1, .hold = .{ .id = "H2", .metadataId = "S2", .status = "NOT_YET_AVAILABLE" } },
         },
         .page = 1,
         .pages = 1,
@@ -1188,6 +1238,7 @@ test "item lists through the C interface" {
     try std.testing.expectEqual(@as(usize, 2), n);
     try std.testing.expectEqual(@as(i64, 1), formats[0].count);
     const ids = [_]Str{"hold-H1"};
+    try std.testing.expectEqual(@as(usize, 0), biblio_list_remove(l, null, 0));
     try std.testing.expectEqual(@as(usize, 1), biblio_list_remove(l, &ids, 1));
     try std.testing.expectEqual(@as(i64, 1), biblio_list_state(l).total);
 }

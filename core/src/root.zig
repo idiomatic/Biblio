@@ -65,7 +65,9 @@ fn abortPanic(message: []const u8, _: ?usize) noreturn {
 
 var throttle: http.Throttle = .{};
 var std_transport: http.StdTransport = undefined;
-var host_transport: ?HostTransport = null;
+/// Each setting is its own allocation, never freed, so clients created under an earlier one
+/// keep a valid transport whatever is set later.
+var host_transport: std.atomic.Value(?*const HostTransport) = .init(null);
 var std_transport_ready: std.atomic.Value(bool) = .init(false);
 var std_transport_mutex: sync.Mutex = .{};
 
@@ -84,8 +86,8 @@ fn builtInTransport() ?http.Transport {
 
 /// The host's transport if it set one, else the built-in one (none on iOS).
 fn transport() http.Transport {
-    const real: http.Transport = if (host_transport) |*t|
-        .{ .ctx = t, .sendFn = HostTransport.send }
+    const real: http.Transport = if (host_transport.load(.acquire)) |t|
+        .{ .ctx = @constCast(t), .sendFn = HostTransport.send }
     else
         builtInTransport() orelse .{ .ctx = null, .sendFn = noTransport };
     return mock.wrap(real) orelse real;
@@ -125,7 +127,7 @@ const HostTransport = struct {
     ctx: ?*anyopaque,
 
     fn send(ctx: ?*anyopaque, a: Allocator, req: http.Request) anyerror!http.Response {
-        const t: *HostTransport = @ptrCast(@alignCast(ctx.?));
+        const t: *const HostTransport = @ptrCast(@alignCast(ctx.?));
         var headers = try a.alloc(CHeader, req.headers.len);
         for (req.headers, 0..) |h, i| headers[i] = .{ .name = try a.dupeSentinel(u8, h.name, 0), .value = try a.dupeSentinel(u8, h.value, 0) };
         const c_req: CRequest = .{
@@ -195,20 +197,27 @@ pub export fn biblio_version() [*:0]const u8 {
 /// Routes every request through the host's HTTP stack. Pass null to go back to the built-in one.
 /// Call before creating clients.
 pub export fn biblio_set_transport(func: ?CTransportFn, ctx: ?*anyopaque) void {
-    host_transport = if (func) |f| .{ .func = f, .ctx = ctx } else null;
+    const setting: ?*const HostTransport = if (func) |f| blk: {
+        const t = gpa.create(HostTransport) catch return;
+        t.* = .{ .func = f, .ctx = ctx };
+        break :blk t;
+    } else null;
+    host_transport.store(setting, .release);
 }
 
 pub const CPasswordFn = *const fn (ctx: ?*anyopaque, subdomain: [*:0]const u8, username: [*:0]const u8) callconv(.c) ?[*:0]u8;
 
 const PasswordBridge = struct {
-    func: CPasswordFn,
+    /// Null for a client that never signs in (a guest).
+    func: ?CPasswordFn,
     ctx: ?*anyopaque,
 
-    fn get(ctx: ?*anyopaque, subdomain: []const u8, username: []const u8, a: Allocator) ?[]const u8 {
+    fn get(ctx: ?*anyopaque, subdomain: []const u8, username: []const u8, a: Allocator) ?[]u8 {
         const b: *PasswordBridge = @ptrCast(@alignCast(ctx.?));
+        const func = b.func orelse return null;
         const sd = a.dupeSentinel(u8, subdomain, 0) catch return null;
         const un = a.dupeSentinel(u8, username, 0) catch return null;
-        const p = b.func(b.ctx, sd, un) orelse return null;
+        const p = func(b.ctx, sd, un) orelse return null;
         defer biblio_free(p);
         const s = std.mem.span(p);
         const copy = a.dupe(u8, s) catch null;
@@ -224,8 +233,8 @@ pub const Handle = struct {
 
 /// Creates a client for one (library, username) pair. An empty username makes a guest client.
 /// `password` is called (from the calling thread) whenever the core needs to log in; it returns
-/// a string allocated with `biblio_alloc`, or null if no password is saved.
-pub export fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, password: CPasswordFn, ctx: ?*anyopaque) ?*Handle {
+/// a string allocated with `biblio_alloc`, or null if no password is saved. It may be null.
+pub export fn biblio_client_new(subdomain: [*:0]const u8, username: [*:0]const u8, password: ?CPasswordFn, ctx: ?*anyopaque) ?*Handle {
     const h = gpa.create(Handle) catch return null;
     h.bridge = .{ .func = password, .ctx = ctx };
     h.client = Client.create(gpa, transport(), &throttle, std.mem.span(subdomain), std.mem.span(username), PasswordBridge.get, &h.bridge) catch {

@@ -32,9 +32,9 @@ pub const Failure = struct {
     status: ?u16 = null,
 };
 
-/// Asks the app for the saved password. Returns null if there is none. The returned
-/// string must stay valid until the call returns (the core copies it).
-pub const PasswordFn = *const fn (ctx: ?*anyopaque, subdomain: []const u8, username: []const u8, arena: Allocator) ?[]const u8;
+/// Asks the app for the saved password, allocated in `arena`. Returns null if there is none.
+/// The core wipes it once it has signed in.
+pub const PasswordFn = *const fn (ctx: ?*anyopaque, subdomain: []const u8, username: []const u8, arena: Allocator) ?[]u8;
 
 pub const Client = struct {
     gpa: Allocator,
@@ -46,7 +46,8 @@ pub const Client = struct {
     jar: http.CookieJar,
     transport: http.Transport,
     throttle: *http.Throttle,
-    sample_account: bool = false,
+    /// For screenshots: hide the real card and email. Set from any thread.
+    sample_account: std.atomic.Value(bool) = .init(false),
     /// The format refinements this library makes itself (formats.zig).
     native_formats: formats.Native = .init(0),
 
@@ -58,8 +59,9 @@ pub const Client = struct {
     /// The app's language, used until a login reports the account's.
     language: ?[]u8 = null,
     /// Bumped on every login, so a request that saw an expired session can tell whether
-    /// another thread already logged in again.
-    login_generation: u64 = 0,
+    /// another thread already logged in again. Written with `mutex` held; read before taking it.
+    /// 32 bits, for 32-bit ARM's atomics; it is only compared for a change, so wrapping is fine.
+    login_generation: std.atomic.Value(u32) = .init(0),
 
     /// Status-bar reporting: the latest request's title, URL and size, and requests in flight.
     status_mutex: sync.Mutex = .{},
@@ -170,17 +172,17 @@ pub const Client = struct {
             failure.* = .{ .kind = "signInRequired", .message = "Sign in to use this feature." };
             return error.SignInRequired;
         }
-        const seen = c.login_generation;
+        const seen = c.login_generation.load(.acquire);
         c.mutex.lock();
         defer c.mutex.unlock();
         // Someone else logged in while we waited for the lock: use their session.
-        if (c.patron != null and c.session_id != null and (!force or c.login_generation != seen)) {
+        if (c.patron != null and c.session_id != null and (!force or c.login_generation.load(.monotonic) != seen)) {
             return c.patron.?.clone(a);
         }
         const patron = try c.performLogin(a, failure);
         if (c.patron) |old| old.free(c.gpa);
         c.patron = try patron.clone(c.gpa);
-        c.login_generation += 1;
+        _ = c.login_generation.fetchAdd(1, .release);
         return patron;
     }
 
@@ -190,9 +192,13 @@ pub const Client = struct {
             failure.* = .{ .kind = "missingCredentials", .message = "No saved password for this user. Add the user again." };
             return error.MissingCredentials;
         };
+        // The core's copies of the password go once the request is sent.
+        defer std.crypto.secureZero(u8, password);
         c.clearSession();
         c.jar.clear();
-        var body: std.Io.Writer.Allocating = .init(a);
+        // Sized so it never grows, which would leave copies behind.
+        var body: std.Io.Writer.Allocating = try .initCapacity(a, 64 + 6 * (c.username.len + password.len));
+        defer std.crypto.secureZero(u8, body.writer.buffer);
         std.json.Stringify.value(.{ .username = c.username, .password = password }, .{}, &body.writer) catch return error.OutOfMemory;
         const res = try c.request(a, .{
             .method = "POST",
@@ -245,7 +251,7 @@ pub const Client = struct {
             .borrowingHistoryEnabled = account.get("borrowingHistoryEnabled").boolean(),
         };
         // For screenshots: hide the real card and email.
-        if (c.sample_account) {
+        if (c.sample_account.load(.monotonic)) {
             patron.email = "reader@example.com";
             patron.barcode = "21168012345678";
         }
@@ -308,7 +314,7 @@ pub const Client = struct {
         // a 401, so a read that gets one signs in afresh and tries once more. Never a change: a
         // hold the library placed before failing would then be refused as a repeat.
         const is_read = std.mem.eql(u8, method, "GET");
-        if (authenticated and (isAuthFailure(a, res.status, j) or (res.status == 500 and is_read))) {
+        if (authenticated and (isAuthFailure(res.status) or (res.status == 500 and is_read))) {
             _ = try c.login(a, true, failure);
             res = try c.rawGateway(a, method, url.items, body, authenticated, failure);
             j = json.parse(a, res.body);
@@ -337,14 +343,11 @@ pub const Client = struct {
         return c.request(a, .{ .method = method, .url = url, .headers = headers.items, .body = body }, failure);
     }
 
-    fn isAuthFailure(a: Allocator, status: u16, j: J) bool {
-        if (status == 401 or status == 403) return true;
-        if (status < 400) return false;
-        const m = std.ascii.allocLowerString(a, models.message(a, j) orelse "") catch return false;
-        for ([_][]const u8{ "session", "not logged", "unauthor", "authenticat" }) |w| {
-            if (std.mem.find(u8, m, w) != null) return true;
-        }
-        return false;
+    /// An expired or evicted session. Other 4xx answers (a refused hold that mentions the
+    /// session, say) are the library's word on the request, and signing in again would only
+    /// repeat them.
+    fn isAuthFailure(status: u16) bool {
+        return status == 401 or status == 403;
     }
 
     /// Fetches an HTML page on the library's web host (shares this session's cookies).
@@ -366,6 +369,8 @@ pub const Client = struct {
         var fields = form.fields(a);
         for (values) |v| try fields.put(a, v[0], v[1]);
         var body: std.ArrayList(u8) = .empty;
+        // Forms carry passwords (changing one): wipe what was sent.
+        defer std.crypto.secureZero(u8, body.items);
         var it = fields.iterator();
         var first = true;
         while (it.next()) |e| {
@@ -515,11 +520,34 @@ pub const Client = struct {
             .enableSingleClickHolds = false,
             .materialParams = .{ .errorMessageLocale = c.locale(a), .branchId = pickup_branch orelse p.preferredPickup },
         }, .{ .emit_null_optional_fields = false }, &body.writer) catch return error.OutOfMemory;
-        const j = try c.send(a, "POST", "holds", &.{}, body.written(), true, failure);
-        if (j.get("failures").at(0).get("message").nonEmpty(a) orelse j.path("error.message").nonEmpty(a)) |m| {
-            failure.* = .{ .kind = "unexpected", .message = m };
+        const j = c.send(a, "POST", "holds", &.{}, body.written(), true, failure) catch |err| {
+            if (err == error.Http and failure.status != null and failure.status.? < 500 and isHoldLimit(a, failure.message, null)) {
+                failure.kind = "holdLimit";
+                return error.Unexpected;
+            }
+            return err;
+        };
+        const refusal = j.get("failures").at(0);
+        if (refusal.get("message").nonEmpty(a) orelse j.path("error.message").nonEmpty(a)) |m| {
+            const code = refusal.get("code").str(a) orelse refusal.get("errorCode").str(a) orelse j.path("error.code").str(a);
+            failure.* = .{ .kind = if (isHoldLimit(a, m, code)) "holdLimit" else "unexpected", .message = m };
             return error.Unexpected;
         }
+    }
+
+    /// Whether a refused hold says the account has as many holds as the library allows. The
+    /// gateway has been seen to say so only in English words ("You have reached the maximum
+    /// number of holds."); a code naming a limit or maximum counts too.
+    fn isHoldLimit(a: Allocator, message: []const u8, code: ?[]const u8) bool {
+        if (code) |k| {
+            const upper = std.ascii.allocUpperString(a, k) catch k;
+            if (std.mem.find(u8, upper, "LIMIT") != null or std.mem.find(u8, upper, "MAX") != null) return true;
+        }
+        const m = std.ascii.allocLowerString(a, message) catch return false;
+        for ([_][]const u8{ "maximum", "too many holds", "hold limit", "holds limit" }) |w| {
+            if (std.mem.find(u8, m, w) != null) return true;
+        }
+        return false;
     }
 
     pub const HoldRef = struct { id: []const u8, metadataId: []const u8 };

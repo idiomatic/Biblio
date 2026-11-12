@@ -39,10 +39,12 @@ char *biblio_incidents(void);
 typedef struct biblio_client biblio_client;
 
 /* Returns the saved password for (subdomain, username), allocated with biblio_alloc and
- * NUL-terminated, or NULL if none is saved. The core wipes and frees it. */
+ * NUL-terminated, or NULL if none is saved. The core wipes and frees it, and wipes its own
+ * copies once it has signed in. */
 typedef char *(*biblio_password_fn)(void *ctx, const char *subdomain, const char *username);
 
-/* An empty username makes a guest client, which can only use the catalog. */
+/* An empty username makes a guest client, which can only use the catalog. password may be
+ * NULL for a client that never signs in. */
 biblio_client *biblio_client_new(const char *subdomain, const char *username,
                                  biblio_password_fn password, void *ctx);
 /* No call on the client may still be running. */
@@ -77,7 +79,8 @@ typedef struct {
 typedef int (*biblio_transport_fn)(void *ctx, const biblio_http_request *request,
                                    biblio_http_response *response);
 
-/* Call once at startup, before creating clients. NULL restores the built-in transport. */
+/* Call at startup, before creating clients; clients keep the transport they were made with.
+ * NULL restores the built-in transport. */
 void biblio_set_transport(biblio_transport_fn transport, void *ctx);
 
 /* ---------------------------------------------------------------------------------------
@@ -100,10 +103,11 @@ typedef enum {
     BIBLIO_LOGIN_FAILED,       /* the library rejected the username or password */
     BIBLIO_HTTP,               /* the gateway or website returned an error status */
     BIBLIO_NETWORK,            /* the library could not be reached */
-    BIBLIO_UNEXPECTED,         /* the library refused (e.g. hold limit) or a page could not be read */
+    BIBLIO_UNEXPECTED,         /* the library refused (e.g. a hold) or a page could not be read */
     BIBLIO_NOT_A_LIBRARY,      /* no BiblioCommons catalog at that subdomain */
     BIBLIO_BAD_REQUEST,        /* a missing argument or client: a bug in the caller */
     BIBLIO_OUT_OF_MEMORY,
+    BIBLIO_HOLD_LIMIT,         /* the library refused a hold: the account has as many as it allows */
 } biblio_result;
 
 typedef struct {
@@ -248,6 +252,7 @@ typedef struct {
     void *owner;
     const biblio_detail_field_t *items;
     size_t items_count;
+    int64_t edition_index; /* the Edition field's index in items, or -1 */
 } biblio_detail_list_t;
 
 typedef struct {
@@ -383,6 +388,20 @@ typedef enum {
 double *biblio_barcode(const char *value, biblio_symbology symbology, size_t *count);
 /* A scanned card number without Codabar A-D start and stop characters; NULL if empty or not printable ASCII. */
 char *biblio_card_normalize(const char *scanned);
+/* Where a hold's status (biblio_hold_t.status) falls, in the status sort's order; the value
+ * biblio_list_item.status_rank takes. No network. */
+typedef enum {
+    BIBLIO_HOLD_READY = 0,  /* ready for pickup */
+    BIBLIO_HOLD_IN_TRANSIT,
+    BIBLIO_HOLD_WAITING,    /* not yet available, or a status the core doesn't know */
+    BIBLIO_HOLD_PAUSED,
+} biblio_hold_rank;
+biblio_hold_rank biblio_hold_status_rank(const char *status);
+/* "Ready for pickup", "In transit", "On hold", or "Paused". Static; don't free. No network. */
+const char *biblio_hold_status_name(const char *status);
+/* The year a publication date names ("c2019." gives "2019"), else the date as given; NULL if
+ * date is NULL. Free with biblio_free. No network. */
+char *biblio_year(const char *date);
 /* Image bytes through the shared throttle, for apps without an image loader. */
 biblio_result biblio_fetch_image(const char *url, unsigned char **bytes, size_t *len, biblio_error *err);
 
@@ -427,10 +446,12 @@ biblio_result biblio_checkouts(biblio_client *client, int64_t page, const char *
                                biblio_list_page_t **out, biblio_error *err);
 biblio_result biblio_history(biblio_client *client, int64_t page, const char *sort,
                              biblio_list_page_t **out, biblio_error *err);
-/* material_type NULL means "PHYSICAL"; pickup_branch NULL uses the preferred branch. */
+/* material_type NULL means "PHYSICAL"; pickup_branch NULL uses the preferred branch. A refusal
+ * because the account has as many holds as the library allows is BIBLIO_HOLD_LIMIT. */
 biblio_result biblio_place_hold(biblio_client *client, const char *metadata_id, const char *material_type,
                                 const char *pickup_branch, biblio_error *err);
 /* *refused lists the holds the library declined to cancel (often none). */
+/* holds may be NULL when count is 0. */
 biblio_result biblio_cancel_holds(biblio_client *client, const biblio_hold_ref *holds, size_t count,
                                   biblio_refusal_list_t **refused, biblio_error *err);
 biblio_result biblio_account_settings(biblio_client *client, biblio_account_settings_t **out, biblio_error *err);
@@ -531,7 +552,8 @@ void biblio_list_begin_refresh(biblio_list *list);
 void biblio_list_clear(biblio_list *list);
 /* True if the app should fetch this page now (it is then in flight). */
 bool biblio_list_request(biblio_list *list, int64_t page);
-/* False if the list was reloaded since the page was requested. */
+/* False if the list was reloaded since the page was requested, or it wasn't requested. items
+ * may be NULL when count is 0. */
 bool biblio_list_apply_page(biblio_list *list, uint64_t generation, int64_t page,
                             const biblio_list_page_t *result, int64_t now_ms);
 bool biblio_list_apply(biblio_list *list, uint64_t generation, int64_t page, const biblio_list_item *items,
@@ -559,7 +581,9 @@ void biblio_list_set_sort(biblio_list *list, biblio_list_sort sort);
  * which the server can't filter); NULL for all. */
 void biblio_list_set_format(biblio_list *list, const char *format);
 void biblio_list_set_hold_filter(biblio_list *list, biblio_hold_filter filter);
-/* Returns how many items were removed. */
+/* Returns how many items were removed; ids may be NULL when count is 0. Later items move up, as on
+ * the server, so a fetched page that now ends in unfetched items shows placeholders and can be
+ * requested again. */
 size_t biblio_list_remove(biblio_list *list, const char *const *ids, size_t count);
 int64_t biblio_list_hold_count(const biblio_list *list, biblio_hold_filter filter);
 

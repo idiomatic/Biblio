@@ -41,7 +41,7 @@ The core needs Zig 0.17. From `core/`:
 
 | Command | Produces |
 |---|---|
-| `zig build` | `zig-out/lib/libbiblio.a`, the shared library (`.dylib`, `.so` or `.dll`), `zig-out/include/biblio.h`, and the `biblio` CLI |
+| `zig build` | `zig-out/lib/libbiblio.a`, the shared library (`.dylib`, `.so`, or `.dll`), `zig-out/include/biblio.h`, and the `biblio` CLI |
 | `zig build test` | Runs the unit and fixture tests |
 | `zig build -Dtarget=<triple> -Doptimize=safe` | The library for another platform, such as `x86_64-windows-gnu`, `aarch64-linux-android`, or `aarch64-linux-gnu` (Raspberry Pi) |
 
@@ -49,7 +49,7 @@ Each app builds the core in its own way:
 
 | App | How the core is built and linked |
 |---|---|
-| Apple | [`apple/build.zig`](../apple/build.zig) packages `apple/zig-out/BiblioCore.xcframework` with a `BiblioCore` module map; Xcode runs `zig build` there before compiling. Swift code calls `import BiblioCore`. |
+| Apple | [`apple/build.zig`](../apple/build.zig) builds `apple/zig-out/lib/PLATFORM/libbiblio.a` and a `BiblioCore` module map in `apple/zig-out/include`; Xcode runs `zig build` there before compiling. Swift code calls `import BiblioCore`. |
 | GNOME | [`gnome/build.zig`](../gnome/build.zig) imports `core/src/root.zig` as the Zig module `biblio`. |
 | Terminal | [`tui/build.zig`](../tui/build.zig) does the same. |
 | Android | [`android/native/build.zig`](../android/native/build.zig) builds `libbiblio_jni.so` (the core plus a JNI shim) for each ABI. |
@@ -108,8 +108,8 @@ with About's Copy Diagnostic Log button or, on Mac, Help ▸ Copy Diagnostic Log
 ### Sessions and signing in
 
 - Account operations sign in first if needed, by calling the app's password callback.
-- If the gateway rejects a request with 401 or 403, or with an error message about the
-  session, or answers an authenticated read with a 500 (which a session ended by the same card
+- If the gateway rejects a request with 401 or 403, or answers an authenticated read with a
+  500 (which a session ended by the same card
   signing in elsewhere can produce), the core signs in again once and retries the request. A
   500 to a change (placing a hold) is not retried, since the library may have done it first;
   the app checks the holds list instead.
@@ -120,7 +120,8 @@ The app never sees an expired session. It only sees errors that are left after t
 
 ### Cookies and redirects
 
-Each client has its own cookie jar. The core follows up to 5 redirects. A 303, or a 301 or 302
+Each client has its own cookie jar, which drops a cookie set with a past `Expires` date or a
+`Max-Age` of 0. The core follows up to 5 redirects. A 303, or a 301 or 302
 after a POST, is followed as a GET; a 307 or 308 repeats the original method and body. Any
 transport the app supplies must therefore **not** follow redirects or store cookies; see
 [Writing a transport](#writing-a-transport).
@@ -142,7 +143,8 @@ required.
 ### Passwords
 
 The core never stores passwords. When it needs to sign in, it calls the password callback
-given to `biblio_client_new`, uses the password once, and wipes its copy. Each app keeps
+given to `biblio_client_new`, uses the password once, and wipes the callback's string and its
+own copies, the request body included, once it is sent. Each app keeps
 passwords in its platform's secure store:
 
 | App | Where passwords are kept |
@@ -200,7 +202,8 @@ The password callback:
 - runs on whichever thread is making the call;
 - returns a NUL-terminated string allocated with `biblio_alloc`, or NULL if no password is
   saved, which fails sign-in with `BIBLIO_MISSING_CREDENTIALS`;
-- receives `ctx` unchanged.
+- receives `ctx` unchanged;
+- may be NULL for a client that never signs in, such as a guest's.
 
 `biblio_client_new` returns NULL only if memory runs out. Before calling
 `biblio_client_free`, make sure no call on that client is still running; the Windows binding
@@ -211,8 +214,9 @@ void biblio_set_transport(biblio_transport_fn transport, void *ctx);
 ```
 
 Sends every request through the app's HTTP stack. Pass NULL to go back to the built-in
-transport. Call this once at startup, before creating any clients, because clients keep the
-transport they were created with. See [Writing a transport](#writing-a-transport).
+transport. Call this at startup, before creating any clients: clients keep the transport they
+were created with, and a client made before a later call keeps using the earlier one safely.
+See [Writing a transport](#writing-a-transport).
 
 ---
 
@@ -234,7 +238,8 @@ transport they were created with. See [Writing a transport](#writing-a-transport
   `biblio_free`.
 - **Optional numbers and booleans** come with a flag: `has_position` says whether `position`
   is set.
-- **Arrays** are a pointer and a `<name>_count`, such as `entries` and `entries_count`.
+- **Arrays** are a pointer and a `<name>_count`, such as `entries` and `entries_count`. An
+  array argument may be NULL when its count is 0.
 
 | `biblio_result` | Meaning | What apps usually do |
 |---|---|---|
@@ -244,10 +249,11 @@ transport they were created with. See [Writing a transport](#writing-a-transport
 | `BIBLIO_LOGIN_FAILED` | The library rejected the username or password | Show the message |
 | `BIBLIO_HTTP` | The gateway or website returned an error status | Show the message |
 | `BIBLIO_NETWORK` | The library couldn't be reached | Show the message; retrying may help |
-| `BIBLIO_UNEXPECTED` | The library refused the request (for example, the hold limit was reached) or a page couldn't be read | Show the message |
+| `BIBLIO_UNEXPECTED` | The library refused the request (for example, a hold) or a page couldn't be read | Show the message |
 | `BIBLIO_NOT_A_LIBRARY` | `biblio_library_info` found no BiblioCommons catalog at that subdomain | Show the message |
 | `BIBLIO_BAD_REQUEST` | A missing argument or client | A bug in the app |
 | `BIBLIO_OUT_OF_MEMORY` | The core ran out of memory | Rare; report it |
+| `BIBLIO_HOLD_LIMIT` | `biblio_place_hold`: the account has as many holds as the library allows | Show the message; stop placing more |
 
 ### Example
 
@@ -310,6 +316,9 @@ these columns:
 | `biblio_format_codes` | `*count` | Static string array | No |
 | `biblio_barcode` | `value`, `symbology`, `*count` | `double` array, or NULL | No |
 | `biblio_card_normalize` | `scanned` | String or NULL | No |
+| `biblio_hold_status_rank` | `status` | `biblio_hold_rank` | No |
+| `biblio_hold_status_name` | `status` | Static string | No |
+| `biblio_year` | `date` | String, or NULL for NULL | No |
 | `biblio_fetch_image` | `url` | Image bytes and their length | Yes |
 | `biblio_library_icon` | `website`, `subdomain`, `logo`, `*bytes`, `*len` | `biblio_icon_kind`, and image bytes unless `NONE` | Yes |
 | `biblio_logo_bounds` | `pixels`, `width`, `height`, `stride`, `channels`, `bounds[4]` | `true` and the content rectangle, or `false` | No |
@@ -358,6 +367,17 @@ the number has characters the symbology can't encode.
 **`biblio_card_normalize`** cleans a card number read from a barcode scanner: it trims
 whitespace and drops Codabar `A…D` start and stop characters. It returns NULL if nothing is
 left or the rest isn't printable ASCII without spaces.
+
+**`biblio_hold_status_rank`** groups a hold's `status` the way the status sort orders it:
+`BIBLIO_HOLD_READY` (`READY_FOR_PICKUP`), `BIBLIO_HOLD_IN_TRANSIT` (`IN_TRANSIT`, `SHIPPED`,
+`READY_SOON`), `BIBLIO_HOLD_WAITING` (anything else, such as `NOT_YET_AVAILABLE`), and
+`BIBLIO_HOLD_PAUSED` (`SUSPENDED`, `INACTIVE`). The value is what `biblio_list_item.status_rank`
+takes. **`biblio_hold_status_name`** names the group: "Ready for pickup", "In transit",
+"On hold", or "Paused". Its strings are static; don't free them.
+
+**`biblio_year`** finds the year in a publication date for a list row: `"2019"`, `"20190312"`,
+`"c2019."`, and `"[2019?]"` all give `"2019"`. It takes the first four digits from 1500 to 2099
+that aren't part of a longer number or word, and returns the date as given if there are none.
 
 **`biblio_fetch_image`** fetches an image, such as a book jacket, through the shared throttle.
 It is for apps without an image loader of their own (GNOME). Apps that have one should use it
@@ -421,7 +441,8 @@ The Apple app calls it after each operation.
 **`biblio_patron`** returns the patron from the last sign-in without contacting the library,
 or sets `*out` to NULL if the client hasn't signed in.
 
-**`biblio_search`** searches the catalog, 25 results per page. Its `biblio_search_query` has:
+**`biblio_search`** searches the catalog, a page at a time (25 results on the libraries seen so
+far). Its `biblio_search_query` has:
 - `search_type`: NULL or `"smart"` for keyword searches, or `"bl"` for field-qualified queries.
 - `filters`: extra form fields as `biblio_pair` entries, such as `f_AUDIENCE` = `adult`.
 - `format`: a format code to filter by.
@@ -436,8 +457,10 @@ any of the title's editions. The New Titles list is a search for `nw:[0 TO 180]`
 Each copy has a `kind` grouping its status (see `biblio_copy_t`), which the apps use for an
 icon and color. The status text always appears as well.
 
-**`biblio_details`** returns the full catalog record as labeled fields, leaving out the title
-and summary.
+**`biblio_details`** returns the full catalog record as labeled fields, leaving out the title,
+the summary, and any reader opinions. `edition_index` is the Edition field's index in `items`
+(every edition statement the record has), or -1; use it rather than matching the label, which
+may be localized.
 
 **`biblio_locations`** returns the library's visible branches, sorted by name, for pickup
 choices.
@@ -449,8 +472,9 @@ and `sort` may be NULL.
 **`biblio_place_hold`** places a hold:
 - `material_type` comes from the bib; NULL means `"PHYSICAL"`.
 - A NULL `pickup_branch` uses the account's preferred pickup location.
-- If the library refuses, the result is `BIBLIO_UNEXPECTED` with the library's reason. For
-  example, its message mentions the maximum number of holds when the account is at its limit.
+- If the library refuses, the result is `BIBLIO_UNEXPECTED` with the library's reason, or
+  `BIBLIO_HOLD_LIMIT` when the account already has as many holds as the library allows (the
+  core reads that from the refusal's code or its English wording, such as "maximum").
 
 **`biblio_cancel_holds`** cancels several holds in one request and returns the ones the
 library refused, with its reasons. Some libraries won't cancel holds that are ready for
@@ -543,7 +567,7 @@ One row of any list.
 | `entries` | `biblio_list_entry_t` array | |
 | `page`, `pages` | int64 | 1-based |
 | `count` | int64 | Total entries across all pages |
-| `page_size` | int64 | 25 on the libraries seen so far |
+| `page_size` | int64 | From the response's pagination (25 on the libraries seen so far); `server_index` counts in it |
 | `facets` | `biblio_facet_t` array | Search only; each has an `id` and `values` (`value`, `count`). `FORMAT` drives the format filter |
 | `sort_options` | string array | Server sort IDs |
 | `applied_sort`? | string | |
@@ -552,7 +576,7 @@ One row of any list.
 
 | Type | Fields |
 |---|---|
-| `biblio_hold_t` | `id`, `metadata_id`, `status` (such as `READY_FOR_PICKUP`, `NOT_YET_AVAILABLE`, `IN_TRANSIT`), `position`?, `pickup_location`?, `expiry_date`?, `pickup_by_date`?, `suspend_end_date`?, `can_cancel` |
+| `biblio_hold_t` | `id`, `metadata_id`, `status` (such as `READY_FOR_PICKUP`, `NOT_YET_AVAILABLE`, `IN_TRANSIT`; see `biblio_hold_status_rank`), `position`?, `pickup_location`?, `expiry_date`?, `pickup_by_date`?, `suspend_end_date`?, `can_cancel` |
 | `biblio_checkout_t` | `id`, `metadata_id`, `status`?, `due_date`?, `checkout_date`?, `times_renewed`? |
 | `biblio_history_entry_t` | `id`, `metadata_id`, `checkout_date`?, `returned_date`? |
 
@@ -575,6 +599,7 @@ Dates are passed through as the library sends them.
 | Type | Fields |
 |---|---|
 | `biblio_detail_field_t` | `label` (readable, such as "Publisher"), `values` (string array) |
+| `biblio_detail_list_t` | `items` (`biblio_detail_field_t` array), `edition_index` (the Edition field's, or -1) |
 | `biblio_location_t` | `id`, `name` |
 | `biblio_patron_t` | `user_id`, `account_id`, `name`, `email`?, `language`, `barcode`?, `preferred_pickup`?, `borrowing_history_enabled`? (unset when the library doesn't say) |
 | `biblio_library_info_t` | `subdomain`, `name`, `short_name`?, `primary_color`? (`#RRGGBB`), `website`?, `labels` (`biblio_pair` array), `languages` (string array), `users` (always empty) |
@@ -595,11 +620,11 @@ Use a list from one thread (the UI thread).
 | Step | Calls |
 |---|---|
 | Load | `biblio_list_reload` requests page 1 and returns the generation to apply it with. `keep_content` keeps the rows, stale, until page 1 replaces them (refreshing). `biblio_list_clear` empties it for an empty search. |
-| Apply | `biblio_list_apply_page` (or `biblio_list_apply` with `biblio_list_item`s built from the app's own models), or `biblio_list_fail`. Both return false for a page from before the latest reload. |
+| Apply | `biblio_list_apply_page` (or `biblio_list_apply` with `biblio_list_item`s built from the app's own models), or `biblio_list_fail`. Both return false for a page from before the latest reload; applying returns false, too, for a page the list didn't request. |
 | Scroll | `biblio_list_item_appeared` returns a page to prefetch near the end of the fetched items. Count placeholders with `biblio_list_placeholder_appeared` and `_disappeared`; after about 300 ms, `biblio_list_take_visible_requests` requests the pages still on screen. |
 | Fetch the rest | After page 1 when `biblio_list_wants_all_pages` (client sorts, local filters, holds), or after a sort or filter change when `biblio_list_needs_all_pages`: `biblio_list_begin_background`, then `biblio_list_next_background_page` one page at a time until it returns 0 (at most 40 pages). `biblio_list_end_background` stops after an error. |
 | Show | `biblio_list_rows` (a placeholder's id is NULL), `biblio_list_ids` in server order, `biblio_list_formats`, `biblio_list_hold_count`, and `biblio_list_state`. They stay valid until the next call that changes the list. |
-| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally; searches filter only refined formats locally), `biblio_list_set_not_borrowed`, and `biblio_list_remove` (after canceling holds). |
+| Change | `biblio_list_set_sort` (server sorts need a reload; client sorts need every page), `biblio_list_set_format` and `biblio_list_set_hold_filter` (account lists, applied locally; searches filter only refined formats locally), `biblio_list_set_not_borrowed`, and `biblio_list_remove` (after canceling holds; later items move up, so a fetched page left ending in unfetched items shows placeholders again). |
 
 `biblio_list_is_stale` is true 15 minutes after page 1 arrived; times are milliseconds on any
 monotonic clock. Every call that returns a page to fetch has already marked it in flight.
@@ -755,7 +780,9 @@ Zig 0.17's `std.Io.Threaded` doesn't compile.
 
   Keep live testing light, and don't change real accounts without meaning to.
 - **A mock library.** `BIBLIO_MOCK=core/mock/video` (or `books`) serves a fictional library
-  from fixtures, for the CLI and every app; see [mock/README.md](mock/README.md).
+  from fixtures, for the CLI and every app but Android, in Debug and ReleaseSafe builds (it is
+  compiled out of ReleaseFast and ReleaseSmall builds, and of every Android build); see
+  [mock/README.md](mock/README.md).
 
 When a library's responses change shape, capture a trimmed example as a new fixture before
 changing the parser.

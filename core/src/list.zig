@@ -254,10 +254,10 @@ pub const List = struct {
         return true;
     }
 
-    /// A fetched page. False if the list was reloaded since it was requested.
+    /// A fetched page. False if the list was reloaded since it was requested, or it wasn't.
     pub fn apply(l: *List, generation: u64, page: i64, items: []const Item, count: i64, page_size: i64, now_ms: i64) Allocator.Error!bool {
         if (generation != l.generation) return false;
-        _ = l.in_flight.remove(page);
+        if (!l.in_flight.remove(page)) return false;
         if (page == 1) {
             if (l.refreshing) {
                 l.dropItems();
@@ -428,14 +428,22 @@ pub const List = struct {
         return true;
     }
 
-    /// Removes the items with these ids (after canceling holds); returns how many.
+    /// Removes the items with these ids (after canceling holds); returns how many. Later items
+    /// move up, as they do on the server, so a fetched page that now ends in items not yet
+    /// fetched is fetched again (its fetched items keep their places).
     pub fn remove(l: *List, ids: []const []const u8) Allocator.Error!usize {
+        var refetch: std.ArrayList(i64) = .empty;
+        defer refetch.deinit(l.gpa);
         var kept: usize = 0;
-        for (l.slots.items) |slot| {
+        for (l.slots.items, 0..) |slot, i| {
             if (slot) |it| if (contains(ids, it.id)) continue;
+            if (slot == null and kept != i and !l.loaded_pages.contains(l.pageOf(@intCast(i)))) {
+                try refetch.append(l.gpa, l.pageOf(@intCast(kept)));
+            }
             l.slots.items[kept] = slot;
             kept += 1;
         }
+        for (refetch.items) |p| _ = l.loaded_pages.remove(p);
         const removed = l.slots.items.len - kept;
         l.slots.shrinkRetainingCapacity(kept);
         l.total = @max(0, l.total - @as(i64, @intCast(removed)));
@@ -512,7 +520,12 @@ pub const List = struct {
         const y = l.slots.items[b].?;
         return switch (l.sort) {
             .people_waiting => if (x.held_copies != y.held_copies) x.held_copies > y.held_copies else x.server_index < y.server_index,
-            .title => naturalOrder(x.title, y.title) == .lt,
+            // Equal titles keep server order, so rebuilds don't swap them (the sort is unstable).
+            .title => switch (naturalOrder(x.title, y.title)) {
+                .lt => true,
+                .gt => false,
+                .eq => if (x.server_index != y.server_index) x.server_index < y.server_index else a < b,
+            },
             .due_date => if (x.due_day != y.due_day) dueBefore(x.due_day, y.due_day) else x.server_index < y.server_index,
             .status => if (x.status_rank != y.status_rank) x.status_rank < y.status_rank else x.server_index < y.server_index,
             .server, .server_title, .author => a < b,
@@ -948,6 +961,57 @@ test "an item that moved between pages keeps its first position" {
     try l.reload(false);
     _ = try l.apply(l.generation, 1, &p1, 2, 2, 0);
     try testing.expectEqual(@as(usize, 2), l.rows.items.len);
+}
+
+test "equal titles keep server order" {
+    var l: List = .init(testing.allocator, .holds);
+    defer l.deinit();
+    try l.reload(false);
+    const p1 = [_]Item{
+        .{ .id = "b", .title = "Dune", .format = "BK", .server_index = 0 },
+        .{ .id = "a", .title = "dune", .format = "BK", .server_index = 1 },
+        .{ .id = "c", .title = "Arrival", .format = "BK", .server_index = 2 },
+    };
+    _ = try l.apply(l.generation, 1, &p1, 3, 25, 0);
+    try l.setSort(.title);
+    for (0..5) |_| {
+        try l.setSort(.title);
+        for ([_][]const u8{ "c", "b", "a" }, 0..) |id, i| try testing.expectEqualStrings(id, std.mem.span(l.rows.items[i].id.?));
+    }
+}
+
+test "pages are applied only when requested" {
+    var l: List = .init(testing.allocator, .search);
+    defer l.deinit();
+    try l.reload(false);
+    var buf: [32][8]u8 = undefined;
+    // Page 9 of a list nobody asked for would size the list to it.
+    try testing.expect(!try l.apply(l.generation, 9, pageOfItems(&buf, "x", 2), 2, 25, 0));
+    try testing.expectEqual(@as(usize, 0), l.slots.items.len);
+    try testing.expect(try l.apply(l.generation, 1, pageOfItems(&buf, "a", 2), 2, 25, 0));
+    // Nor twice.
+    try testing.expect(!try l.apply(l.generation, 1, pageOfItems(&buf, "a", 2), 2, 25, 0));
+}
+
+test "removing from a partly fetched list fetches the page that moved up again" {
+    var l: List = .init(testing.allocator, .holds);
+    defer l.deinit();
+    try l.reload(false);
+    var buf: [32][8]u8 = undefined;
+    _ = try l.apply(l.generation, 1, pageOfItems(&buf, "a", 3), 9, 3, 0);
+    try testing.expectEqual(@as(usize, 6), placeholders(&l));
+    try testing.expectEqual(@as(usize, 1), try l.remove(&.{"a1"}));
+    // The server now has page 2's first item at the end of page 1, which is fetched again.
+    try testing.expectEqual(@as(usize, 8), l.rows.items.len);
+    try testing.expectEqualStrings("a2", std.mem.span(l.rows.items[1].id.?));
+    try testing.expect(l.rows.items[2].id == null);
+    try testing.expect(try l.request(1));
+    const again = [_]Item{ item("a0", 0), item("a2", 0), item("b0", 0) };
+    try testing.expect(try l.apply(l.generation, 1, &again, 8, 3, 0));
+    try testing.expectEqualStrings("b0", std.mem.span(l.rows.items[2].id.?));
+    try testing.expectEqual(@as(usize, 5), placeholders(&l));
+    // A fully fetched list needs nothing again.
+    try testing.expect(!try l.request(1));
 }
 
 test "lists go stale after 15 minutes" {

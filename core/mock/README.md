@@ -1,8 +1,8 @@
 # Mock library
 
-A fictional library, FirstLanding Public Library, for screenshots and demos, themed on Martha Wells's Murderbot Diaries. Setting `BIBLIO_MOCK` to a fixtures directory puts [mock.zig](../src/mock.zig) in front of libbiblio's transport: the gateway and website of the `firstlanding` library are served from these files, and every other request goes to the real transport. Every app gets it, because the core owns the transport.
+A fictional library, FirstLanding Public Library, for screenshots and demos, themed on Martha Wells's Murderbot Diaries. Setting `BIBLIO_MOCK` to a fixtures directory puts [mock.zig](../src/mock.zig) in front of libbiblio's transport: the gateway and website of the `firstlanding` library are served from these files, and every other request goes to the real transport. Every app but Android gets it, because the core owns the transport.
 
-It is compiled out of `ReleaseFast` and `ReleaseSmall` builds (and Android), so shipped apps ignore the variable.
+It is compiled out of `ReleaseFast` and `ReleaseSmall` builds, and out of every Android build, so shipped apps and the Android app ignore the variable. (Outside Windows it also needs libc, which every app's Debug and ReleaseSafe build links.)
 
 ## Using it
 

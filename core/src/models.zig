@@ -97,12 +97,28 @@ fn opensLast(before: []const u8) bool {
     return before[i] == '[';
 }
 
-/// Whether the final period belongs to an abbreviation ("rev. ed.", "U.S.").
+/// Whether the final period belongs to an abbreviation ("rev. ed.", "U.S.", "2e éd.",
+/// "3. Aufl.").
 fn endsWithAbbreviation(s: []const u8) bool {
     const start = if (std.mem.findLastAny(u8, s, " -")) |i| i + 1 else 0;
     const word = s[start .. s.len - 1];
     if (std.mem.findScalar(u8, word, '.') != null) return true;
-    const abbreviations = [_][]const u8{ "abr", "corr", "ed", "eds", "enl", "exp", "illus", "no", "pt", "rev", "unabr", "upd", "vol" };
+    // English, then French, Spanish, Italian, and German. Accented capitals are listed too,
+    // because only ASCII letters compare ignoring case.
+    const abbreviations = [_][]const u8{
+        "abr",   "corr",     "ed",   "eds",  "enl", "exp",  "illus", "no", "pt", "rev", "unabr", "upd", "vol",
+        "éd",
+        "Éd",
+        "rév",
+        "Rév",
+        "augm",  "nouv",
+        "réimpr",
+        "Réimpr",
+        "aum",   "reimpr",   "act",  "agg",  "riv", "Aufl", "erw",
+        "überarb",
+        "Überarb",
+        "bearb", "neubearb", "verb", "Ausg", "Bd",
+    };
     for (abbreviations) |abbreviation| {
         if (std.ascii.eqlIgnoreCase(word, abbreviation)) return true;
     }
@@ -121,6 +137,7 @@ test "detail fields tidy every edition statement" {
     );
     const fields = detailFields(a, j, "b1");
     try std.testing.expectEqual(@as(usize, 2), fields.len);
+    try std.testing.expectEqual(@as(i64, 0), editionIndex(fields));
     try std.testing.expectEqual(@as(usize, 2), fields[0].values.len);
     try std.testing.expectEqualStrings("Collector's edition", fields[0].values[0]);
     try std.testing.expectEqualStrings("4K Ultra HD + Blu-ray edition", fields[0].values[1]);
@@ -145,6 +162,47 @@ test "editions read as written" {
     try std.testing.expectEqualStrings("Second edition [", tidyEdition(a, "Second edition [."));
     try std.testing.expectEqualStrings("Book club] edition", tidyEdition(a, "Book club] edition"));
     try std.testing.expectEqualStrings("[a b c", tidyEdition(a, "[a [b] c"));
+    try std.testing.expectEqualStrings("2e éd.", tidyEdition(a, "2e éd."));
+    try std.testing.expectEqualStrings("3. Aufl.", tidyEdition(a, "[3. Aufl.]"));
+    try std.testing.expectEqualStrings("Nouvelle édition", tidyEdition(a, "Nouvelle édition."));
+}
+
+/// The year a publication date names ("2019", "c2019.", "[2019?]", "20190312", "Paris, 1998"):
+/// the first four digits from 1500 to 2099 not inside a longer number or word, else the date
+/// as given.
+pub fn year(date: []const u8) []const u8 {
+    const d = std.mem.trim(u8, date, " ");
+    if (d.len == 4) return d;
+    if (d.len == 8 and std.mem.findNone(u8, d, "0123456789") == null) return d[0..4];
+    var i: usize = 0;
+    while (i + 4 <= d.len) : (i += 1) {
+        const y = d[i .. i + 4];
+        if (std.mem.findNone(u8, y, "0123456789") != null) continue;
+        // A word boundary each side, as \b in a regular expression ("c2019" counts: c is a letter
+        // the catalog puts before copyright years).
+        const before_ok = i == 0 or !isWordByte(d[i - 1]) or (d[i - 1] == 'c' and (i == 1 or !isWordByte(d[i - 2])));
+        const after_ok = i + 4 == d.len or !isWordByte(d[i + 4]);
+        if (!before_ok or !after_ok) continue;
+        if ((y[0] == '1' and y[1] >= '5') or (y[0] == '2' and y[1] == '0')) return y;
+    }
+    return d;
+}
+
+fn isWordByte(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_';
+}
+
+test "years" {
+    try std.testing.expectEqualStrings("2019", year("2019"));
+    try std.testing.expectEqualStrings("2019", year("20190312"));
+    try std.testing.expectEqualStrings("2019", year("c2019."));
+    try std.testing.expectEqualStrings("2019", year("[2019?]"));
+    try std.testing.expectEqualStrings("1998", year("Paris : Gallimard, 1998, ©1997"));
+    try std.testing.expectEqualStrings("2021", year("12345 2021"));
+    try std.testing.expectEqualStrings("Spring", year("Spring"));
+    try std.testing.expectEqualStrings("1997", year("©1997"));
+    try std.testing.expectEqualStrings("1066 AD", year("1066 AD"));
+    try std.testing.expectEqualStrings("No2019", year("No2019"));
 }
 
 pub const Hold = struct {
@@ -353,16 +411,16 @@ pub fn codabar(a: Allocator, value: []const u8) ?[]const f64 {
 pub fn code128(a: Allocator, value: []const u8) ?[]const f64 {
     // Bar and space widths per symbol value, 6 elements each; the last is the 7-element stop.
     const patterns = [_][]const u8{
-        "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
-        "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
-        "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
-        "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
-        "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
-        "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
-        "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
-        "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
-        "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
-        "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+        "212222", "222122", "222221", "121223", "121322", "131222", "122213",  "122312", "132212", "221213",
+        "221312", "231212", "112232", "122132", "122231", "113222", "123122",  "123221", "223211", "221132",
+        "221231", "213212", "223112", "312131", "311222", "321122", "321221",  "312212", "322112", "322211",
+        "212123", "212321", "232121", "111323", "131123", "131321", "112313",  "132113", "132311", "211313",
+        "231113", "231311", "112133", "112331", "132131", "113123", "113321",  "133121", "313121", "211331",
+        "231131", "213113", "213311", "213131", "311123", "311321", "331121",  "312113", "312311", "332111",
+        "314111", "221411", "431111", "111224", "111422", "121124", "121421",  "141122", "141221", "112214",
+        "112412", "122114", "122411", "142112", "142211", "241211", "221114",  "413111", "241112", "134111",
+        "111242", "121142", "121241", "114212", "124112", "124211", "411212",  "421112", "421211", "212141",
+        "214121", "412121", "111143", "111341", "131141", "114113", "114311",  "411113", "411311", "113141",
         "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
     };
     const start_b = 104;
@@ -424,7 +482,18 @@ pub fn normalizeCard(value: []const u8) ?[]const u8 {
 }
 
 /// A labeled detail field from the full catalog record.
-pub const DetailField = struct { label: []const u8, values: []const []const u8 };
+pub const DetailField = struct {
+    label: []const u8,
+    values: []const []const u8,
+    /// The gateway's field name, such as "EDITION"; the label is for people.
+    code: []const u8 = "",
+};
+
+/// The index of the Edition field, or -1.
+pub fn editionIndex(fields: []const DetailField) i64 {
+    for (fields, 0..) |f, i| if (std.mem.eql(u8, f.code, "EDITION")) return @intCast(i);
+    return -1;
+}
 
 pub const Location = struct { id: []const u8, name: []const u8 };
 
@@ -507,6 +576,7 @@ pub const AccountIndex = struct {
 
 pub fn searchPage(a: Allocator, json: J, page: i64) ListPage {
     const search = json.get("catalogSearch");
+    const page_size = pageSize(search);
     const bibs = json.path("entities.bibs");
     var index = AccountIndex.build(a, json.get("entities"));
     var entries: std.ArrayList(ListEntry) = .empty;
@@ -514,7 +584,7 @@ pub fn searchPage(a: Allocator, json: J, page: i64) ListPage {
         const r = J.of(r_value);
         const id = r.get("representative").str(a) orelse continue;
         const bib = Bib.parse(a, bibs.get(id)) orelse continue;
-        var entry: ListEntry = .{ .id = id, .bib = bib, .kind = "catalog", .serverIndex = (page - 1) * 25 + @as(i64, @intCast(i)) };
+        var entry: ListEntry = .{ .id = id, .bib = bib, .kind = "catalog", .serverIndex = (page - 1) * page_size + @as(i64, @intCast(i)) };
         // A title can group several editions; any of them held or checked out counts.
         var ids: std.ArrayList([]const u8) = .empty;
         ids.append(a, id) catch {};
@@ -549,11 +619,17 @@ pub fn searchPage(a: Allocator, json: J, page: i64) ListPage {
         .page = search.path("pagination.page").int() orelse page,
         .pages = search.path("pagination.pages").int() orelse page,
         .count = search.path("pagination.count").int() orelse @intCast(entries.items.len),
-        .pageSize = search.path("pagination.limit").int() orelse 25,
+        .pageSize = page_size,
         .facets = facets.items,
         .sortOptions = sorts.items,
         .appliedSort = applied,
     };
+}
+
+/// Items per page from a list's `pagination.limit` (25 on the sites seen so far).
+fn pageSize(list: J) i64 {
+    const limit = list.path("pagination.limit").int() orelse 25;
+    return if (limit > 0) limit else 25;
 }
 
 pub const BorrowingKind = enum { holds, checkouts, history };
@@ -591,6 +667,7 @@ pub fn borrowingPage(a: Allocator, json: J, kind: BorrowingKind, page: i64) List
     }
     const entities = json.get("entities").get(entity_key);
     const bibs = json.path("entities.bibs");
+    const page_size = pageSize(list);
 
     var ids = list.get("items").strings(a);
     if (ids.len == 0) ids = list.get("results").strings(a);
@@ -613,7 +690,7 @@ pub fn borrowingPage(a: Allocator, json: J, kind: BorrowingKind, page: i64) List
     for (ids, 0..) |id, i| {
         const e = entities.get(id);
         if (e.isNull()) continue;
-        const index = (page - 1) * 25 + @as(i64, @intCast(i));
+        const index = (page - 1) * page_size + @as(i64, @intCast(i));
         const bib_from_entities: ?Bib = if (e.get("metadataId").str(a)) |m| Bib.parse(a, bibs.get(m)) else null;
         const untitled = e.get("bibTitle").str(a) orelse "Untitled";
         switch (kind) {
@@ -666,7 +743,7 @@ pub fn borrowingPage(a: Allocator, json: J, kind: BorrowingKind, page: i64) List
         .page = list.path("pagination.page").int() orelse page,
         .pages = list.path("pagination.pages").int() orelse page,
         .count = list.path("pagination.count").int() orelse @intCast(entries.items.len),
-        .pageSize = list.path("pagination.limit").int() orelse 25,
+        .pageSize = page_size,
         .sortOptions = sorts.items,
         .appliedSort = applied,
     };
@@ -711,26 +788,34 @@ pub fn availability(a: Allocator, json: J) []const CopyAvailability {
     return out.items;
 }
 
-/// Matches /on.order/i, as in "On-Order", "On order", "5 on order".
+/// Matches /\bon[^a-z0-9]order\b/i, as in "On-Order", "On order", "5 on order", but not
+/// "Reservation order".
 fn mentionsOnOrder(s: []const u8) bool {
     var i: usize = 0;
     while (i + 8 <= s.len) : (i += 1) {
+        if (i > 0 and std.ascii.isAlphanumeric(s[i - 1])) continue;
+        if (std.ascii.isAlphanumeric(s[i + 2])) continue;
+        if (i + 8 < s.len and std.ascii.isAlphanumeric(s[i + 8])) continue;
         if (std.ascii.eqlIgnoreCase(s[i .. i + 2], "on") and std.ascii.eqlIgnoreCase(s[i + 3 .. i + 8], "order")) return true;
     }
     return false;
 }
 
-/// Full record fields ("Details", "About", …). Opinion/UGC sections are never requested.
+/// Full record fields ("Details", "About", …), without the "Opinion" (reader content) the
+/// spec hides, should a library's record carry it.
 pub fn detailFields(a: Allocator, json: J, metadata_id: []const u8) []const DetailField {
     const record = json.path("entities.catalogBibs").get(metadata_id);
     var out: std.ArrayList(DetailField) = .empty;
     var seen: std.StringHashMapUnmanaged(void) = .empty;
-    for (record.get("fields").items()) |category| {
-        for (J.of(category).get("items").items()) |item_v| {
+    for (record.get("fields").items()) |category_v| {
+        const category = J.of(category_v);
+        if (isOpinion(a, category.get("id").str(a)) or isOpinion(a, category.get("name").str(a)) or
+            isOpinion(a, category.get("label").str(a))) continue;
+        for (category.get("items").items()) |item_v| {
             const item = J.of(item_v);
             const name = item.get("fieldName").str(a) orelse continue;
             // The summary is already shown from the brief record; the title is the header.
-            if (std.mem.eql(u8, name, "TITLE") or std.mem.eql(u8, name, "SUMMARY")) continue;
+            if (std.mem.eql(u8, name, "TITLE") or std.mem.eql(u8, name, "SUMMARY") or isOpinion(a, name)) continue;
             var values: std.ArrayList([]const u8) = .empty;
             for (item.get("fieldValues").items()) |fv| {
                 for (J.of(fv).path("primary.values").strings(a)) |v| {
@@ -747,10 +832,17 @@ pub fn detailFields(a: Allocator, json: J, metadata_id: []const u8) []const Deta
             for (values.items) |v| key.appendSlice(a, v) catch {};
             const gop = seen.getOrPut(a, key.items) catch continue;
             if (gop.found_existing) continue;
-            out.append(a, .{ .label = label, .values = values.items }) catch {};
+            out.append(a, .{ .label = label, .values = values.items, .code = name }) catch {};
         }
     }
     return out.items;
+}
+
+/// A field group or field of reader content: opinions, ratings, and comments (UGC).
+fn isOpinion(a: Allocator, name: ?[]const u8) bool {
+    const n = std.ascii.allocUpperString(a, name orelse return false) catch return false;
+    for ([_][]const u8{ "OPINION", "UGC", "USER_CONTENT" }) |w| if (std.mem.find(u8, n, w) != null) return true;
+    return false;
 }
 
 pub fn locations(a: Allocator, json: J) []const Location {
@@ -824,8 +916,28 @@ test "code 128" {
     for (code128(a, "21234000123456").?) |e| try std.testing.expect(e >= 1 and e <= 4);
 }
 
+test "server positions follow the reported page size" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const j = @import("json.zig").parse(a,
+        \\{"borrowing":{"holds":{"items":["h1"],"pagination":{"page":2,"pages":2,"count":11,"limit":10}}},
+        \\ "entities":{"holds":{"h1":{"holdsId":"H1","metadataId":"S1","status":"IN_TRANSIT"}}}}
+    );
+    const page = borrowingPage(a, j, .holds, 2);
+    try std.testing.expectEqual(@as(i64, 10), page.pageSize);
+    try std.testing.expectEqual(@as(i64, 10), page.entries[0].serverIndex);
+    const s = @import("json.zig").parse(a,
+        \\{"catalogSearch":{"results":[{"representative":"S1"}],"pagination":{"page":3,"pages":3,"count":21,"limit":10}},
+        \\ "entities":{"bibs":{"S1":{"id":"S1","briefInfo":{"title":"Dune"}}}}}
+    );
+    try std.testing.expectEqual(@as(i64, 20), searchPage(a, s, 3).entries[0].serverIndex);
+}
+
 test "on order wording" {
     try std.testing.expect(mentionsOnOrder("On-Order"));
     try std.testing.expect(mentionsOnOrder("5 on order"));
     try std.testing.expect(!mentionsOnOrder("Checked out"));
+    try std.testing.expect(!mentionsOnOrder("Reservation order"));
+    try std.testing.expect(!mentionsOnOrder("On orders"));
 }

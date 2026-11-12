@@ -3,7 +3,8 @@
 //! Setting `BIBLIO_MOCK` to a fixtures directory (such as `core/mock/video`) puts this in
 //! front of the real transport: the gateway and website of one fictional library are served
 //! from the fixtures, with holds and settings changing in memory, and every other request
-//! goes to the real transport. Compiled out of release builds (`ReleaseFast` and `ReleaseSmall`) and Android.
+//! goes to the real transport. Compiled out of `ReleaseFast` and `ReleaseSmall` builds, and out of
+//! Android builds of any kind.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -15,7 +16,9 @@ const json = @import("json.zig");
 const J = json.J;
 const Value = std.json.Value;
 
-const available = !builtin.abi.isAndroid() and builtin.mode != .fast and builtin.mode != .small;
+/// Outside Windows the mock reads its fixtures through libc, so a build without it has none.
+const available = !builtin.abi.isAndroid() and builtin.mode != .fast and builtin.mode != .small and
+    (builtin.link_libc or builtin.os.tag == .windows);
 
 var instance: ?*Mock = null;
 var instance_mutex: sync.Mutex = .{};
@@ -129,11 +132,17 @@ const Mock = struct {
     next_hold: u32 = 9000,
     today: i64,
 
+    fn destroy(m: *Mock) void {
+        m.arena.deinit();
+        sync.allocator.destroy(m);
+    }
+
     fn load(dir: []const u8) !*Mock {
         const m = try sync.allocator.create(Mock);
         errdefer sync.allocator.destroy(m);
         m.* = undefined;
         m.arena = .init(sync.allocator);
+        errdefer m.arena.deinit();
         m.mutex = .{};
         m.next_hold = 9000;
         const a = m.arena.allocator();
@@ -1046,6 +1055,7 @@ fn readJson(a: Allocator, dir: []const u8, name: []const u8) !J {
 test "mock library serves search, holds, and settings" {
     if (!available) return error.SkipZigTest;
     const m = Mock.load("mock/video") catch return error.SkipZigTest;
+    defer m.destroy();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1078,6 +1088,7 @@ test "mock library serves search, holds, and settings" {
 test "mock library keeps a second patron's account apart" {
     if (!available) return error.SkipZigTest;
     const m = Mock.load("mock/video") catch return error.SkipZigTest;
+    defer m.destroy();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1104,6 +1115,7 @@ test "mock library keeps a second patron's account apart" {
 test "mock library places a hold and then fails it when signed in as boom" {
     if (!available) return error.SkipZigTest;
     const m = Mock.load("mock/video") catch return error.SkipZigTest;
+    defer m.destroy();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();

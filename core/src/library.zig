@@ -186,7 +186,6 @@ pub const format_codes = blk: {
 
 /// The library's own name for a format code, else a built-in English one, else the code prettified.
 pub fn formatName(a: Allocator, labels: J, code: []const u8) []const u8 {
-    if (std.mem.eql(u8, code, "UK")) return "4K Ultra HD Blu-ray";
     const lower = std.ascii.allocLowerString(a, code) catch code;
     const key = std.fmt.allocPrint(a, "FORMAT.{s}", .{lower}) catch "";
     if (labels.get(key).str(a)) |s| return s;

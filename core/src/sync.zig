@@ -94,6 +94,7 @@ pub fn unixSeconds() i64 {
         const ticks = (@as(u64, ft.high) << 32) | ft.low; // 100 ns since 1601
         return @intCast(ticks / 10_000_000 - 11_644_473_600);
     }
+    if (has_std_io) return @intCast(@divFloor(std.Io.Clock.real.now(io()).nanoseconds, std.time.ns_per_s));
     var ts: std.c.timespec = undefined;
     _ = std.c.clock_gettime(.REALTIME, &ts);
     return @intCast(ts.sec);

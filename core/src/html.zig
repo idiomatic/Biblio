@@ -91,8 +91,38 @@ pub fn attribute(attrs: []const u8, name: []const u8) ?[]const u8 {
     return null;
 }
 
-fn hasWord(attrs: []const u8, word: []const u8) bool {
-    return std.ascii.findIgnoreCase(attrs, word) != null;
+/// Whether a tag's attribute text has the attribute `name` (a boolean one such as `checked`),
+/// not merely the text: `data-unchecked` and `value="checked"` don't count.
+fn hasAttribute(attrs: []const u8, name: []const u8) bool {
+    var i: usize = 0;
+    while (i < attrs.len) {
+        while (i < attrs.len and (std.ascii.isWhitespace(attrs[i]) or attrs[i] == '/')) i += 1;
+        const start = i;
+        while (i < attrs.len and !std.ascii.isWhitespace(attrs[i]) and attrs[i] != '=' and attrs[i] != '/' and attrs[i] != '>') i += 1;
+        if (i > start and std.ascii.eqlIgnoreCase(attrs[start..i], name)) return true;
+        if (i == start) {
+            i += 1;
+            continue;
+        }
+        while (i < attrs.len and std.ascii.isWhitespace(attrs[i])) i += 1;
+        if (i >= attrs.len or attrs[i] != '=') continue;
+        i += 1;
+        while (i < attrs.len and std.ascii.isWhitespace(attrs[i])) i += 1;
+        if (i < attrs.len and (attrs[i] == '"' or attrs[i] == '\'')) {
+            const close = std.mem.findScalarPos(u8, attrs, i + 1, attrs[i]) orelse return false;
+            i = close + 1;
+        } else {
+            while (i < attrs.len and !std.ascii.isWhitespace(attrs[i])) i += 1;
+        }
+    }
+    return false;
+}
+
+/// Whether a space-separated `class` value has `name` as one of its classes.
+fn hasClass(class: []const u8, name: []const u8) bool {
+    var words = std.mem.tokenizeAny(u8, class, " \t\r\n");
+    while (words.next()) |w| if (eq(w, name)) return true;
+    return false;
 }
 
 /// Finds the closing `</name>` at or after `from`.
@@ -124,7 +154,7 @@ pub fn forms(a: Allocator, html: []const u8, base: []const u8) []const Form {
             const name = attribute(t.tag.attrs, "name") orelse continue;
             const type_raw = attribute(t.tag.attrs, "type") orelse "text";
             const type_ = std.ascii.allocLowerString(a, type_raw) catch continue;
-            if ((eq(type_, "checkbox") or eq(type_, "radio")) and !hasWord(t.tag.attrs, "checked")) continue;
+            if ((eq(type_, "checkbox") or eq(type_, "radio")) and !hasAttribute(t.tag.attrs, "checked")) continue;
             inputs.append(a, .{
                 .name = decode(a, name),
                 .type = type_,
@@ -143,7 +173,7 @@ pub fn forms(a: Allocator, html: []const u8, base: []const u8) []const Form {
             while (nextTag(options, op, "option")) |o| {
                 op = o.tag.end;
                 if (first == null) first = o.tag.attrs;
-                if (chosen == null and hasWord(o.tag.attrs, "selected")) chosen = o.tag.attrs;
+                if (chosen == null and hasAttribute(o.tag.attrs, "selected")) chosen = o.tag.attrs;
             }
             const attrs = chosen orelse first;
             const value = if (attrs) |t| attribute(t, "value") orelse "" else "";
@@ -154,23 +184,65 @@ pub fn forms(a: Allocator, html: []const u8, base: []const u8) []const Form {
     return out.items;
 }
 
-/// Finds a visible error message in a response page, if any.
+/// Finds a visible error message in a response page, if any: the text of the first element
+/// with an error class, nested markup and all, outside scripts, templates, and hidden elements.
 pub fn errorMessage(a: Allocator, html: []const u8) ?[]const u8 {
     const classes = [_][]const u8{ "alert-danger", "alert-error", "form-error", "error_message", "errorMessage" };
     var pos: usize = 0;
-    while (findI(html, pos, "class=\"")) |p| {
-        pos = p + 7;
-        const close_quote = std.mem.findScalarPos(u8, html, pos, '"') orelse return null;
-        const class = html[pos..close_quote];
-        var matched = false;
-        for (classes) |c| if (std.mem.find(u8, class, c) != null) {
-            matched = true;
-        };
-        if (!matched) continue;
-        const gt = std.mem.findScalarPos(u8, html, close_quote, '>') orelse return null;
-        const end = std.mem.findPos(u8, html, gt + 1, "</") orelse return null;
+    while (std.mem.findScalarPos(u8, html, pos, '<')) |lt| {
+        pos = lt + 1;
+        var n = lt + 1;
+        while (n < html.len and (std.ascii.isAlphanumeric(html[n]) or html[n] == '-')) n += 1;
+        const name = html[lt + 1 .. n];
+        if (name.len == 0) continue;
+        const gt = std.mem.findScalarPos(u8, html, n, '>') orelse return null;
+        const attrs = html[n..gt];
+        // Script and template text isn't shown, whatever classes it mentions.
+        if (std.ascii.eqlIgnoreCase(name, "script") or std.ascii.eqlIgnoreCase(name, "template") or std.ascii.eqlIgnoreCase(name, "style")) {
+            pos = (closing(html, gt + 1, name) orelse return null) + 2;
+            continue;
+        }
+        const class = attribute(attrs, "class") orelse continue;
+        const matched = for (classes) |c| {
+            if (hasClass(class, c)) break true;
+        } else false;
+        if (!matched or isHidden(attrs)) continue;
+        const end = matchingClose(html, gt + 1, name) orelse html.len;
         const text = std.mem.trim(u8, decode(a, stripTags(a, html[gt + 1 .. end])), " \t\r\n");
         if (text.len > 0) return text;
+    }
+    return null;
+}
+
+fn isHidden(attrs: []const u8) bool {
+    if (hasAttribute(attrs, "hidden")) return true;
+    const style = attribute(attrs, "style") orelse return false;
+    var compact: [64]u8 = undefined;
+    var n: usize = 0;
+    for (style) |c| if (!std.ascii.isWhitespace(c) and n < compact.len) {
+        compact[n] = std.ascii.toLower(c);
+        n += 1;
+    };
+    return std.mem.find(u8, compact[0..n], "display:none") != null;
+}
+
+/// The `</name>` that closes an element whose content starts at `from`, counting nested
+/// elements of the same name.
+fn matchingClose(html: []const u8, from: usize, name: []const u8) ?usize {
+    var depth: usize = 0;
+    var i = from;
+    while (std.mem.findScalarPos(u8, html, i, '<')) |lt| {
+        i = lt + 1;
+        const closing_tag = lt + 1 < html.len and html[lt + 1] == '/';
+        const start = if (closing_tag) lt + 2 else lt + 1;
+        const after = start + name.len;
+        if (after > html.len or !std.ascii.eqlIgnoreCase(html[start..after], name)) continue;
+        if (after < html.len and !isTagBoundary(html[after])) continue;
+        if (!closing_tag) {
+            depth += 1;
+        } else if (depth == 0) {
+            return lt;
+        } else depth -= 1;
     }
     return null;
 }
@@ -224,7 +296,7 @@ pub fn directoryEntries(a: Allocator, html: []const u8) []const DirectoryEntry {
     while (nextTag(html, pos, "a")) |link| {
         pos = link.tag.end;
         const class = attribute(link.tag.attrs, "class") orelse continue;
-        if (!std.mem.startsWith(u8, class, "library-link")) continue;
+        if (!hasClass(class, "library-link")) continue;
         const href = attribute(link.tag.attrs, "href");
         const img = nextTag(html, link.tag.end, "img") orelse break;
         const name = decode(a, attribute(img.tag.attrs, "alt") orelse continue);
@@ -311,7 +383,9 @@ pub fn decode(a: Allocator, s: []const u8) []const u8 {
                         std.fmt.parseInt(u21, ent[2..], 16) catch null
                     else
                         std.fmt.parseInt(u21, ent[1..], 10) catch null;
-                    if (cp) |c| {
+                    // NUL (which would end a C string) reads as U+FFFD, as browsers show it.
+                    if (cp) |raw| {
+                        const c: u21 = if (raw == 0) 0xFFFD else raw;
                         var buf: [4]u8 = undefined;
                         if (std.unicode.utf8Encode(c, &buf)) |n| {
                             out.appendSlice(a, buf[0..n]) catch {};
@@ -364,6 +438,8 @@ test "forms" {
         \\<input name="_method" type="hidden" value="put" />
         \\<input type="checkbox" name="off" value="1">
         \\<input type="checkbox" name="on" value="1" checked>
+        \\<input type="checkbox" name="unchecked" value="checked" data-checked-by="x">
+        \\<input type="radio" name="r" value="1" data-unselected checked=checked>
         \\<select name="user_lang"><option value="en-US">English</option><option value="fr-CA" selected>French</option></select>
         \\<input type="submit" name="commit" value="Save">
         \\</form>
@@ -379,6 +455,8 @@ test "forms" {
     try testing.expectEqualStrings("Save", f.get("commit").?);
     try testing.expect(f.get("off") == null);
     try testing.expectEqualStrings("1", f.get("on").?);
+    try testing.expect(f.get("unchecked") == null);
+    try testing.expectEqualStrings("1", f.get("r").?);
 }
 
 test "error message, title, decode, resolve" {
@@ -386,6 +464,14 @@ test "error message, title, decode, resolve" {
     defer arena.deinit();
     const a = arena.allocator();
     try testing.expectEqualStrings("PIN is <b>wrong</b>", errorMessage(a, "<div class=\"alert alert-danger\" role=x>PIN is &lt;b&gt;wrong&lt;/b&gt;</div>").?);
+    try testing.expectEqualStrings("Error: the PIN is too short.", errorMessage(a, "<div class=\"alert-danger\"><div><strong>Error:</strong> the PIN</div> is too short.</div>").?);
+    try testing.expectEqualStrings("Shown", errorMessage(a,
+        \\<script>var t = '<p class="alert-danger">In a script</p>';</script>
+        \\<template><p class="alert-danger">Template</p></template>
+        \\<p class="alert-danger" hidden>Hidden</p><p class="alert-danger" style="display: none">Gone</p>
+        \\<p class="no-alert-danger-here">Other</p><p class="alert-danger">Shown</p>
+    ).?);
+    try testing.expectEqualStrings("a\u{FFFD}b", decode(a, "a&#0;b"));
     try testing.expectEqualStrings("My Account | WCCLS", title(a, "<html><title> My Account | WCCLS </title>").?);
     try testing.expectEqualStrings("✓ '", decode(a, "&#x2713; &#39;"));
     try testing.expectEqualStrings("https://w.org/libraries?a_page=2", resolve(a, "https://w.org/libraries?a_page=1", "?a_page=2"));

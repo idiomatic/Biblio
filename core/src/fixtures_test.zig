@@ -21,7 +21,7 @@ const search_json =
     \\  "fields":[{"id":"FORMAT","fieldFilters":[{"value":"BK","count":40},{"value":"UK","count":2}]}],
     \\  "sortBys":[{"id":"relevancy","applied":true},{"id":"newly_acquired"}]},
     \\ "entities":{"bibs":{
-    \\   "S1C1":{"id":"S1C1","briefInfo":{"title":"Dune","subtitle":"Deluxe","authors":["Herbert, Frank"],"format":"BK","publicationDate":"2019","jacket":{"small":"https://img/s.jpg","large":"https://img/l.jpg"}},
+    \\   "S1C1":{"id":"S1C1","briefInfo":{"title":"Dune","subtitle":"Deluxe","authors":["Herbert, Frank"],"format":"BK","publicationDate":"2019","edition":"[Deluxe edition].","jacket":{"small":"https://img/s.jpg","large":"https://img/l.jpg"}},
     \\           "policy":{"materialType":"PHYSICAL","holdable":true},"availability":{"status":"AVAILABLE","heldCopies":3,"availableCopies":1,"totalCopies":9}},
     \\   "S1C9":{"id":"S1C9","briefInfo":{"title":"  ","format":"UK"},"availability":{"status":"ON_ORDER","onOrderCopies":4}}},
     \\  "holds":{"h1":{"holdsId":"H1","metadataId":"S1C2","status":"IN_TRANSIT","holdsPosition":2,"actions":["cancel"]}}}}
@@ -43,6 +43,19 @@ const availability_json =
     \\   "i3":{"branchName":"Aloha","availability":{"libraryStatus":"5 on order"}}}}}
 ;
 
+const locations_json =
+    \\{"entities":{"locations":{"BEA":{"id":"BEA","name":"Beaverton"},"ALO":{"id":"ALO","name":"Aloha"},"X":{"id":"X","name":"Staff","isHidden":true}}}}
+;
+
+const details_json =
+    \\{"entities":{"catalogBibs":{"S1C1":{"fields":[
+    \\  {"id":"DETAILS","items":[
+    \\    {"fieldName":"TITLE","fieldValues":[{"primary":{"values":["Dune"]}}]},
+    \\    {"fieldName":"PUBLICATION","fieldValues":[{"primary":{"values":["New York : Ace, 2019"]}}]},
+    \\    {"fieldName":"EDITION","fieldValues":[{"primary":{"values":["Deluxe edition."]}}]}]},
+    \\  {"id":"OPINION","items":[{"fieldName":"RATING","fieldValues":[{"primary":{"values":["5 stars"]}}]}]}]}}}}
+;
+
 const pickup_page =
     \\<html><title>Pickup</title><form action="/account/preferred_branches" method="post">
     \\<input type="hidden" name="authenticity_token" value="tok">
@@ -60,6 +73,8 @@ const Fake = struct {
     bodies: std.ArrayList([]const u8) = .empty,
     sessions_valid: bool = true,
     logins: u32 = 0,
+    /// The status the next sign-ins get (a 503 while the gateway is down).
+    login_status: u16 = 200,
 
     fn deinit(f: *Fake) void {
         for (f.sent.items) |s| f.gpa.free(s);
@@ -83,6 +98,7 @@ const Fake = struct {
             }
         }.r;
         if (std.mem.endsWith(u8, path, "/sessions")) {
+            if (f.login_status != 200) return .{ .status = f.login_status, .url = "", .headers = &.{}, .body = "<html>Service Unavailable</html>" };
             f.logins += 1;
             f.sessions_valid = true;
             return .{ .status = 200, .url = "", .headers = &.{.{ .name = "Set-Cookie", .value = "session_id=abc; Domain=.bibliocommons.com" }}, .body = login_json };
@@ -102,6 +118,10 @@ const Fake = struct {
         if (!f.sessions_valid) return .{ .status = 401, .url = "", .headers = &.{}, .body = "{\"error\":{\"message\":\"Session expired\"}}" };
         if (std.mem.endsWith(u8, path, "/bibs/search")) return ok(search_json);
         if (std.mem.endsWith(u8, path, "/availability")) return ok(availability_json);
+        if (std.mem.endsWith(u8, path, "/locations")) return ok(locations_json);
+        if (std.mem.endsWith(u8, path, "/catalogbibs/S1C1")) return ok(details_json);
+        // A refusal that mentions the session is still a refusal, not an expired session.
+        if (std.mem.endsWith(u8, path, "/checkouts")) return .{ .status = 400, .url = "", .headers = &.{}, .body = "{\"error\":{\"message\":\"Invalid session parameter\"}}" };
         if (std.mem.endsWith(u8, path, "/holds") and std.mem.eql(u8, req.method, "GET")) return ok(holds_json);
         if (std.mem.endsWith(u8, path, "/holds") and std.mem.eql(u8, req.method, "DELETE")) {
             return ok("{\"failures\":[{\"id\":\"H1\",\"message\":\"Ready holds can't be canceled.\"}]}");
@@ -114,8 +134,8 @@ const Fake = struct {
     }
 };
 
-fn password(_: ?*anyopaque, _: []const u8, _: []const u8, _: Allocator) ?[]const u8 {
-    return "1234";
+fn password(_: ?*anyopaque, _: []const u8, _: []const u8, a: Allocator) ?[]u8 {
+    return a.dupe(u8, "1234") catch null;
 }
 
 const Setup = struct {
@@ -150,6 +170,8 @@ test "login, search and account status" {
     const dune = page.entries[0];
     try testing.expectEqualStrings("Dune", dune.bib.title);
     try testing.expectEqualStrings("https://img/s.jpg", dune.bib.jacketSmall.?);
+    try testing.expectEqualStrings("Deluxe edition", dune.bib.edition.?);
+    try testing.expectEqual(@as(i64, 1), page.entries[1].serverIndex);
     // Held through another edition of the same title.
     try testing.expectEqualStrings("onHold", dune.accountStatus.?.kind);
     try testing.expectEqualStrings("H1", dune.hold.?.id);
@@ -209,6 +231,7 @@ test "holds, expiry and re-login" {
 
     try testing.expectError(error.Unexpected, c.placeHold(a, "S1C9", "PHYSICAL", null, &failure));
     try testing.expectEqualStrings("You have reached the maximum number of holds.", failure.message);
+    try testing.expectEqualStrings("holdLimit", failure.kind);
     const place = json.parse(a, s.fake.bodies.items[s.fake.bodies.items.len - 1]);
     try testing.expectEqualStrings("BEA", place.path("materialParams.branchId").str(a).?);
 }
@@ -281,8 +304,97 @@ test "typed functions" {
     try testing.expectEqual(@as(usize, 1), refused.?.items_count);
     try testing.expectEqualStrings("H1", std.mem.span(refused.?.items[0].hold_id));
 
-    try testing.expectEqual(capi.Result.unexpected, capi.biblio_place_hold(&h, "S1C9", null, null, &err));
+    try testing.expectEqual(capi.Result.hold_limit, capi.biblio_place_hold(&h, "S1C9", null, null, &err));
     try testing.expectEqualStrings("You have reached the maximum number of holds.", std.mem.span(err.message.?));
     capi.biblio_error_clear(&err);
     try testing.expect(err.message == null);
+
+    // Nothing to cancel, from a caller that passes no array.
+    try testing.expectEqual(capi.Result.ok, capi.biblio_cancel_holds(&h, null, 0, null, &err));
+    try testing.expectEqual(capi.Result.bad_request, capi.biblio_cancel_holds(&h, null, 2, null, &err));
+    capi.biblio_error_clear(&err);
+
+    var details: ?*capi.DetailList = null;
+    try testing.expectEqual(capi.Result.ok, capi.biblio_details(&h, "S1C1", &details, &err));
+    defer capi.free(details);
+    // The title is the header and the reader ratings are hidden: publication and edition remain.
+    try testing.expectEqual(@as(usize, 2), details.?.items_count);
+    try testing.expectEqual(@as(i64, 1), details.?.edition_index);
+    try testing.expectEqualStrings("Deluxe edition", std.mem.span(details.?.items[1].values[0]));
+
+    var locations: ?*capi.LocationList = null;
+    try testing.expectEqual(capi.Result.ok, capi.biblio_locations(&h, &locations, &err));
+    defer capi.free(locations);
+    try testing.expectEqual(@as(usize, 2), locations.?.items_count);
+    try testing.expectEqualStrings("Aloha", std.mem.span(locations.?.items[0].name));
+}
+
+test "an outage while signing in is not a refused password" {
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator, .login_status = 503 }, .arena = .init(testing.allocator) };
+    defer s.fake.deinit();
+    defer s.arena.deinit();
+    const a = s.arena.allocator();
+    const c = try makeClient(&s, "pat");
+    defer c.destroy();
+    try testing.expectError(error.Http, c.login(a, false, &failure));
+    try testing.expectEqualStrings("http", failure.kind);
+    try testing.expectEqual(@as(?u16, 503), failure.status);
+}
+
+test "only 401 and 403 sign in again" {
+    var s: Setup = .{ .fake = .{ .gpa = testing.allocator }, .arena = .init(testing.allocator) };
+    defer s.fake.deinit();
+    defer s.arena.deinit();
+    const a = s.arena.allocator();
+    const c = try makeClient(&s, "pat");
+    defer c.destroy();
+    try testing.expectError(error.Http, c.borrowing(a, .checkouts, 1, null, &failure));
+    try testing.expectEqual(@as(u32, 1), s.fake.logins);
+    try testing.expectEqualStrings("Invalid session parameter", failure.message);
+}
+
+test "the throttle spaces requests apart" {
+    var t: http.Throttle = .{};
+    const sync = @import("sync.zig");
+    const start = sync.now();
+    t.acquire();
+    t.acquire();
+    try testing.expectEqual(@as(u32, 2), t.in_flight);
+    t.release();
+    t.release();
+    try testing.expect(sync.now() - start >= 250 * std.time.ns_per_ms);
+    try testing.expectEqual(@as(u32, 0), t.in_flight);
+}
+
+/// A host transport (as an app's would be) serving the locations endpoint.
+fn hostTransport(ctx: ?*anyopaque, req: *const root.CRequest, res: *root.CResponse) callconv(.c) c_int {
+    const calls: *u32 = @ptrCast(@alignCast(ctx.?));
+    calls.* += 1;
+    if (std.mem.find(u8, std.mem.span(req.url), "/locations") == null) return 1;
+    const headers = "Content-Type: application/json\r\nSet-Cookie: a=1\r\n";
+    const h = root.biblio_alloc(headers.len).?;
+    @memcpy(h[0..headers.len], headers);
+    const b = root.biblio_alloc(locations_json.len).?;
+    @memcpy(b[0..locations_json.len], locations_json);
+    res.* = .{ .status = 200, .headers = h, .headers_len = headers.len, .body = b, .body_len = locations_json.len };
+    return 0;
+}
+
+test "requests go through the host's transport" {
+    const capi = root.capi;
+    var calls: u32 = 0;
+    root.biblio_set_transport(hostTransport, &calls);
+    const h = root.biblio_client_new("wccls", "", null, null).?;
+    // Clients keep the transport they were made with.
+    root.biblio_set_transport(null, null);
+    defer root.biblio_client_free(h);
+    var locations: ?*capi.LocationList = null;
+    var err: capi.Error = .{};
+    try testing.expectEqual(capi.Result.ok, capi.biblio_locations(h, &locations, &err));
+    defer capi.free(locations);
+    try testing.expectEqual(@as(u32, 1), calls);
+    try testing.expectEqualStrings("Beaverton", std.mem.span(locations.?.items[1].name));
+    try testing.expectEqual(capi.Result.network, capi.biblio_availability(h, "S1", null, &err));
+    capi.biblio_error_clear(&err);
+    try testing.expectEqual(@as(u32, 2), calls);
 }
