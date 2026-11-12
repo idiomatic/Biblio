@@ -81,6 +81,24 @@ pub fn now() i96 {
     return @as(i96, ts.sec) * std.time.ns_per_s + ts.nsec;
 }
 
+const win = struct {
+    const FileTime = extern struct { low: u32, high: u32 };
+    extern "kernel32" fn GetSystemTimeAsFileTime(out: *FileTime) callconv(.winapi) void;
+};
+
+/// Wall-clock seconds since 1970-01-01.
+pub fn unixSeconds() i64 {
+    if (builtin.os.tag == .windows) {
+        var ft: win.FileTime = undefined;
+        win.GetSystemTimeAsFileTime(&ft);
+        const ticks = (@as(u64, ft.high) << 32) | ft.low; // 100 ns since 1601
+        return @intCast(ticks / 10_000_000 - 11_644_473_600);
+    }
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @intCast(ts.sec);
+}
+
 pub fn sleep(ns: u64) void {
     if (has_std_io) {
         io().sleep(.fromNanoseconds(@intCast(ns)), .awake) catch {};

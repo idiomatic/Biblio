@@ -1020,3 +1020,13 @@ test "item lists through the C interface" {
     try std.testing.expectEqual(@as(usize, 1), biblio_list_remove(l, &ids, 1));
     try std.testing.expectEqual(@as(i64, 1), biblio_list_state(l).total);
 }
+
+/// Throttling seen in the field, as JSON (see http.Incidents), for diagnostics. Free with biblio_free.
+pub export fn biblio_incidents() ?[*:0]u8 {
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const text = http_incidents.json(arena.allocator()) catch return null;
+    return root.hostString(text);
+}
+
+const http_incidents = &@import("http.zig").incidents;

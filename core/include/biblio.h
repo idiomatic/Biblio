@@ -30,6 +30,12 @@ void biblio_free(void *ptr);
 
 const char *biblio_version(void);
 
+/* Throttling and failures the servers have shown (HTTP 429 or any 5xx) since launch, as JSON for
+ * diagnostics: {"total":N,"recent":[{"at":unix_s,"status":429,"method":"GET","host":…,"path":…,"retryAfter":s|-1,"inFlight":n}]},
+ * oldest first, the latest 16. Ids in paths are masked and nothing names an account.
+ * Free with biblio_free. */
+char *biblio_incidents(void);
+
 typedef struct biblio_client biblio_client;
 
 /* Returns the saved password for (subdomain, username), allocated with biblio_alloc and

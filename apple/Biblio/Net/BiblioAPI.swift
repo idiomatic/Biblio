@@ -120,6 +120,8 @@ extension BiblioClient {
     /// Changes the PIN/password, then keeps the Keychain in step so automatic re-login still works.
     func changePassword(current: String, new: String) async throws {
         try await perform { biblio_change_password($0, current, new, $1) }
-        Keychain.setPassword(new, subdomain: subdomain, username: username)
+        guard Keychain.setPassword(new, subdomain: subdomain, username: username) else {
+            throw BiblioError.unexpected("Your password was changed, but Biblio couldn’t save it to the Keychain. Add the user again with the new password.")
+        }
     }
 }

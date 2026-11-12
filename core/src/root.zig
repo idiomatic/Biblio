@@ -149,7 +149,8 @@ const HostTransport = struct {
                 });
             }
         }
-        return .{ .status = @intCast(res.status), .url = req.url, .headers = list.items, .body = body };
+        const status = std.math.cast(u16, res.status) orelse return error.TransportFailed;
+        return .{ .status = status, .url = req.url, .headers = list.items, .body = body };
     }
 };
 
@@ -182,7 +183,7 @@ pub fn hostString(s: []const u8) ?[*:0]u8 {
 // MARK: Exports
 
 pub export fn biblio_version() [*:0]const u8 {
-    return "1.8.0";
+    return @import("version.zig").string;
 }
 
 /// Routes every request through the host's HTTP stack. Pass null to go back to the built-in one.

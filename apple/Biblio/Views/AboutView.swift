@@ -31,6 +31,10 @@ struct AboutCommands: Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Biblio") { MainActor.assumeIsolated { About.showPanel() } }
         }
+        CommandGroup(after: .help) {
+            Divider()
+            Button("Copy Diagnostic Log") { ThrottleLog.copyReport() }
+        }
     }
 }
 #endif
@@ -38,6 +42,7 @@ struct AboutCommands: Commands {
 /// The About sheet on iOS and iPadOS, opened from the version at the foot of the sidebar.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
 
     var body: some View {
         NavigationStack {
@@ -54,6 +59,17 @@ struct AboutView: View {
                     }
                     Text(About.credits)
                     Text(About.independence).foregroundStyle(.secondary)
+                    VStack(spacing: 6) {
+                        Button(copied ? "Copied" : "Copy Diagnostic Log", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                            ThrottleLog.copyReport()
+                            copied = true
+                        }
+                        .buttonStyle(.bordered)
+                        Text("A list of the times a library’s server limited or failed a request. It names no account, and nothing is sent unless you share it.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
                 }
                 .multilineTextAlignment(.center)
                 .padding(24)
@@ -70,6 +86,6 @@ struct AboutView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.fraction(0.85), .large])
     }
 }

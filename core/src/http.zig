@@ -11,7 +11,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const sync = @import("sync.zig");
 
-pub const user_agent = "Biblio/1.0 (libbiblio)";
+pub const user_agent = "Biblio/" ++ @import("version.zig").string ++ " (libbiblio)";
 
 pub const Header = struct { name: []const u8, value: []const u8 };
 
@@ -76,6 +76,98 @@ pub const Throttle = struct {
         t.cond.signal();
     }
 };
+
+// MARK: Throttling incidents
+
+/// Responses that say a server is limiting or failing requests (429 and every 5xx), kept for
+/// diagnostics in the field: a total, and the latest few with what was asked (the method, and the
+/// path with anything that looks like an id masked) and how busy the throttle was. Nothing
+/// identifies an account.
+pub const Incidents = struct {
+    pub const capacity = 16;
+    pub const Entry = struct {
+        at: i64 = 0,
+        status: u16 = 0,
+        /// "GET", "POST", and so on.
+        method: [8]u8 = undefined,
+        method_len: u8 = 0,
+        /// The host, e.g. "gateway.bibliocommons.com".
+        host: [48]u8 = undefined,
+        host_len: u8 = 0,
+        /// The path, e.g. "/v2/libraries/wccls/holds"; id-like segments become "*".
+        path: [64]u8 = undefined,
+        path_len: u8 = 0,
+        /// The Retry-After header in seconds, or -1.
+        retry_after: i32 = -1,
+        /// Requests in flight when it happened, itself included.
+        in_flight: u32 = 0,
+    };
+
+    mutex: sync.Mutex = .{},
+    total: u64 = 0,
+    entries: [capacity]Entry = undefined,
+    next: usize = 0,
+
+    pub fn record(i: *Incidents, method: []const u8, url: []const u8, res: Response, in_flight: u32) void {
+        if (res.status != 429 and (res.status < 500 or res.status > 599)) return;
+        var e: Entry = .{ .at = sync.unixSeconds(), .status = res.status, .in_flight = in_flight };
+        e.method_len = @intCast(@min(method.len, e.method.len));
+        @memcpy(e.method[0..e.method_len], method[0..e.method_len]);
+        const host = hostOf(url);
+        e.host_len = @intCast(@min(host.len, e.host.len));
+        @memcpy(e.host[0..e.host_len], host[0..e.host_len]);
+        const path = @import("html.zig").urlPath(url);
+        var n: usize = 0;
+        var segments = std.mem.splitScalar(u8, path, '/');
+        var first = true;
+        while (segments.next()) |seg| {
+            if (!first and n < e.path.len) {
+                e.path[n] = '/';
+                n += 1;
+            }
+            first = false;
+            // Ids: all digits, or six or more characters with a digit ("v2" stays).
+            const has_digit = for (seg) |ch| {
+                if (std.ascii.isDigit(ch)) break true;
+            } else false;
+            const masked = has_digit and (seg.len >= 6 or std.mem.findNone(u8, seg, "0123456789") == null);
+            const text = if (masked) "*" else seg;
+            const take = @min(text.len, e.path.len - n);
+            @memcpy(e.path[n..][0..take], text[0..take]);
+            n += take;
+        }
+        e.path_len = @intCast(n);
+        if (res.header("retry-after")) |v| e.retry_after = std.fmt.parseInt(i32, std.mem.trim(u8, v, " "), 10) catch -1;
+        i.mutex.lock();
+        defer i.mutex.unlock();
+        i.entries[i.next % capacity] = e;
+        i.next += 1;
+        i.total += 1;
+    }
+
+    /// JSON: `{"total":N,"recent":[{"at":…,"status":…,"method":…,"host":…,"path":…,"retryAfter":…,"inFlight":…}]}`,
+    /// oldest first.
+    pub fn json(i: *Incidents, a: Allocator) ![]u8 {
+        i.mutex.lock();
+        defer i.mutex.unlock();
+        var w: std.Io.Writer.Allocating = .init(a);
+        try w.writer.print("{{\"total\":{d},\"recent\":[", .{i.total});
+        const count = @min(i.next, capacity);
+        const start = i.next - count;
+        for (0..count) |k| {
+            const e = i.entries[(start + k) % capacity];
+            if (k > 0) try w.writer.writeByte(',');
+            try w.writer.print("{{\"at\":{d},\"status\":{d},\"method\":\"{s}\",\"host\":\"{s}\",\"path\":\"{s}\",\"retryAfter\":{d},\"inFlight\":{d}}}", .{
+                e.at, e.status, e.method[0..e.method_len], e.host[0..e.host_len], e.path[0..e.path_len], e.retry_after, e.in_flight,
+            });
+        }
+        try w.writer.writeAll("]}");
+        return w.written();
+    }
+};
+
+/// Every fetch reports here.
+pub var incidents: Incidents = .{};
 
 // MARK: Cookies
 
@@ -216,6 +308,7 @@ pub const Fetcher = struct {
             f.throttle.release();
             var res = try result;
             res.url = current.url;
+            incidents.record(current.method, current.url, res, f.throttle.in_flight);
 
             if (f.jar) |jar| {
                 for (res.headers) |h| {
@@ -235,19 +328,32 @@ pub const Fetcher = struct {
             const html = @import("html.zig");
             const next_url = html.resolve(arena, current.url, location);
             const keep_method = res.status == 307 or res.status == 308;
+            // Session credentials never go to another host.
+            const same_host = std.ascii.eqlIgnoreCase(hostOf(current.url), hostOf(next_url));
+            const carried = if (same_host) current.headers else withoutCredentials(arena, current.headers);
             current = if (keep_method) .{
                 .method = current.method,
                 .url = next_url,
-                .headers = current.headers,
+                .headers = carried,
                 .body = current.body,
             } else .{
                 .method = "GET",
                 .url = next_url,
-                .headers = withoutContentType(arena, current.headers),
+                .headers = withoutContentType(arena, carried),
             };
         }
     }
 };
+
+fn withoutCredentials(arena: Allocator, headers: []const Header) []const Header {
+    var out: std.ArrayList(Header) = .empty;
+    for (headers) |h| {
+        if (std.ascii.eqlIgnoreCase(h.name, "x-session-id") or std.ascii.eqlIgnoreCase(h.name, "x-access-token") or
+            std.ascii.eqlIgnoreCase(h.name, "authorization")) continue;
+        out.append(arena, h) catch {};
+    }
+    return out.items;
+}
 
 fn withoutContentType(arena: Allocator, headers: []const Header) []const Header {
     var out: std.ArrayList(Header) = .empty;
@@ -363,4 +469,22 @@ test "cookie jar" {
     jar.store("wccls.bibliocommons.com", "session=; expires=Thu, 01 Jan 1970 00:00:00 GMT");
     try std.testing.expectEqualStrings("bc_access_token=t1", jar.header(a, "wccls.bibliocommons.com").?);
     try std.testing.expectEqualStrings("wccls.bibliocommons.com", hostOf("https://wccls.bibliocommons.com/v2/x"));
+}
+
+test "incidents record throttling without ids" {
+    var i: Incidents = .{};
+    const headers = [_]Header{.{ .name = "Retry-After", .value = "30" }};
+    i.record("GET", "https://gateway.bibliocommons.com/v2/libraries/wccls/bibs/S143C123/availability?x=1", .{ .status = 429, .url = "", .headers = &headers, .body = "" }, 3);
+    i.record("POST", "https://gateway.bibliocommons.com/v2/libraries/wccls/holds", .{ .status = 500, .url = "", .headers = &.{}, .body = "" }, 1);
+    i.record("POST", "https://gateway.bibliocommons.com/v2/libraries/wccls/holds", .{ .status = 200, .url = "", .headers = &.{}, .body = "" }, 1);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const out = try i.json(arena.allocator());
+    try std.testing.expect(std.mem.startsWith(u8, out, "{\"total\":2,"));
+    try std.testing.expect(std.mem.find(u8, out, "\"method\":\"POST\"") != null);
+    try std.testing.expect(std.mem.find(u8, out, "\"path\":\"/v2/libraries/wccls/bibs/*/availability\"") != null);
+    try std.testing.expect(std.mem.find(u8, out, "\"retryAfter\":30") != null);
+    // Apps parse it, so it has to be valid JSON.
+    const parsed = try std.json.parseFromSlice(std.json.Value, arena.allocator(), out, .{});
+    try std.testing.expectEqual(@as(usize, 2), parsed.value.object.get("recent").?.array.items.len);
 }

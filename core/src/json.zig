@@ -71,7 +71,7 @@ pub const J = struct {
         const v = self.v orelse return null;
         return switch (v) {
             .integer => |i| i,
-            .float => |f| if (std.math.isFinite(f)) @as(i64, @intFromFloat(f)) else null,
+            .float => |f| if (std.math.isFinite(f) and f >= -0x1p63 and f < 0x1p63) @as(i64, @intFromFloat(f)) else null,
             .number_string, .string => |s| std.fmt.parseInt(i64, s, 10) catch null,
             else => null,
         };

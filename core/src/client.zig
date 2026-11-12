@@ -201,7 +201,14 @@ pub const Client = struct {
         const sid = j.path("auth.sessionId").str(a);
         const token = j.path("auth.authToken").str(a);
         const uid = j.path("auth.currentUserId").int();
-        if (res.status < 200 or res.status >= 300 or sid == null or token == null or uid == null) {
+        // Only a refusal of the credentials is a failed login; throttling and outages are not.
+        const refused = res.status == 400 or res.status == 401 or res.status == 403;
+        const ok = res.status >= 200 and res.status < 300;
+        if (!ok and !refused) {
+            failure.* = .{ .kind = "http", .status = res.status, .message = models.message(a, j) orelse statusText(res.status) };
+            return error.Http;
+        }
+        if (!ok or sid == null or token == null or uid == null) {
             failure.* = .{ .kind = "loginFailed", .message = models.message(a, j) orelse "Login failed. Check the username and PIN." };
             return error.LoginFailed;
         }
@@ -293,13 +300,21 @@ pub const Client = struct {
         if (authenticated) _ = try c.login(a, false, failure);
         var res = try c.rawGateway(a, method, url.items, body, authenticated, failure);
         var j = json.parse(a, res.body);
-        if (authenticated and isAuthFailure(a, res.status, j)) {
+        // A session ended by the same card signing in elsewhere may answer with a bare 500, not
+        // a 401, so a read that gets one signs in afresh and tries once more. Never a change: a
+        // hold the library placed before failing would then be refused as a repeat.
+        const is_read = std.mem.eql(u8, method, "GET");
+        if (authenticated and (isAuthFailure(a, res.status, j) or (res.status == 500 and is_read))) {
             _ = try c.login(a, true, failure);
             res = try c.rawGateway(a, method, url.items, body, authenticated, failure);
             j = json.parse(a, res.body);
         }
         if (res.status < 200 or res.status >= 300) {
-            failure.* = .{ .kind = "http", .status = res.status, .message = models.message(a, j) orelse statusText(res.status) };
+            const message: []const u8 = if (authenticated and res.status == 500)
+                "The library’s server reported an error. If this card is also signed in on another device or app, that can end this session. A change you asked for may still have gone through."
+            else
+                models.message(a, j) orelse statusText(res.status);
+            failure.* = .{ .kind = "http", .status = res.status, .message = message };
             return error.Http;
         }
         return j;
@@ -374,7 +389,16 @@ pub const Client = struct {
     }
 
     fn submitAccountForm(c: *Client, a: Allocator, form: html.Form, values: []const struct { []const u8, []const u8 }, failure: *Failure) Error!void {
-        const res = try c.submitForm(a, form, values, failure);
+        var res = try c.submitForm(a, form, values, failure);
+        if (std.mem.find(u8, html.urlPath(res.url), "/user/login") != null) {
+            // The web session expired since the form was fetched: log in again and submit once more.
+            _ = try c.login(a, true, failure);
+            res = try c.submitForm(a, form, values, failure);
+            if (std.mem.find(u8, html.urlPath(res.url), "/user/login") != null) {
+                failure.* = .{ .kind = "unexpected", .message = "Your session expired. Try again." };
+                return error.Unexpected;
+            }
+        }
         if (res.status < 200 or res.status >= 400) {
             failure.* = .{ .kind = "http", .status = res.status, .message = statusText(res.status) };
             return error.Http;
