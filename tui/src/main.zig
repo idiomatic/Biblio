@@ -1,10 +1,11 @@
 //! Biblio in the terminal: the libraries you've added, then one account's catalog search, new
 //! titles, holds, checkouts, borrowing history and account details, with item details,
-//! availability by location, and placing and canceling holds. Runs in any xterm-256color
-//! terminal; needs nothing beyond libbiblio and libc.
+//! availability by location, placing and canceling holds, and what you borrowed before. Runs
+//! in any xterm-256color terminal; needs nothing beyond libbiblio and libc.
 //!
 //! Core calls block, so each is preceded by a "Loading…" frame. Keep requests few: each
-//! screen loads once, and lists load a page at a time.
+//! screen loads once, and lists load a page at a time. Only borrowing history, read in full
+//! for "borrowed before", is fetched on another thread.
 
 const std = @import("std");
 const biblio = @import("biblio");
@@ -19,6 +20,8 @@ const gpa = std.heap.c_allocator;
 
 const color = struct {
     const dim: term.Color = 245;
+    /// Quieter than `dim`: a work borrowed in another format.
+    const faint: term.Color = 241;
     const selected: term.Color = 237;
     const failure: term.Color = 203;
     const success: term.Color = 114;
@@ -35,6 +38,14 @@ const color = struct {
         return map.get(k) orelse dim;
     }
 };
+
+/// A panic leaves the terminal usable before printing its message.
+pub const panic = std.debug.FullPanic(panicRestoring);
+
+fn panicRestoring(msg: []const u8, first_trace_addr: ?usize) noreturn {
+    term.restore();
+    std.debug.defaultPanic(msg, first_trace_addr);
+}
 
 pub fn main(init: std.process.Init) !void {
     var t = try term.Terminal.init(init.io);
@@ -99,13 +110,15 @@ const App = struct {
         while (!app.quit) {
             const key = app.term.readKey(250) orelse {
                 const now = app.term.size();
-                if (now.rows != last.rows or now.cols != last.cols) {
+                const synced = if (app.session) |s| s.poll() else false;
+                if (synced or now.rows != last.rows or now.cols != last.cols) {
                     last = now;
                     app.draw();
                 }
                 continue;
             };
             app.handle(key);
+            if (app.session) |s| _ = s.poll();
             if (!app.quit) app.draw();
         }
         if (app.session) |s| s.close();
@@ -442,6 +455,12 @@ const List = struct {
     sort: ?[]const u8 = null,
     query_buf: [256]u8 = undefined,
     query: []const u8 = "",
+    /// "Not Borrowed": hides works borrowed before in the same format.
+    not_borrowed: bool = false,
+    /// The entries shown, by index; `cursor` and `top` count these.
+    shown: std.ArrayList(usize) = .empty,
+    /// What `shown` was computed for: entry count, filter, and index generation.
+    shown_for: ?ShownFor = null,
     cursor: usize = 0,
     top: usize = 0,
 
@@ -454,8 +473,16 @@ const List = struct {
         l.count = 0;
         l.sort_options = &.{};
         l.applied_sort = null;
+        l.shown = .empty;
+        l.shown_for = null;
         l.cursor = 0;
         l.top = 0;
+    }
+
+    const ShownFor = struct { len: usize, filter: bool, generation: u64 };
+
+    fn shownEntry(l: *const List, i: usize) models.ListEntry {
+        return l.entries.items[l.shown.items[i]];
     }
 };
 
@@ -467,6 +494,41 @@ const Detail = struct {
     copies_error: ?[]const u8 = null,
     fields: []const models.DetailField = &.{},
     scroll: usize = 0,
+};
+
+/// A borrowing-history page fetched on its own thread, so the index fills in while the app
+/// stays responsive; the main thread polls `done` and applies the page.
+const HistoryFetch = struct {
+    client: *biblio.Client,
+    page: i64,
+    arena: std.heap.ArenaAllocator,
+    thread: std.Thread = undefined,
+    result: ?models.ListPage = null,
+    done: std.atomic.Value(bool) = .init(false),
+
+    fn start(c: *biblio.Client, page: i64) ?*HistoryFetch {
+        const job = gpa.create(HistoryFetch) catch return null;
+        job.* = .{ .client = c, .page = page, .arena = .init(gpa) };
+        job.thread = std.Thread.spawn(.{}, run, .{job}) catch {
+            job.arena.deinit();
+            gpa.destroy(job);
+            return null;
+        };
+        return job;
+    }
+
+    fn run(job: *HistoryFetch) void {
+        var failure: biblio.Failure = undefined;
+        job.result = job.client.borrowing(job.arena.allocator(), .history, job.page, null, &failure) catch null;
+        job.done.store(true, .release);
+    }
+
+    /// Waits for the fetch to end, then frees it.
+    fn finish(job: *HistoryFetch) void {
+        job.thread.join();
+        job.arena.deinit();
+        gpa.destroy(job);
+    }
 };
 
 const Session = struct {
@@ -482,6 +544,11 @@ const Session = struct {
     tab: Tab = .search,
     lists: [5]List,
     detail: ?Detail = null,
+    /// What this account borrowed before; null for guests and while borrowing history is off.
+    borrowed: ?biblio.borrowed.Index = null,
+    borrowed_path: []const u8 = "",
+    /// The history page being fetched for `borrowed`, off the main thread.
+    fetch: ?*HistoryFetch = null,
 
     fn create(app: *App, lib: usize, username: []const u8, password: ?[]const u8) ?*Session {
         const s = gpa.create(Session) catch return null;
@@ -519,6 +586,8 @@ const Session = struct {
     }
 
     fn close(s: *Session) void {
+        if (s.fetch) |job| job.finish();
+        if (s.borrowed) |*ix| ix.deinit();
         biblio.biblio_client_free(s.core);
         if (s.password) |p| {
             std.crypto.secureZero(u8, p);
@@ -559,6 +628,7 @@ const Session = struct {
         if (!s.isGuest()) {
             s.load(.holds, 1);
             s.load(.checkouts, 1);
+            s.startBorrowed();
         }
         app.say("Signed in to {s}{s}{s}. Press / to search.", .{ displayName(s.info), if (s.isGuest()) " as a guest" else " as ", s.username });
         return true;
@@ -613,6 +683,7 @@ const Session = struct {
         l.reset();
         if (tab == .search and l.query.len == 0) return;
         s.load(tab, 1);
+        s.fill(tab);
     }
 
     fn search(s: *Session, query: []const u8) void {
@@ -636,7 +707,12 @@ const Session = struct {
             if (!s.isGuest() and e.hold == null and e.checkout == null and e.bib.holdable) return "↑↓ scroll  h place hold  Esc back";
             return "↑↓ scroll  Esc back";
         }
-        if (s.tab == .account) return "Tab section  Esc libraries  ^C quit";
+        if (s.tab == .account) {
+            const ix = if (s.borrowed) |*x| x else return "Tab section  Esc libraries  ^C quit";
+            if (ix.isSyncing()) return "Tab section  Esc libraries  ^C quit";
+            return "b refresh borrowing history  Tab section  Esc libraries  ^C quit";
+        }
+        if (s.notBorrowedOffered(s.tab)) return "↑↓ move  Enter details  Tab section  / search  s sort  n not borrowed  r reload  Esc libraries";
         return "↑↓ move  Enter details  Tab section  / search  s sort  r reload  Esc libraries";
     }
 
@@ -660,9 +736,13 @@ const Session = struct {
             },
             else => {},
         }
-        if (s.tab == .account) return;
+        if (s.tab == .account) {
+            if (key == .char and key.char == 'b') s.rebuildBorrowed();
+            return;
+        }
         const l = s.list(s.tab);
-        const n = l.entries.items.len;
+        s.refilter(l);
+        const n = l.shown.items.len;
         const page = s.visibleEntries();
         switch (key) {
             .up => l.cursor -|= 1,
@@ -671,9 +751,16 @@ const Session = struct {
             .page_down => l.cursor = @min(l.cursor + page, n -| 1),
             .home => l.cursor = 0,
             .end => l.cursor = n -| 1,
-            .enter => if (n > 0) s.openDetail(l.entries.items[l.cursor]),
+            .enter => if (n > 0) s.openDetail(l.shownEntry(l.cursor)),
             .char => |c| switch (c) {
-                'r' => s.reload(s.tab),
+                'r' => {
+                    s.reload(s.tab);
+                    if (s.tab == .holds or s.tab == .checkouts or s.tab == .history) s.syncBorrowed();
+                },
+                'n' => if (s.notBorrowedOffered(s.tab)) {
+                    l.not_borrowed = !l.not_borrowed;
+                    return s.fill(s.tab);
+                },
                 's' => if (l.sort_options.len > 1) {
                     const current = l.sort orelse l.applied_sort orelse "";
                     var next: usize = 0;
@@ -688,7 +775,10 @@ const Session = struct {
             else => {},
         }
         // Near the end: the next page.
-        if (l.loaded and l.cursor + 1 >= n and l.page < l.pages and key != .up) s.load(s.tab, l.page + 1);
+        if (l.loaded and l.cursor + 1 >= n and l.page < l.pages and key != .up) {
+            s.load(s.tab, l.page + 1);
+            s.fill(s.tab);
+        }
     }
 
     fn visibleEntries(s: *const Session) usize {
@@ -786,6 +876,149 @@ const Session = struct {
         s.app.say("Hold canceled.", .{});
     }
 
+    // Borrowed before
+
+    /// Reads the saved index and brings it up to date, unless the library keeps no borrowing
+    /// history for the account: then nothing is kept.
+    fn startBorrowed(s: *Session) void {
+        s.borrowed_path = s.app.store.borrowedPath(s.arena.allocator(), s.info.subdomain, s.username);
+        const on = if (s.patron) |p| p.borrowingHistoryEnabled orelse true else true;
+        if (!on) return s.app.store.deleteBorrowed(s.borrowed_path);
+        s.borrowed = .init(gpa);
+        const ix = &s.borrowed.?;
+        var arena = std.heap.ArenaAllocator.init(gpa);
+        defer arena.deinit();
+        if (s.app.store.readBorrowed(arena.allocator(), s.borrowed_path)) |bytes| _ = ix.importJson(bytes) catch false;
+        s.fetchHistory(ix.beginSync());
+    }
+
+    /// Catches up on borrowing history, as when account lists reload.
+    fn syncBorrowed(s: *Session) void {
+        if (s.borrowed) |*ix| s.fetchHistory(ix.beginSync());
+    }
+
+    /// Forgets the index and reads the whole history again.
+    fn rebuildBorrowed(s: *Session) void {
+        const ix = if (s.borrowed) |*x| x else return;
+        if (ix.isSyncing()) return;
+        const page = ix.rebuild();
+        s.saveBorrowed();
+        s.fetchHistory(page);
+    }
+
+    /// Fetches a history page for the index, unless `page` is 0 (the sync is done).
+    fn fetchHistory(s: *Session, page: i64) void {
+        if (page <= 0 or s.fetch != null) return;
+        s.fetch = HistoryFetch.start(s.client(), page) orelse return s.borrowed.?.fail();
+    }
+
+    /// Takes in a fetched history page, if one is in, and fetches the next. True if the screen
+    /// needs drawing again.
+    fn poll(s: *Session) bool {
+        const job = s.fetch orelse return false;
+        if (!job.done.load(.acquire)) return false;
+        s.fetch = null;
+        defer job.finish();
+        const ix = if (s.borrowed) |*x| x else return false;
+        const page = job.result orelse {
+            ix.fail();
+            return true;
+        };
+        const a = job.arena.allocator();
+        const sources = a.alloc(biblio.borrowed.Source, page.entries.len) catch return true;
+        for (sources, page.entries) |*src, e| {
+            const h = e.history;
+            src.* = .{
+                .id = if (h) |x| x.id else e.id,
+                .metadata_id = if (h) |x| x.metadataId else e.bib.id,
+                .checkout_date = if (h) |x| x.checkoutDate orelse "" else "",
+                .returned_date = if (h) |x| x.returnedDate orelse "" else "",
+                .format = e.bib.format,
+                .library_format = e.bib.libraryFormat,
+                .title = e.bib.title,
+                .author = if (e.bib.authors.len > 0) e.bib.authors[0] else "",
+            };
+        }
+        const next = ix.apply(job.page, sources, page.count, page.pageSize) catch {
+            ix.fail();
+            return true;
+        };
+        s.saveBorrowed();
+        s.fetchHistory(next);
+        return true;
+    }
+
+    fn saveBorrowed(s: *Session) void {
+        const ix = if (s.borrowed) |*x| x else return;
+        const bytes = ix.exportJson(gpa) catch return;
+        defer gpa.free(bytes);
+        s.app.store.writeBorrowed(s.borrowed_path, bytes);
+    }
+
+    /// Whether the account borrowed the item, or the same work in another format.
+    fn borrowedMatch(s: *const Session, bib: models.Bib) ?biblio.borrowed.Borrowed {
+        const ix = if (s.borrowed) |*x| x else return null;
+        const b = ix.lookup(bib.id, bib.format, bib.title, if (bib.authors.len > 0) bib.authors[0] else "");
+        return if (b.match == .none) null else b;
+    }
+
+    /// "the audiobook", "on Blu-ray Disc", "the book", or "as Kit".
+    fn borrowedFormat(s: *const Session, a: std.mem.Allocator, code: ?[*:0]const u8) []const u8 {
+        const c = if (code) |x| std.mem.span(x) else "";
+        return borrowedPhrase(a, c, library.formatName(a, .of(s.labels), c));
+    }
+
+    /// Whether the work was borrowed in this format: what "Not Borrowed" hides.
+    fn borrowedInFormat(s: *const Session, bib: models.Bib) bool {
+        const ix = if (s.borrowed) |*x| x else return false;
+        const key = biblio.formats.workKey(gpa, bib.title, if (bib.authors.len > 0) bib.authors[0] else "") catch return false;
+        defer gpa.free(key);
+        return ix.hasWorkInFormat(key, bib.format);
+    }
+
+    /// "Not Borrowed" is offered once the whole history is read, and stays while it's on.
+    fn notBorrowedOffered(s: *const Session, tab: Tab) bool {
+        if (tab != .search and tab != .new_titles and tab != .holds) return false;
+        if (s.lists[@backingInt(tab)].not_borrowed) return true;
+        const ix = if (s.borrowed) |*x| x else return false;
+        return ix.complete;
+    }
+
+    /// Brings a list's shown entries up to date, keeping the selected entry selected.
+    fn refilter(s: *const Session, l: *List) void {
+        const want: List.ShownFor = .{
+            .len = l.entries.items.len,
+            .filter = l.not_borrowed,
+            .generation = if (s.borrowed) |*ix| ix.generation else 0,
+        };
+        if (l.shown_for) |had| if (std.meta.eql(had, want)) return;
+        const selected = if (l.cursor < l.shown.items.len) l.shown.items[l.cursor] else 0;
+        l.shown.clearRetainingCapacity();
+        const a = l.arena.allocator();
+        for (l.entries.items, 0..) |e, i| {
+            if (l.not_borrowed and s.borrowedInFormat(e.bib)) continue;
+            l.shown.append(a, i) catch {};
+        }
+        l.shown_for = want;
+        l.cursor = 0;
+        for (l.shown.items, 0..) |i, n| if (i <= selected) {
+            l.cursor = n;
+        };
+        l.top = @min(l.top, l.cursor);
+    }
+
+    /// With "Not Borrowed" on, loads pages until a screenful shows, a few pages at most.
+    fn fill(s: *Session, tab: Tab) void {
+        const l = s.list(tab);
+        var pages: usize = 0;
+        while (l.not_borrowed and l.loaded and l.page < l.pages and pages < 8) : (pages += 1) {
+            s.refilter(l);
+            if (l.shown.items.len > l.cursor + s.visibleEntries()) break;
+            s.load(tab, l.page + 1);
+        }
+        s.refilter(l);
+    }
+
     // Drawing
 
     fn draw(s: *Session, f: *Frame) void {
@@ -811,6 +1044,7 @@ const Session = struct {
 
         if (s.tab == .account) return s.drawAccount(f);
         const l = s.list(s.tab);
+        s.refilter(l);
         f.at(2, 0);
         f.style(.{ .fg = color.dim });
         if (s.tab == .search and l.query.len == 0) {
@@ -819,18 +1053,24 @@ const Session = struct {
             const sort = l.sort orelse l.applied_sort;
             const sort_name = if (sort) |id| library.sortName(f.a, .of(s.labels), id) else "";
             const what = if (s.tab == .search) std.fmt.allocPrint(f.a, "“{s}”: ", .{l.query}) catch "" else "";
-            _ = f.text(std.fmt.allocPrint(f.a, " {s}{d} {s}{s}{s}", .{
-                what,                                  l.count,
-                if (l.count == 1) "item" else "items",
+            // Filtered here, the server's count doesn't apply: count what's shown.
+            const count = if (l.not_borrowed)
+                std.fmt.allocPrint(f.a, "{d} not borrowed{s}", .{ l.shown.items.len, if (l.page < l.pages) " so far" else "" }) catch ""
+            else
+                std.fmt.allocPrint(f.a, "{d} {s}", .{ l.count, if (l.count == 1) "item" else "items" }) catch "";
+            _ = f.text(std.fmt.allocPrint(f.a, " {s}{s}{s}{s}", .{
+                what,
+                count,
                 if (sort != null) " · sorted by " else "",
                 sort_name,
             }) catch "", f.size.cols, false);
         }
         f.style(.{});
 
-        if (l.loaded and l.entries.items.len == 0) {
+        if (l.loaded and l.shown.items.len == 0) {
             f.at(4, 2);
-            _ = f.text(switch (s.tab) {
+            const all_borrowed = if (l.page < l.pages) "Everything so far was borrowed before. Press ↓ for more." else "Everything here was borrowed before.";
+            _ = f.text(if (l.not_borrowed and l.entries.items.len > 0) all_borrowed else switch (s.tab) {
                 .search => "No results.",
                 .new_titles => "No new titles.",
                 .holds => "No holds.",
@@ -840,11 +1080,14 @@ const Session = struct {
             return;
         }
 
+        // Catalog and hold rows mark what was borrowed before.
+        const marks = s.tab == .search or s.tab == .new_titles or s.tab == .holds;
         const visible = s.visibleEntries();
         if (l.cursor < l.top) l.top = l.cursor;
         if (l.cursor >= l.top + visible) l.top = l.cursor + 1 - visible;
-        const end = @min(l.entries.items.len, l.top + visible);
-        for (l.entries.items[l.top..end], l.top..) |entry, i| {
+        const end = @min(l.shown.items.len, l.top + visible);
+        for (l.top..end) |i| {
+            const entry = l.shownEntry(i);
             const selected = i == l.cursor;
             const row = 3 + (i - l.top) * 2;
             const bg: ?term.Color = if (selected) color.selected else null;
@@ -861,12 +1104,24 @@ const Session = struct {
             f.style(.{ .bg = bg, .fg = color.dim });
             w = f.text("   ", 3, false);
             w += f.text(s.formatLine(f.a, entry.bib), f.size.cols -| w, false);
+            const borrowed = if (marks) s.borrowedMatch(entry.bib) else null;
+            const mark_color = if (borrowed) |b| if (b.match == .same) color.dim else color.faint else color.dim;
+            if (borrowed != null) {
+                f.style(.{ .bg = bg, .fg = mark_color });
+                w += f.text(" " ++ borrowed_mark, f.size.cols -| w, false);
+            }
             const st = statusLine(f.a, entry);
             if (st.text.len > 0) {
                 w += f.text("  ", f.size.cols -| w, false);
                 f.style(.{ .bg = bg, .fg = st.color });
                 w += f.text(st.text, f.size.cols -| w, false);
             }
+            // The selected row spells out its mark, as a tooltip would.
+            if (selected) if (borrowed) |b| {
+                f.style(.{ .bg = bg, .fg = mark_color });
+                w += f.text("  ", f.size.cols -| w, false);
+                w += f.text(borrowedShort(f.a, b, s.borrowedFormat(f.a, b.format)), f.size.cols -| w, false);
+            };
             f.fill(w);
             f.style(.{});
         }
@@ -898,6 +1153,25 @@ const Session = struct {
             f.style(.{});
             _ = f.text(r[1], f.size.cols -| 22, false);
         }
+        // Under the borrowing history row: "Updating · 340 of 1,200" with a small gauge.
+        if (s.borrowed) |*ix| if (ix.isSyncing()) {
+            f.at(3 + rows.len * 2 - 1, 22);
+            f.style(.{ .fg = color.dim });
+            const fetched: i64 = @intCast(ix.entries.items.len);
+            if (ix.total > 0) {
+                var used = f.text(std.fmt.allocPrint(f.a, "Updating · {s} of {s}  ", .{ grouped(f.a, @min(fetched, ix.total)), grouped(f.a, ix.total) }) catch "", f.size.cols -| 24, false);
+                const cells = 12;
+                const filled: usize = @intCast(@divFloor(@min(fetched, ix.total) * cells, ix.total));
+                f.style(.{ .fg = 75 });
+                for (0..cells) |cell| {
+                    if (cell == filled) f.style(.{ .fg = color.selected });
+                    used += f.text("━", f.size.cols -| 24 -| used, false);
+                }
+            } else {
+                _ = f.text("Updating…", f.size.cols -| 24, false);
+            }
+            f.style(.{});
+        };
         f.at(3 + rows.len * 2 + 1, 2);
         f.style(.{ .fg = color.dim });
         _ = f.text("Change these settings in the Apple, GNOME, Android or Windows app, or on the library's website.", f.size.cols -| 4, false);
@@ -924,6 +1198,10 @@ const Session = struct {
         if (bib.edition) |ed| add(&lines, a, ed, width, .{ .fg = color.dim });
         const st = statusLine(a, e);
         if (st.text.len > 0) add(&lines, a, st.text, width, .{ .fg = st.color });
+        if (d.from != .history) if (s.borrowedMatch(bib)) |b| {
+            const text = std.fmt.allocPrint(a, borrowed_mark ++ " {s}", .{borrowedSentence(a, b, s.borrowedFormat(a, b.format))}) catch "";
+            add(&lines, a, text, width, .{ .fg = if (b.match == .same) color.dim else color.faint });
+        };
         if (bib.summary) |summary| {
             lines.append(a, .{ .text = "" }) catch {};
             add(&lines, a, summary, width, .{});
@@ -1022,8 +1300,100 @@ fn year(date: []const u8) []const u8 {
     return date;
 }
 
+// MARK: Borrowed before
+
+/// Follows the details of a row borrowed before.
+const borrowed_mark = "↺";
+
+/// How "borrowed" reads for a format: "the audiobook", "on Blu-ray Disc", "the book", or
+/// "as Kit", given the format's code and name.
+fn borrowedPhrase(a: std.mem.Allocator, code: []const u8, name: []const u8) []const u8 {
+    const Kind = enum { audio, video, print };
+    const kinds = std.StaticStringMap(Kind).initComptime(.{
+        .{ "AB", .audio },
+        .{ "BOOK_CD", .audio },
+        .{ "PLAYAWAY_AUDIOBOOK", .audio },
+        .{ "AUDIOBOOK", .audio },
+        .{ "DVD", .video },
+        .{ "BLURAY", .video },
+        .{ "UK", .video },
+        .{ "DVD_PBLURAY", .video },
+        .{ "VIDEO_ONLINE", .video },
+        .{ "BK", .print },
+        .{ "LPRINT", .print },
+        .{ "EBOOK", .print },
+    });
+    return switch (kinds.get(code) orelse return std.fmt.allocPrint(a, "as {s}", .{name}) catch name) {
+        .audio => "the audiobook",
+        .video => std.fmt.allocPrint(a, "on {s}", .{name}) catch name,
+        .print => std.fmt.allocPrint(a, "the {s}", .{std.ascii.allocLowerString(a, name) catch name}) catch name,
+    };
+}
+
+/// For a row: "Borrowed before · returned Mar 2024", or "Borrowed the audiobook · Mar 2024".
+fn borrowedShort(a: std.mem.Allocator, b: biblio.borrowed.Borrowed, phrase: []const u8) []const u8 {
+    const when = monthYear(a, b.last_returned orelse b.last_checkout, false);
+    if (b.match == .same) {
+        const verb = if (b.last_returned != null) "returned" else "borrowed";
+        const w = when orelse return "Borrowed before";
+        return std.fmt.allocPrint(a, "Borrowed before · {s} {s}", .{ verb, w }) catch "Borrowed before";
+    }
+    const what = std.fmt.allocPrint(a, "Borrowed {s}", .{phrase}) catch "Borrowed before";
+    const w = when orelse return what;
+    return std.fmt.allocPrint(a, "{s} · {s}", .{ what, w }) catch what;
+}
+
+/// For item detail: "You borrowed this in March 2024 · 3 times", or "You borrowed on DVD in
+/// March 2024".
+fn borrowedSentence(a: std.mem.Allocator, b: biblio.borrowed.Borrowed, phrase: []const u8) []const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    out.print(a, "You borrowed {s}", .{if (b.match == .same) "this" else phrase}) catch {};
+    if (monthYear(a, b.last_checkout orelse b.last_returned, true)) |when| out.print(a, " in {s}", .{when}) catch {};
+    if (b.count > 1) out.print(a, " · {d} times", .{b.count}) catch {};
+    return out.items;
+}
+
+/// "March 2024" (or "Mar 2024") from a date starting "2024-03".
+fn monthYear(a: std.mem.Allocator, date: ?[*:0]const u8, full: bool) ?[]const u8 {
+    const d = std.mem.span(date orelse return null);
+    if (d.len < 7 or d[4] != '-' or std.mem.indexOfNone(u8, d[0..4], "0123456789") != null) return null;
+    const m = std.fmt.parseInt(u8, d[5..7], 10) catch return null;
+    if (m < 1 or m > 12) return null;
+    const months = [_][]const u8{ "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
+    const name = if (full) months[m - 1] else months[m - 1][0..3];
+    return std.fmt.allocPrint(a, "{s} {s}", .{ name, d[0..4] }) catch null;
+}
+
+/// "1,200"
+fn grouped(a: std.mem.Allocator, n: i64) []const u8 {
+    const digits = std.fmt.allocPrint(a, "{d}", .{@abs(n)}) catch return "";
+    var out: std.ArrayList(u8) = .empty;
+    if (n < 0) out.append(a, '-') catch {};
+    for (digits, 0..) |c, i| {
+        if (i > 0 and (digits.len - i) % 3 == 0) out.append(a, ',') catch {};
+        out.append(a, c) catch {};
+    }
+    return out.items;
+}
+
 test {
     _ = term;
+}
+
+test borrowedSentence {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const same: biblio.borrowed.Borrowed = .{ .match = .same, .format = "BK", .count = 3, .last_checkout = "2024-03-02", .last_returned = "2024-03-20" };
+    try std.testing.expectEqualStrings("You borrowed this in March 2024 · 3 times", borrowedSentence(a, same, borrowedPhrase(a, "BK", "Book")));
+    try std.testing.expectEqualStrings("Borrowed before · returned Mar 2024", borrowedShort(a, same, ""));
+    const dvd: biblio.borrowed.Borrowed = .{ .match = .other_format, .format = "DVD", .count = 1, .last_checkout = "2023-11-05" };
+    try std.testing.expectEqualStrings("You borrowed on DVD in November 2023", borrowedSentence(a, dvd, borrowedPhrase(a, "DVD", "DVD")));
+    try std.testing.expectEqualStrings("Borrowed the audiobook · Nov 2023", borrowedShort(a, dvd, borrowedPhrase(a, "AB", "Audiobook CD")));
+    try std.testing.expectEqualStrings("the large print", borrowedPhrase(a, "LPRINT", "Large Print"));
+    try std.testing.expectEqualStrings("as Kit", borrowedPhrase(a, "KIT", "Kit"));
+    try std.testing.expectEqualStrings("1,200", grouped(a, 1200));
+    try std.testing.expectEqualStrings("340", grouped(a, 340));
 }
 
 test statusLine {

@@ -21,9 +21,40 @@ pub const Key = union(enum) {
     delete,
     escape,
     ctrl_c,
+    suspend_app,
+    /// The screen needs redrawing (after the app was suspended and resumed).
+    redraw,
 };
 
 pub const Size = struct { rows: u16, cols: u16 };
+
+/// The terminal's original settings while the app owns it, for `restore` (called also from signal and panic handlers).
+var saved_termios: ?posix.termios = null;
+
+/// Puts the screen and termios back; safe to call more than once, and from signal handlers.
+pub fn restore() void {
+    const saved = saved_termios orelse return;
+    saved_termios = null;
+    const reset = "\x1b[0m\x1b[?25h\x1b[?1049l";
+    _ = std.c.write(posix.STDOUT_FILENO, reset, reset.len);
+    posix.tcsetattr(posix.STDIN_FILENO, .FLUSH, saved) catch {};
+}
+
+fn onFatalSignal(sig: posix.SIG) callconv(.c) void {
+    restore();
+    // The handler was reset to the default on entry; raising again ends the process as usual.
+    posix.raise(sig) catch {};
+}
+
+/// Restores the terminal when the process is killed by a signal (the handlers reset themselves, then re-raise).
+fn installSignalHandlers() void {
+    const act: posix.Sigaction = .{
+        .handler = .{ .handler = onFatalSignal },
+        .mask = posix.sigemptyset(),
+        .flags = posix.SA.RESETHAND,
+    };
+    for ([_]posix.SIG{ .TERM, .HUP, .INT, .QUIT }) |sig| posix.sigaction(sig, &act, null);
+}
 
 pub const Terminal = struct {
     io: std.Io,
@@ -33,6 +64,13 @@ pub const Terminal = struct {
 
     pub fn init(io: std.Io) !Terminal {
         const saved = try posix.tcgetattr(posix.STDIN_FILENO);
+        saved_termios = saved;
+        errdefer saved_termios = null;
+        installSignalHandlers();
+        return enter(io, saved);
+    }
+
+    fn enter(io: std.Io, saved: posix.termios) !Terminal {
         var raw = saved;
         raw.lflag.ECHO = false;
         raw.lflag.ICANON = false;
@@ -49,9 +87,17 @@ pub const Terminal = struct {
         return t;
     }
 
-    pub fn deinit(t: *Terminal) void {
-        t.write("\x1b[0m\x1b[?25h\x1b[?1049l");
-        posix.tcsetattr(posix.STDIN_FILENO, .FLUSH, t.saved) catch {};
+    pub fn deinit(_: *Terminal) void {
+        restore();
+    }
+
+    /// Ctrl+Z (raw mode swallows it): hands the terminal back, stops until continued, then takes it again.
+    fn suspendSelf(t: *Terminal) void {
+        restore();
+        posix.raise(.STOP) catch {};
+        saved_termios = t.saved;
+        const again = enter(t.io, t.saved) catch return;
+        t.* = again;
     }
 
     pub fn write(t: *const Terminal, bytes: []const u8) void {
@@ -75,6 +121,10 @@ pub const Terminal = struct {
         const key, const used = parseKey(t.pending[0..t.pending_len]);
         std.mem.copyForwards(u8, t.pending[0 .. t.pending_len - used], t.pending[used..t.pending_len]);
         t.pending_len -= used;
+        if (key == .suspend_app) {
+            t.suspendSelf();
+            return .redraw;
+        }
         return key;
     }
 };
@@ -84,6 +134,7 @@ pub fn parseKey(bytes: []const u8) struct { Key, usize } {
     const b = bytes[0];
     switch (b) {
         3 => return .{ .ctrl_c, 1 },
+        26 => return .{ .suspend_app, 1 },
         9 => return .{ .tab, 1 },
         '\r', '\n' => return .{ .enter, 1 },
         8, 127 => return .{ .backspace, 1 },
