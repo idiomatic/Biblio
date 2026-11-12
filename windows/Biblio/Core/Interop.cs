@@ -26,6 +26,7 @@ internal static unsafe class Interop
         public byte Holdable;
         public byte* Status;
         public long HeldCopies, AvailableCopies, TotalCopies, OnOrderCopies;
+        public byte* LibraryFormat;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -154,6 +155,7 @@ internal static unsafe class Interop
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_resolve_subdomain(byte* name, byte* website);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_format_name(byte* code, Pair* labels, nuint count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte* biblio_sort_name(byte* id, Pair* labels, nuint count);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern bool biblio_format_is_refined(byte* code);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern double* biblio_barcode(byte* value, int symbology, nuint* count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int biblio_library_icon(byte* website, byte* subdomain, byte* logo, byte** bytes, nuint* len);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern byte biblio_logo_bounds(byte* pixels, nuint width, nuint height, nuint stride, nuint channels, nuint* bounds);
@@ -221,6 +223,12 @@ internal static unsafe class Interop
         using var s = new Strings();
         var pairs = s.Pairs(labels);
         fixed (Pair* l = pairs) return Take(biblio_sort_name(s[id], l, (nuint)pairs.Length));
+    }
+
+    public static bool IsRefinedFormat(string code)
+    {
+        using var s = new Strings();
+        return biblio_format_is_refined(s[code]);
     }
 
     public static double[] Barcode(string value, bool code128)
@@ -306,6 +314,27 @@ internal static unsafe class Interop
         };
         return Finish(result, &err, p, ToListPage);
     }
+
+    /// <summary>A history page as the core's own result (a biblio_list_page_t*), for a borrowed index; free it with FreeListPage.</summary>
+    public static IntPtr CoreHistoryPage(IntPtr client, int page)
+    {
+        Error err = default;
+        CListPage* p = null;
+        var result = biblio_history(client, page, null, &p, &err);
+        try
+        {
+            Check(result, &err);
+            if (p == null) throw new CoreException("unexpected", "The library returned an unexpected response.");
+        }
+        catch
+        {
+            if (p != null) biblio_list_page_free(p);
+            throw;
+        }
+        return (IntPtr)p;
+    }
+
+    public static void FreeListPage(IntPtr page) => biblio_list_page_free((void*)page);
 
     public static List<CopyAvailability> Availability(IntPtr client, string metadataId)
     {
@@ -393,7 +422,8 @@ internal static unsafe class Interop
     private static Bib ToBib(in CBib b) => new(
         Str(b.Id), Str(b.Title), Opt(b.Subtitle), Strs(b.Authors, b.AuthorsCount), Opt(b.Format) ?? "UNKNOWN", Opt(b.PublicationDate),
         Opt(b.Edition), Opt(b.CallNumber), Opt(b.Summary), Opt(b.JacketSmall), Opt(b.JacketLarge), Opt(b.MaterialType) ?? "PHYSICAL",
-        b.Holdable != 0, Opt(b.Status), (int)b.HeldCopies, (int)b.AvailableCopies, (int)b.TotalCopies, (int)b.OnOrderCopies);
+        b.Holdable != 0, Opt(b.Status), (int)b.HeldCopies, (int)b.AvailableCopies, (int)b.TotalCopies, (int)b.OnOrderCopies,
+        Opt(b.LibraryFormat) ?? Opt(b.Format) ?? "UNKNOWN");
 
     private static Hold ToHold(CHold* h) => new(
         Str(h->Id), Str(h->MetadataId), Str(h->Status), h->HasPosition != 0 ? (int)h->Position : null, Opt(h->PickupLocation),

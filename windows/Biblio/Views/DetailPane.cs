@@ -12,11 +12,39 @@ public sealed class DetailPane : StackPanel
     private readonly AccountWindow _window;
     private int _generation;
     public event Action? Closed;
+    /// <summary>"You borrowed this…", under the hold controls; empty unless the card borrowed it.</summary>
+    private readonly Grid _borrowed = new()
+    {
+        ColumnSpacing = 8, Visibility = Visibility.Collapsed,
+        ColumnDefinitions = { new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition() },
+    };
+    private Bib? _bib;
+    private ulong? _borrowedGeneration;
 
     public DetailPane(AccountWindow window)
     {
         _window = window;
         Spacing = 16;
+    }
+
+    /// <summary>Redraws the "You borrowed this…" line when the index's matches change.</summary>
+    public void UpdateBorrowed()
+    {
+        if (_bib is null || _window.Borrowed is not { } borrowed || borrowed.Generation == _borrowedGeneration) return;
+        _borrowedGeneration = borrowed.Generation;
+        _borrowed.Children.Clear();
+        var match = borrowed.Lookup(_bib);
+        _borrowed.Visibility = match is null ? Visibility.Collapsed : Visibility.Visible;
+        if (match is null) return;
+        var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        _borrowed.Children.Add(new FontIcon
+        {
+            Glyph = ItemListView.BorrowedGlyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = match.SameFormat ? secondary : (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+        });
+        var sentence = new TextBlock { Text = BorrowedText.Sentence(match, _window.Library), Foreground = secondary, TextWrapping = TextWrapping.Wrap };
+        Grid.SetColumn(sentence, 1);
+        _borrowed.Children.Add(sentence);
     }
 
     public void Show(ListEntry entry)
@@ -60,6 +88,10 @@ public sealed class DetailPane : StackPanel
         Children.Add(top);
 
         if (Actions(entry) is { } actions) Children.Add(actions);
+        _bib = bib;
+        _borrowedGeneration = null;
+        Children.Add(_borrowed);
+        UpdateBorrowed();
         if (bib.Summary is { } summary) Children.Add(new TextBlock { Text = summary, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
 
         var copies = new StackPanel { Spacing = 2 };

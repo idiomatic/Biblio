@@ -108,6 +108,9 @@ public sealed class CoreClient : IDisposable
     public Task<ListPage> CheckoutsAsync(int page, string? sort) => Run(h => Interop.BorrowingList(h, Interop.Borrowing.Checkouts, page, sort));
     public Task<ListPage> HistoryAsync(int page, string? sort) => Run(h => Interop.BorrowingList(h, Interop.Borrowing.History, page, sort));
 
+    /// <summary>A history page as the core's own result, for <see cref="BorrowedIndex"/>, which frees it.</summary>
+    public Task<IntPtr> CoreHistoryPageAsync(int page) => Run(h => Interop.CoreHistoryPage(h, page));
+
     public Task<List<CopyAvailability>> AvailabilityAsync(string metadataId) => Run(h => Interop.Availability(h, metadataId));
 
     /// <summary>Full record fields ("Details", "About", …).</summary>
@@ -166,6 +169,9 @@ public static class Core
 
     public static string FormatName(string code, IReadOnlyDictionary<string, string>? labels) => Interop.FormatName(code, labels) ?? code;
     public static string SortName(string id, IReadOnlyDictionary<string, string>? labels) => Interop.SortName(id, labels) ?? id;
+
+    /// <summary>A format the core refines from a broader one (4K Ultra HD Blu-ray filed as Blu-ray); searches filter it locally.</summary>
+    public static bool IsRefinedFormat(string code) => Interop.IsRefinedFormat(code);
 
     /// <summary>Codabar, or Code 128, bar and space widths in narrow units, bar first; empty if the value can't be encoded.</summary>
     public static double[] Barcode(string value, bool code128 = false) => Interop.Barcode(value, code128);

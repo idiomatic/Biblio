@@ -5,10 +5,12 @@ namespace Biblio.Core;
 // The data every Biblio app shows, as libbiblio returns it (core/src/models.zig), built from its
 // C structs in Interop.cs.
 
+/// <summary>A catalog record. Format may refine LibraryFormat, the library's own code (4K filed as Blu-ray).</summary>
 public sealed record Bib(
     string Id, string Title, string? Subtitle, List<string>? Authors, string Format, string? PublicationDate,
     string? Edition, string? CallNumber, string? Summary, string? JacketSmall, string? JacketLarge,
-    string MaterialType, bool Holdable, string? Status, int HeldCopies, int AvailableCopies, int TotalCopies, int OnOrderCopies)
+    string MaterialType, bool Holdable, string? Status, int HeldCopies, int AvailableCopies, int TotalCopies, int OnOrderCopies,
+    string LibraryFormat)
 {
     public string? PrimaryAuthor => Authors is { Count: > 0 } a ? a[0] : null;
 

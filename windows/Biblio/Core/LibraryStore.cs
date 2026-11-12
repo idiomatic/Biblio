@@ -6,7 +6,8 @@ namespace Biblio.Core;
 
 /// <summary>
 /// Added libraries and their usernames (JSON in local app data); passwords in the Windows
-/// Credential Locker (PasswordVault), one credential per library and username.
+/// Credential Locker (PasswordVault), one credential per library and username. Removing a user or
+/// library also deletes its saved borrowing-history index (<see cref="BorrowedIndex"/>).
 /// </summary>
 public sealed class LibraryStore
 {
@@ -25,7 +26,7 @@ public sealed class LibraryStore
             if (File.Exists(_path) && JsonSerializer.Deserialize<List<LibraryInfo>>(File.ReadAllText(_path), CoreJson.Options) is { } list)
                 foreach (var lib in list) Libraries.Add(lib);
         }
-        catch (JsonException) { }
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { }
     }
 
     public LibraryInfo? Library(string subdomain) => Libraries.FirstOrDefault(l => l.Subdomain == subdomain);
@@ -40,7 +41,11 @@ public sealed class LibraryStore
 
     public void Remove(string subdomain)
     {
-        foreach (var user in Library(subdomain)?.Users ?? []) DeletePassword(subdomain, user);
+        foreach (var user in Library(subdomain)?.Users ?? [])
+        {
+            DeletePassword(subdomain, user);
+            BorrowedIndex.DeleteFile(subdomain, user);
+        }
         var i = IndexOf(subdomain);
         if (i >= 0) Libraries.RemoveAt(i);
         Save();
@@ -61,6 +66,7 @@ public sealed class LibraryStore
         var i = IndexOf(subdomain);
         if (i < 0) return;
         DeletePassword(subdomain, username);
+        BorrowedIndex.DeleteFile(subdomain, username);
         Libraries[i] = Libraries[i] with { Users = (Libraries[i].Users ?? []).Where(u => u != username).ToList() };
         Save();
     }

@@ -14,6 +14,11 @@ public sealed class AccountPage : UserControl
     // ScrollViewer is sealed, so the page wraps one.
     private readonly ScrollViewer _scroll = new() { Padding = new Thickness(24, 12, 24, 24) };
     private bool _filling;
+    // "Borrowed before": updated in place as the index syncs.
+    private SettingsCard? _borrowedCard;
+    private Button? _refreshBorrowed;
+    private ProgressBar? _borrowedProgress;
+    private TextBlock? _borrowedStatus;
 
     public AccountPage(AccountWindow window)
     {
@@ -120,7 +125,11 @@ public sealed class AccountPage : UserControl
             toggle.Toggled += async (_, _) =>
             {
                 if (_filling) return;
-                if (toggle.IsOn) { _ = Save(c => c.SetBorrowingHistoryAsync(true), "Borrowing history turned on."); return; }
+                if (toggle.IsOn)
+                {
+                    if (await Save(c => c.SetBorrowingHistoryAsync(true), "Borrowing history turned on.")) _window.Borrowed?.Sync(_window.Client);
+                    return;
+                }
                 // Turning history off can delete it, so it asks first.
                 var dialog = new ContentDialog
                 {
@@ -129,7 +138,10 @@ public sealed class AccountPage : UserControl
                     PrimaryButtonText = "Turn off", CloseButtonText = "Keep history", DefaultButton = ContentDialogButton.Close,
                 };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                    _ = Save(c => c.SetBorrowingHistoryAsync(false), "Borrowing history turned off.");
+                {
+                    // Nothing borrowed-before stays on the device once the library confirms.
+                    if (await Save(c => c.SetBorrowingHistoryAsync(false), "Borrowing history turned off.")) _window.Borrowed?.Clear();
+                }
                 else
                 {
                     _filling = true;
@@ -143,7 +155,43 @@ public sealed class AccountPage : UserControl
                 HeaderIcon = new SymbolIcon(Symbol.Clock), Content = toggle,
             });
         }
+        if (_window.Borrowed is { } borrowed)
+        {
+            _refreshBorrowed = new Button { Content = "Refresh Borrowing History" };
+            _refreshBorrowed.Click += (_, _) => borrowed.Rebuild(_window.Client);
+            _borrowedProgress = new ProgressBar { Width = 200 };
+            _borrowedStatus = new TextBlock { Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
+            _borrowedCard = new SettingsCard
+            {
+                Header = "Borrowed before", Description = "Marks items you borrowed before. Refreshing reads your whole borrowing history again.",
+                HeaderIcon = new FontIcon { Glyph = ItemListView.BorrowedGlyph },
+                Content = new StackPanel
+                {
+                    Spacing = 4, HorizontalAlignment = HorizontalAlignment.Right,
+                    Children = { _refreshBorrowed, _borrowedProgress, _borrowedStatus },
+                },
+            };
+            stack.Children.Add(_borrowedCard);
+            UpdateBorrowed();
+        }
         _filling = false;
+    }
+
+    /// <summary>Refresh Borrowing History, and "Updating · 340 of 1,200" with a small progress bar while syncing.</summary>
+    public void UpdateBorrowed()
+    {
+        if (_window.Borrowed is not { } borrowed || _borrowedCard is null || _refreshBorrowed is null ||
+            _borrowedProgress is null || _borrowedStatus is null) return;
+        var historyOn = _window.Patron?.BorrowingHistoryEnabled != false;
+        _borrowedCard.IsEnabled = historyOn;
+        _refreshBorrowed.IsEnabled = historyOn && !borrowed.IsSyncing;
+        var syncing = historyOn && borrowed.IsSyncing;
+        _borrowedProgress.Visibility = _borrowedStatus.Visibility = syncing ? Visibility.Visible : Visibility.Collapsed;
+        if (!syncing) return;
+        _borrowedProgress.IsIndeterminate = borrowed.Total == 0;
+        _borrowedProgress.Maximum = Math.Max(1, borrowed.Total);
+        _borrowedProgress.Value = Math.Min(borrowed.Fetched, borrowed.Total);
+        _borrowedStatus.Text = borrowed.Total > 0 ? $"Updating · {borrowed.Fetched:N0} of {borrowed.Total:N0}" : "Updating…";
     }
 
     private static Microsoft.UI.Xaml.Input.InputScope Scope(Microsoft.UI.Xaml.Input.InputScopeNameValue value) =>
@@ -159,8 +207,9 @@ public sealed class AccountPage : UserControl
             Refresh();
             return true;
         }
-        catch (CoreException e)
+        catch (Exception e) when (e is CoreException or System.IO.IOException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
+            // Event handlers here are async void: an exception that escapes one ends the process.
             _window.ShowMessage(e.Message, error: true);
             Refresh();
             return false;

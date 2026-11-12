@@ -25,12 +25,17 @@ public sealed class AccountWindow : Window
     public CoreClient Client { get; }
     public Patron? Patron { get; private set; }
     public List<Location> Locations { get; private set; } = [];
+    /// <summary>What this card borrowed before; null for guests.</summary>
+    public BorrowedIndex? Borrowed { get; }
 
     private readonly NavigationView _nav = new();
     private readonly InfoBar _message = new() { IsClosable = true };
     private readonly Dictionary<Section, ItemListView> _lists = [];
     private readonly Dictionary<Section, NavigationViewItem> _items = [];
     private AccountPage? _account;
+    /// <summary>The sidebar badges loaded so far; borrowing history syncs once both have.</summary>
+    private readonly HashSet<Section> _counted = [];
+    private readonly TaskCompletionSource _badges = new();
 
     public static bool IsOpen(string subdomain, string username) => OpenWindows.ContainsKey($"{subdomain}|{username}");
 
@@ -47,6 +52,9 @@ public sealed class AccountWindow : Window
         window.Closed += (_, _) =>
         {
             OpenWindows.Remove(key);
+            foreach (var list in window._lists.Values) list.Dispose();
+            // After the lists, whose "Not Borrowed" filters point at it.
+            window.Borrowed?.Dispose();
             window.Client.Dispose();
         };
         window.Activate();
@@ -58,6 +66,11 @@ public sealed class AccountWindow : Window
         Username = username;
         var store = LibraryStore.Shared;
         Client = new CoreClient(library.Subdomain, username, () => store.Password(library.Subdomain, username));
+        if (!IsGuest)
+        {
+            Borrowed = new BorrowedIndex(library.Subdomain, username);
+            Borrowed.Changed += BorrowedChanged;
+        }
         Title = $"{library.DisplayName} — {(IsGuest ? "Guest" : username)}";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -119,7 +132,27 @@ public sealed class AccountWindow : Window
             ListFor(Section.Checkouts).LoadIfNeeded();
             _account?.Refresh();
         }
-        catch (CoreException e) { ShowMessage(e.Message, error: true); }
+        catch (CoreException e) { ShowMessage(e.Message, error: true); return; }
+        // Borrowing history syncs after the badges, so they come first through the shared throttle.
+        await Task.WhenAny(_badges.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        if (Patron is { } patron) Borrowed?.Start(Client, patron.BorrowingHistoryEnabled);
+    }
+
+    /// <summary>
+    /// After the patron changes (signing in afresh): keeps nothing when the library's borrowing
+    /// history is off, and syncs what's new otherwise.
+    /// </summary>
+    public void SignedIn(Patron patron)
+    {
+        Patron = patron;
+        Borrowed?.Start(Client, patron.BorrowingHistoryEnabled);
+    }
+
+    /// <summary>The borrowed-before index's progress or matches changed.</summary>
+    private void BorrowedChanged()
+    {
+        foreach (var list in _lists.Values) list.BorrowedChanged();
+        _account?.UpdateBorrowed();
     }
 
     public ItemListView ListFor(Section section)
@@ -150,6 +183,7 @@ public sealed class AccountWindow : Window
     {
         if (_items.TryGetValue(section, out var item))
             item.InfoBadge = count > 0 ? new InfoBadge { Value = count } : null;
+        if (_counted.Add(section) && _counted.Count == 2) _badges.TrySetResult();
     }
 
     public void ShowMessage(string message, bool error = false)

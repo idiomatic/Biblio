@@ -93,6 +93,7 @@ Frames follow [docs/screenshots/README.md](../docs/screenshots/README.md). In a 
 
 * Don't change the guest's DNS servers or toggle its adapter. Doing so dropped the DHCP lease (a `169.254.x.x` address); `Restart-NetAdapter -Name Ethernet` restores it.
 * `Biblio.exe` finds no .NET unless `DOTNET_ROOT` is set (`guest-setup.ps1` sets it machine-wide, for new sessions).
+* A process started in the background through `terrarium exec` (`Start-Process`) is killed when the `exec` returns; to start `Biblio.exe` on the desktop, register a scheduled task that runs interactively and start it.
 * Launch `Biblio.exe` itself, from its output folder (`bin\ARM64\Debug\net10.0-windows10.0.22621.0`). Starting `Biblio.dll` through `dotnet.exe` crashes in `Microsoft.UI.Xaml.dll` (stowed exception `0xc000027b`).
 * The core is copied beside the app as `libbiblio.dll`, because Windows file names ignore case and `biblio.dll` collided with the app's own `Biblio.dll`.
 * Windows shows notifications (OneDrive, for one) over the app and takes clicks meant for it; dismiss them first.
