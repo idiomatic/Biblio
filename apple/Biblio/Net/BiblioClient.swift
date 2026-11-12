@@ -6,14 +6,17 @@ nonisolated enum BiblioError: LocalizedError, Sendable {
     case signInRequired
     case loginFailed(String)
     case http(Int, String?)
+    /// The account has as many holds as the library allows.
+    case holdLimit(String)
     case unexpected(String)
 
     var errorDescription: String? {
         switch self {
-        case .missingCredentials: "No saved password for this user. Add the user again."
-        case .signInRequired: "Sign in to use this feature."
+        case .missingCredentials: String(localized: "No saved password for this user. Add the user again.")
+        case .signInRequired: String(localized: "Sign in to use this feature.")
         case .loginFailed(let m): m
         case .http(let code, let m): m ?? HTTPURLResponse.localizedString(forStatusCode: code).capitalized
+        case .holdLimit(let m): m
         case .unexpected(let m): m
         }
     }
@@ -34,7 +37,6 @@ actor BiblioClient {
 
     /// Guest clients have no username and can only make unauthenticated catalog requests.
     nonisolated var isGuest: Bool { username.isEmpty }
-    nonisolated var webBase: URL { URL(string: "https://\(subdomain).bibliocommons.com")! }
 
     init(subdomain: String, username: String, status: FetchStatus,
          password: (@Sendable () -> String?)? = nil) {
@@ -63,10 +65,6 @@ actor BiblioClient {
     @discardableResult
     func login(force: Bool = false) async throws -> Patron {
         try await fetch({ biblio_login($0, force, $1, $2) }, free: biblio_patron_free, Patron.init)
-    }
-
-    func setLanguage(_ code: String) {
-        biblio_configure(handle.pointer, code, -1)
     }
 
     // MARK: Requests

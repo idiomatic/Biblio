@@ -30,7 +30,7 @@ struct PlaceHoldsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(bibs.count == 1 ? "1 Item to Hold" : "\(bibs.count) Items to Hold")
+                Text("^[\(bibs.count) Item](inflect: true) to Hold")
                     .font(.title3.weight(.semibold))
                 Spacer()
                 if combined.sessions.count > 1 {
@@ -55,7 +55,7 @@ struct PlaceHoldsView: View {
             } label: {
                 HStack {
                     if working { ProgressView().controlSize(.small) }
-                    Text(placeable.count == 1 ? "Place 1 Hold" : "Place \(placeable.count) Holds")
+                    Text("Place ^[\(placeable.count) Hold](inflect: true)")
                 }
                 .frame(maxWidth: .infinity)
             }

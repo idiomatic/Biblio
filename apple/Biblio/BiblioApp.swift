@@ -2,8 +2,10 @@ import SwiftUI
 
 @main
 struct BiblioApp: App {
+    static let windowID = "library"
+
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: Self.windowID) {
             WindowRoot()
         }
         .commands {
@@ -42,6 +44,8 @@ struct WindowRoot: View {
     /// The launcher waits for a restored window to reopen its cards.
     @State private var restored = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -114,6 +118,8 @@ struct WindowRoot: View {
         .onOpenURL { url in
             if url.scheme == "biblio", url.host == "card" { LibraryCardRequest.request() }
         }
+        // An open window takes biblio://card rather than a new window opening for each.
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         .onReceive(NotificationCenter.default.publisher(for: .libraryCardRequested)) { _ in showRequestedCard() }
         .onChange(of: currentSection) { _, section in
             // Saved at once, since a window's own storage may lag a quit; leaving to the library
@@ -260,9 +266,28 @@ struct WindowRoot: View {
             openMostRecentLogin()
             return
         }
-        guard !active.isGuest else { return }
+        guard !active.isGuest else {
+            Task { await openMostRecentLoginFromGuest() }
+            return
+        }
         LibraryCardRequest.consume()
         active.showingLibraryCard = true
+    }
+
+    /// A guest window opens the most recently used login once the other windows (which may be
+    /// restoring at launch) have had their turn: in a window of its own where there can be
+    /// several, else in place of the guest.
+    private func openMostRecentLoginFromGuest() async {
+        try? await Task.sleep(for: .milliseconds(300))
+        guard let last = LibraryStore.shared.lastLogin, LibraryStore.shared.library(last.subdomain) != nil,
+              !ClientPool.shared.isInUse(subdomain: last.subdomain, username: last.username),
+              LibraryCardRequest.handOff() else { return }
+        if supportsMultipleWindows {
+            openWindow(id: BiblioApp.windowID)
+        } else {
+            releaseLogin()
+            openMostRecentLogin()
+        }
     }
 
     private func openMostRecentLogin() {

@@ -33,20 +33,24 @@ struct BarcodeView: View {
     var value: String
     var symbology: BarcodeSymbology
     @Environment(\.isShort) private var isShort
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         if let elements = symbology.elements(for: value) {
             VStack(spacing: 6) {
                 Canvas { context, size in
+                    // Whole device pixels per element, so no bar edge blurs across a pixel.
+                    let scale = displayScale
                     let quiet = 10.0   // quiet zone, in narrow units, on each side
-                    let unit = size.width / (elements.reduce(0, +) + 2 * quiet)
-                    var x = quiet * unit
-                    for (i, w) in elements.enumerated() {
+                    let unit = max(1, (size.width * scale / (elements.reduce(0, +) + 2 * quiet)).rounded(.down))
+                    let pixels = elements.map { max(1, ($0 * unit).rounded()) }
+                    var x = ((size.width * scale - pixels.reduce(0, +)) / 2).rounded(.down)
+                    for (i, w) in pixels.enumerated() {
                         // Elements alternate bar, space, …, and the first is a bar.
                         if i % 2 == 0 {
-                            context.fill(Path(CGRect(x: x, y: 0, width: w * unit, height: size.height)), with: .color(.black))
+                            context.fill(Path(CGRect(x: x / scale, y: 0, width: w / scale, height: size.height)), with: .color(.black))
                         }
-                        x += w * unit
+                        x += w
                     }
                 }
                 .frame(height: isShort ? 120 : 64)

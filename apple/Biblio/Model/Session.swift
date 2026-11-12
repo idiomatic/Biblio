@@ -123,6 +123,8 @@ final class WindowSession {
     var showingSignIn = false
     /// On iPhone the item sheet closes for the login picker; this reopens it afterwards.
     var reopenInspector = false
+    /// Whether the inspector is a sheet (a compact width), which the login picker can't cover.
+    var inspectorIsSheet = false
 
     let searchList: ItemListModel
     let newTitlesList: ItemListModel
@@ -224,6 +226,7 @@ final class WindowSession {
 
     func requestSignIn() {
         reopenInspector = showInspector
+        if inspectorIsSheet { showInspector = false }
         showingSignIn = true
     }
 
@@ -246,13 +249,13 @@ final class WindowSession {
         }
         do {
             try await client.placeHold(bib, pickupBranch: pickup)
-            show("Hold placed on “\(bib.title)”.")
+            show(String(localized: "Hold placed on “\(bib.title)”."))
             markHeld(bib)
             // Load the whole (short) holds list so the new hold can be found and canceled.
             Task { await holdsList.reloadAll() }
         } catch {
             if await holdPlacedDespite(error, bib) {
-                show("Hold placed on “\(bib.title)”. The library reported an error first, but the hold is there.")
+                show(String(localized: "Hold placed on “\(bib.title)”. The library reported an error first, but the hold is there."))
                 markHeld(bib)
             } else {
                 show(error.localizedDescription, isError: true)
@@ -276,7 +279,7 @@ final class WindowSession {
 
     func placeHold(_ transfer: BibTransfer) async {
         guard transfer.subdomain == library.subdomain else {
-            show("“\(transfer.title)” belongs to a different library.", isError: true)
+            show(String(localized: "“\(transfer.title)” belongs to a different library."), isError: true)
             return
         }
         await placeHold(transfer.bib)
@@ -313,13 +316,13 @@ final class WindowSession {
                 }
                 firstError = firstError ?? error.localizedDescription
                 // The library refuses everything after its hold limit; stop asking.
-                if error.localizedDescription.localizedCaseInsensitiveContains("maximum") { break }
+                if case BiblioError.holdLimit = error { break }
             }
         }
         if let firstError {
-            show("Placed \(placed) of \(bibs.count) holds. \(firstError)", isError: true)
+            show(inflected("Placed \(placed) of ^[\(bibs.count) hold](inflect: true). \(firstError)"), isError: true)
         } else {
-            show(placed == 1 ? "Hold placed." : "\(placed) holds placed.")
+            show(placed == 1 ? String(localized: "Hold placed.") : inflected("^[\(placed) hold](inflect: true) placed."))
         }
         if placed > 0 { Task { await holdsList.reloadAll() } }
     }
@@ -330,9 +333,10 @@ final class WindowSession {
             let refusedIDs = Set(refused.map(\.hold.id))
             let holds = requested.filter { !refusedIDs.contains($0.id) }
             if let reason = refused.first?.reason {
-                show(holds.isEmpty ? reason : "Canceled \(holds.count) of \(requested.count) holds. \(reason)", isError: true)
+                show(holds.isEmpty ? reason : inflected("Canceled \(holds.count) of ^[\(requested.count) hold](inflect: true). \(reason)"),
+                     isError: true)
             } else {
-                show(holds.count == 1 ? "Hold canceled." : "\(holds.count) holds canceled.")
+                show(holds.count == 1 ? String(localized: "Hold canceled.") : inflected("^[\(holds.count) hold](inflect: true) canceled."))
             }
             for hold in holds {
                 for list in [searchList, newTitlesList] { list.setAccountStatus(nil, for: hold.metadataId) }

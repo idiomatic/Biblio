@@ -323,13 +323,8 @@ final class ItemListModel {
                 var rank: UInt8 = 0
                 if case .hold(let h) = e.kind {
                     isHold = true
-                    ready = h.status == "READY_FOR_PICKUP"
-                    rank = switch h.status {
-                    case "READY_FOR_PICKUP", "READY": 0
-                    case "IN_TRANSIT", "SHIPPED", "READY_SOON": 1
-                    case "SUSPENDED", "INACTIVE": 3
-                    default: 2
-                    }
+                    ready = h.isReady
+                    rank = UInt8(h.rank.rawValue)
                 }
                 if case .checkout(let c) = e.kind, let due = c.dueDate { dueDay = DateText.dayNumber(due) }
                 return biblio_list_item(id: c[4 * i], title: c[4 * i + 1], format: c[4 * i + 2],

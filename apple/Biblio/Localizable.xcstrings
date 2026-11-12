@@ -1,0 +1,904 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    " · due %@" : {
+
+    },
+    "–" : {
+
+    },
+    "“%@” belongs to a different library." : {
+
+    },
+    "%@ (%lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "%@ [%@ KiB]" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ [%2$@ KiB]"
+          }
+        }
+      }
+    },
+    "%@ can't encode this card number." : {
+
+    },
+    "%@ is open in another window." : {
+
+    },
+    "%@ on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ on %2$@"
+          }
+        }
+      }
+    },
+    "%@.bibliocommons.com" : {
+
+    },
+    "%@’s card: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@’s card: %2$@"
+          }
+        }
+      }
+    },
+    "%lld selected holds can’t be canceled online." : {
+
+    },
+    "%lld skipped: that card already has them." : {
+
+    },
+    "^[%lld copy](inflect: true)" : {
+
+    },
+    "^[%lld hold](inflect: true)" : {
+
+    },
+    "^[%lld hold](inflect: true) canceled." : {
+
+    },
+    "^[%lld hold](inflect: true) placed (%@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "^[%1$lld hold](inflect: true) placed (%2$@)."
+          }
+        }
+      }
+    },
+    "^[%lld hold](inflect: true) placed." : {
+
+    },
+    "^[%lld Item](inflect: true) in your Borrowing History" : {
+
+    },
+    "^[%lld Item](inflect: true) Selected" : {
+
+    },
+    "^[%lld Item](inflect: true) to Hold" : {
+
+    },
+    "^[%lld result](inflect: true) for “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "^[%1$lld result](inflect: true) for “%2$@”"
+          }
+        }
+      }
+    },
+    "^[%lld time](inflect: true)" : {
+
+    },
+    "1 selected hold can’t be canceled online." : {
+
+    },
+    "A list of the times a library’s server limited or failed a request. It names no account, and nothing is sent unless you share it." : {
+
+    },
+    "About" : {
+
+    },
+    "About Biblio" : {
+
+    },
+    "About Biblio, version %@" : {
+
+    },
+    "Account" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add a BiblioCommons library to get started." : {
+
+    },
+    "Add Another Card…" : {
+
+    },
+    "Add Card…" : {
+
+    },
+    "Add Library" : {
+
+    },
+    "Add Term" : {
+
+    },
+    "Add User…" : {
+
+    },
+    "Add your library by its BiblioCommons name, such as “wccls”." : {
+
+    },
+    "Advanced search" : {
+
+    },
+    "Advanced Search" : {
+
+    },
+    "Advanced Search…" : {
+
+    },
+    "All Cards" : {
+
+    },
+    "All Formats" : {
+
+    },
+    "All Holds" : {
+
+    },
+    "Allow camera access for Biblio in Settings to scan your library card." : {
+
+    },
+    "and" : {
+
+    },
+    "and %lld more" : {
+
+    },
+    "Any" : {
+
+    },
+    "Any %@" : {
+
+    },
+    "Appearance" : {
+
+    },
+    "Arrival" : {
+
+    },
+    "Audience" : {
+
+    },
+    "Author name" : {
+
+    },
+    "Availability by Location" : {
+
+    },
+    "Barcode type" : {
+
+    },
+    "Biblio" : {
+
+    },
+    "Biblio %@" : {
+
+    },
+    "borrowed %@" : {
+
+    },
+    "Borrowed %@" : {
+
+    },
+    "Borrowed as %@" : {
+
+    },
+    "Borrowed before" : {
+
+    },
+    "Borrowed on %@" : {
+
+    },
+    "Borrowed the %@" : {
+
+    },
+    "Borrowed the audiobook" : {
+
+    },
+    "Borrowing History" : {
+
+    },
+    "Browse as Guest" : {
+
+    },
+    "Camera Access Is Off" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cancel %@’s hold on “%@”?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cancel %1$@’s hold on “%2$@”?"
+          }
+        }
+      }
+    },
+    "Cancel ^[%lld Hold](inflect: true)" : {
+
+    },
+    "Cancel ^[%lld hold](inflect: true)?" : {
+
+    },
+    "Cancel ^[%lld Hold](inflect: true)…" : {
+
+    },
+    "Cancel Hold" : {
+
+    },
+    "Cancel Hold…" : {
+
+    },
+    "Cancel this hold?" : {
+
+    },
+    "Cancel your hold on “%@”?" : {
+
+    },
+    "Canceled %lld of ^[%lld hold](inflect: true). %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Canceled %1$lld of ^[%2$lld hold](inflect: true). %3$@"
+          }
+        }
+      }
+    },
+    "Card" : {
+
+    },
+    "Cards" : {
+
+    },
+    "Catalog" : {
+
+    },
+    "Change sort order" : {
+
+    },
+    "Choose a Library" : {
+
+    },
+    "Choose another library, or browse one as a guest" : {
+
+    },
+    "Choose Another User" : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear search" : {
+
+    },
+    "Color %lld" : {
+
+    },
+    "Confirm new password" : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copy Diagnostic Log" : {
+
+    },
+    "Couldn’t Sign In" : {
+
+    },
+    "Current password" : {
+
+    },
+    "Details" : {
+
+    },
+    "Done" : {
+
+    },
+    "Drag to another card, or use the actions menu to move it" : {
+
+    },
+    "Drop titles here" : {
+
+    },
+    "Due %@" : {
+
+    },
+    "Email" : {
+
+    },
+    "Email address" : {
+
+    },
+    "Enter the name before “.bibliocommons.com” in your library’s catalog address, or search by library name." : {
+
+    },
+    "Filter by" : {
+
+    },
+    "Filter by format" : {
+
+    },
+    "Filter holds by status" : {
+
+    },
+    "For %@ · %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "For %1$@ · %2$lld"
+          }
+        }
+      }
+    },
+    "Format" : {
+
+    },
+    "Format · 2000" : {
+
+    },
+    "From" : {
+
+    },
+    "Hold" : {
+
+    },
+    "Hold ^[%lld Item](inflect: true)" : {
+
+    },
+    "Hold canceled." : {
+
+    },
+    "Hold for %@" : {
+
+    },
+    "Hold for another card" : {
+
+    },
+    "Hold placed (%@)." : {
+
+    },
+    "Hold placed on “%@”." : {
+
+    },
+    "Hold placed on “%@”. The library reported an error first, but the hold is there." : {
+
+    },
+    "Hold placed." : {
+
+    },
+    "Holds" : {
+
+    },
+    "Include %@" : {
+
+    },
+    "Include in the lists" : {
+
+    },
+    "Item Details" : {
+
+    },
+    "Its saved users and passwords will also be removed from this device." : {
+
+    },
+    "Just Arrived" : {
+
+    },
+    "Keep borrowing history" : {
+
+    },
+    "Keep History" : {
+
+    },
+    "Keep Hold" : {
+
+    },
+    "Keep Holds" : {
+
+    },
+    "Language" : {
+
+    },
+    "Libraries" : {
+
+    },
+    "Library" : {
+
+    },
+    "Library Card" : {
+
+    },
+    "Library card barcode, %@" : {
+
+    },
+    "Library Language" : {
+
+    },
+    "Limit To" : {
+
+    },
+    "Loading" : {
+
+    },
+    "Loading library directory…" : {
+
+    },
+    "Loading title placeholder" : {
+
+    },
+    "Loading… %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Loading… %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Monogram" : {
+
+    },
+    "Move to %@" : {
+
+    },
+    "My Library" : {
+
+    },
+    "Name" : {
+
+    },
+    "New password" : {
+
+    },
+    "New Titles" : {
+
+    },
+    "New Titles · On Order" : {
+
+    },
+    "No actions apply to these items." : {
+
+    },
+    "No copies listed." : {
+
+    },
+    "No holds placed." : {
+
+    },
+    "No Items in your Borrowing History" : {
+
+    },
+    "No Libraries" : {
+
+    },
+    "No Matching Items" : {
+
+    },
+    "No saved password for this user. Add the user again." : {
+
+    },
+    "No Selection" : {
+
+    },
+    "not" : {
+
+    },
+    "Not Borrowed" : {
+
+    },
+    "Not set" : {
+
+    },
+    "On %@’s card." : {
+
+    },
+    "On Order" : {
+
+    },
+    "On order — no copies on the shelf yet." : {
+
+    },
+    "Open in another window" : {
+
+    },
+    "Open Settings" : {
+
+    },
+    "Operator" : {
+
+    },
+    "or" : {
+
+    },
+    "Password" : {
+
+    },
+    "Passwords don’t match." : {
+
+    },
+    "People Waiting" : {
+
+    },
+    "Pick up at" : {
+
+    },
+    "Pickup location" : {
+
+    },
+    "PIN or password" : {
+
+    },
+    "Place ^[%lld Hold](inflect: true)" : {
+
+    },
+    "Place Holds" : {
+
+    },
+    "Placed %lld of ^[%lld hold](inflect: true) (%@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Placed %1$lld of ^[%2$lld hold](inflect: true) (%3$@)."
+          }
+        }
+      }
+    },
+    "Placed %lld of ^[%lld hold](inflect: true). %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Placed %1$lld of ^[%2$lld hold](inflect: true). %3$@"
+          }
+        }
+      }
+    },
+    "Placed 0 of ^[%lld hold](inflect: true)." : {
+
+    },
+    "Point the camera at the barcode on your library card." : {
+
+    },
+    "Profile" : {
+
+    },
+    "Published" : {
+
+    },
+    "Query" : {
+
+    },
+    "Read your borrowing history again" : {
+
+    },
+    "Reading borrowing history · %@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reading borrowing history · %1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "Reading borrowing history…" : {
+
+    },
+    "Reading your Borrowing History…" : {
+
+    },
+    "Refresh" : {
+
+    },
+    "Refresh Borrowing History" : {
+
+    },
+    "Remove %@?" : {
+
+    },
+    "Remove Library" : {
+
+    },
+    "Remove Library…" : {
+
+    },
+    "Reset to Default" : {
+
+    },
+    "Retry" : {
+
+    },
+    "returned %@" : {
+
+    },
+    "Scan" : {
+
+    },
+    "Scan library card" : {
+
+    },
+    "Scan Library Card" : {
+
+    },
+    "Screen" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search %@" : {
+
+    },
+    "Search For" : {
+
+    },
+    "Search for this author" : {
+
+    },
+    "Search for This Title" : {
+
+    },
+    "Search In" : {
+
+    },
+    "Search the catalog" : {
+
+    },
+    "Select" : {
+
+    },
+    "Select an item to see its details and availability." : {
+
+    },
+    "Share" : {
+
+    },
+    "Share the titles out among the cards, the one with the fewest holds first" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show All ^[%lld Copy](inflect: true)" : {
+
+    },
+    "Show Details" : {
+
+    },
+    "Show Fewer" : {
+
+    },
+    "Show Library Card" : {
+
+    },
+    "Show or hide item details" : {
+
+    },
+    "Show this at the library’s self-checkout or desk." : {
+
+    },
+    "Show your library card" : {
+
+    },
+    "Sign In" : {
+
+    },
+    "Sign In to %@" : {
+
+    },
+    "Sign In to Place a Hold…" : {
+
+    },
+    "Sign in to place holds and see your account" : {
+
+    },
+    "Sign In to Place Holds…" : {
+
+    },
+    "Sign in to use this feature." : {
+
+    },
+    "Sign Out" : {
+
+    },
+    "Sign out of %@?" : {
+
+    },
+    "Signing out removes this card and its saved password from this device." : {
+
+    },
+    "Sort" : {
+
+    },
+    "Sort (loading all cards…)" : {
+
+    },
+    "Sort By" : {
+
+    },
+    "Split Evenly" : {
+
+    },
+    "Status" : {
+
+    },
+    "Suggestions" : {
+
+    },
+    "Terms" : {
+
+    },
+    "The language the library uses for your account. It’s separate from your device’s language." : {
+
+    },
+    "The library may permanently delete your existing borrowing history." : {
+
+    },
+    "This card is open in another window. Close it there to change its settings or sign it out." : {
+
+    },
+    "This card is switched off. Switch it on in the sidebar to see its holds, loans, and history and to change its settings." : {
+
+    },
+    "This item is waiting for you. Canceling releases it to the next person." : {
+
+    },
+    "This library doesn’t allow canceling a hold that’s ready for pickup." : {
+
+    },
+    "This library doesn’t allow canceling this hold online." : {
+
+    },
+    "Title" : {
+
+    },
+    "To" : {
+
+    },
+    "Try a different filter." : {
+
+    },
+    "Try Again" : {
+
+    },
+    "Turn Off" : {
+
+    },
+    "Turn off borrowing history?" : {
+
+    },
+    "Type in the search field to find books, movies, music, and more." : {
+
+    },
+    "Use a Different Library" : {
+
+    },
+    "Use System Language" : {
+
+    },
+    "Used for new holds unless you choose another location when placing one." : {
+
+    },
+    "Username or card number" : {
+
+    },
+    "Version %@" : {
+
+    },
+    "wccls or https://wccls.bibliocommons.com" : {
+
+    },
+    "When on, the library keeps a list of the items you check out, and Biblio marks what you’ve borrowed before. Refreshing fetches it all again." : {
+
+    },
+    "When several cards show together, the name is used in “Hold for …” and the color and monogram mark this card’s items." : {
+
+    },
+    "You borrowed as %@" : {
+
+    },
+    "You borrowed as %@ in %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You borrowed as %1$@ in %2$@"
+          }
+        }
+      }
+    },
+    "You borrowed on %@" : {
+
+    },
+    "You borrowed on %@ in %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You borrowed on %1$@ in %2$@"
+          }
+        }
+      }
+    },
+    "You borrowed the %@" : {
+
+    },
+    "You borrowed the %@ in %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You borrowed the %1$@ in %2$@"
+          }
+        }
+      }
+    },
+    "You borrowed the audiobook" : {
+
+    },
+    "You borrowed the audiobook in %@" : {
+
+    },
+    "You borrowed this" : {
+
+    },
+    "You borrowed this in %@" : {
+
+    },
+    "You’ll lose your place (#%lld) in line." : {
+
+    },
+    "Your password is stored in the Keychain and used to sign in again automatically when the library ends your session." : {
+
+    },
+    "Your search and selection stay as they are." : {
+
+    }
+  },
+  "version" : "1.0"
+}

@@ -7,11 +7,13 @@ extension Notification.Name {
 
 /// Made when the Lock Screen control (or biblio://card) asks for the library card. The first
 /// signed-in window to see it shows the card and consumes it; a launcher window keeps it
-/// while the login it opens signs in. Unconsumed requests lapse, so the card never shows
+/// while the login it opens signs in, and when only guest windows remain, one of them opens
+/// that login (in a new window where it can). Unconsumed requests lapse, so the card never shows
 /// long after it was asked for.
 @MainActor
 enum LibraryCardRequest {
     private static var requestedAt: Date?
+    private static var handedOff = false
 
     static var pending: Bool {
         guard let requestedAt else { return false }
@@ -20,7 +22,15 @@ enum LibraryCardRequest {
 
     static func request() {
         requestedAt = .now
+        handedOff = false
         NotificationCenter.default.post(name: .libraryCardRequested, object: nil)
+    }
+
+    /// Whether the caller, a guest window, is the one to open the login: true once per request.
+    static func handOff() -> Bool {
+        guard pending, !handedOff else { return false }
+        handedOff = true
+        return true
     }
 
     static func consume() {

@@ -55,21 +55,6 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
         libraryFormat = try c.decodeIfPresent(String.self, forKey: .libraryFormat) ?? format
     }
 
-    /// Minimal bib for entries whose catalog record was not returned (e.g. old history rows).
-    init(placeholderID id: String, title: String) {
-        self.id = id
-        self.title = title
-        authors = []
-        format = "UNKNOWN"
-        materialType = "PHYSICAL"
-        holdable = false
-        heldCopies = 0
-        availableCopies = 0
-        totalCopies = 0
-        onOrderCopies = 0
-        libraryFormat = format
-    }
-
     var fullTitle: String {
         if let subtitle { return "\(title): \(subtitle)" }
         return title
@@ -77,19 +62,16 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
 
     var primaryAuthor: String? { authors.first }
 
-    /// Publication date as shown in lists: "2026", or a year pulled from "20261006" / "03/23/2027".
-    var displayDate: String? {
-        guard let d = publicationDate else { return nil }
-        if d.count == 4 { return d }
-        if d.count == 8, d.allSatisfy(\.isNumber) { return String(d.prefix(4)) }
-        if let r = d.range(of: #"\b(1[5-9]|20)\d\d\b"#, options: .regularExpression) { return String(d[r]) }
-        return d
-    }
-
     /// Text used when an item is dropped onto a search field.
     var searchText: String {
         [title, primaryAuthor].compactMap { $0 }.joined(separator: " ")
     }
+}
+
+/// A localized message for text that isn't a SwiftUI `Text` (banners, errors), with its
+/// `^[…](inflect: true)` counts made to agree, as `Text` does.
+nonisolated func inflected(_ value: String.LocalizationValue) -> String {
+    String(AttributedString(localized: value).characters)
 }
 
 /// One row in any item list. `kind` carries the extra data a particular list knows.
@@ -120,7 +102,7 @@ nonisolated struct ListEntry: Identifiable, Hashable, Sendable {
     /// This account's relationship to the item, whichever list it appears in.
     var accountStatus: AccountStatus? {
         switch kind {
-        case .hold(let h): .onHold(ready: h.status == "READY_FOR_PICKUP", position: h.position)
+        case .hold(let h): .onHold(ready: h.isReady, position: h.position)
         case .checkout(let c): .checkedOut(due: c.dueDate)
         case .catalog, .history: catalogStatus
         }
@@ -197,6 +179,8 @@ nonisolated struct CopyAvailability: Identifiable, Hashable, Sendable {
     var dueDate: String?
     /// Ordered but not yet received (worded "On-Order", "In-Process", "5 on order", …).
     var isOnOrder = false
+    /// The status grouped by the core from the library's own wording.
+    var kind: CopyKind = .other
 }
 
 /// A labeled detail field from the full catalog record.
@@ -204,6 +188,8 @@ nonisolated struct DetailField: Identifiable, Hashable, Sendable {
     var id: String { label + values.joined() }
     var label: String
     var values: [String]
+    /// The record's edition statement, whatever the library's language calls it.
+    var isEdition = false
 }
 
 nonisolated struct Location: Identifiable, Hashable, Sendable, Codable {

@@ -1,3 +1,4 @@
+import BiblioCore
 import SwiftUI
 
 /// Subtle colors for availability and for this account's relationship to an item.
@@ -24,8 +25,9 @@ enum StatusColors {
     }
 }
 
-/// A copy's status, grouped from the library's own wording ("In", "Out", "Held", "In-Process", …).
-enum CopyKind {
+/// A copy's status, grouped by the core (`biblio_copy_t.kind`) from the library's own wording
+/// ("In", "Out", "Held", "In-Process", …).
+nonisolated enum CopyKind: String, Sendable {
     case available, onOrder, out, held, transit, repair, missing, withdrawn, claimsReturned, libraryUseOnly, other
 
     var systemImage: String {
@@ -58,26 +60,6 @@ enum CopyKind {
         case .libraryUseOnly: .blue
         case .other: .orange
         }
-    }
-}
-
-extension CopyAvailability {
-    var kind: CopyKind {
-        if isAvailable { return .available }
-        if isOnOrder { return .onOrder }
-        let s = status.lowercased()
-        func has(_ words: String...) -> Bool { words.contains(where: s.contains) }
-        // Order matters: "Claims Returned" before "returned", "Lost" before "out".
-        if has("transit", "transfer") { return .transit }
-        if has("process", "cataloging", "order") { return .onOrder }
-        if has("repair", "damage", "mend", "bindery") { return .repair }
-        if has("claim") { return .claimsReturned }
-        if has("missing", "lost", "trace") { return .missing }
-        if has("withdrawn", "discard") { return .withdrawn }
-        if has("held", "hold") { return .held }
-        if has("library use", "in library", "reference", "non-circ", "noncirc", "not for loan") { return .libraryUseOnly }
-        if s == "out" || has("checked out", "due", "overdue") || dueDate != nil { return .out }
-        return .other
     }
 }
 
@@ -128,15 +110,16 @@ struct AccountStatusTag: View {
     /// A hold's words, symbol, and color: ready, in transit, paused, or waiting, with its place in line.
     nonisolated static func describe(_ hold: Hold) -> (String, String, Color) {
         let place = hold.position.map { " · #\($0) in line" } ?? ""
-        switch hold.status {
-        case "READY_FOR_PICKUP":
-            return ("Ready for pickup" + (hold.pickupByDate.map { " by \(DateText.format($0))" } ?? ""), "bag.fill", .green)
-        case "IN_TRANSIT", "SHIPPED":
-            return ("In transit" + place, "shippingbox.fill", .orange)
-        case "SUSPENDED", "INACTIVE":
-            return ("Paused" + place, "pause.circle.fill", .secondary)
+        let name = hold.statusName
+        switch hold.rank {
+        case BIBLIO_HOLD_READY:
+            return (name + (hold.pickupByDate.map { " by \(DateText.format($0))" } ?? ""), "bag.fill", .green)
+        case BIBLIO_HOLD_IN_TRANSIT:
+            return (name + place, "shippingbox.fill", .orange)
+        case BIBLIO_HOLD_PAUSED:
+            return (name + place, "pause.circle.fill", .secondary)
         default:
-            return ("On hold" + place, "tray.and.arrow.down.fill", .blue)
+            return (name + place, "tray.and.arrow.down.fill", .blue)
         }
     }
 }

@@ -19,7 +19,7 @@ struct MultiSelectionView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("\(entries.count) Items Selected")
+                Text("^[\(entries.count) Item](inflect: true) Selected")
                     .font(.title2.weight(.semibold))
 
                 if let cards, !holdable.isEmpty {
@@ -38,7 +38,7 @@ struct MultiSelectionView: View {
                                 working = false
                             }
                         } label: {
-                            Label(holdable.count == 1 ? "Hold" : "Hold \(holdable.count) Items",
+                            Label(holdable.count == 1 ? "Hold" : "Hold ^[\(holdable.count) Item](inflect: true)",
                                   systemImage: "tray.and.arrow.down")
                         }
                         .buttonStyle(.borderedProminent)
@@ -47,7 +47,7 @@ struct MultiSelectionView: View {
                         Button(role: .destructive) {
                             confirmCancel = true
                         } label: {
-                            Label(cancelable.count == 1 ? "Cancel Hold" : "Cancel \(cancelable.count) Holds",
+                            Label(cancelable.count == 1 ? "Cancel Hold" : "Cancel ^[\(cancelable.count) Hold](inflect: true)",
                                   systemImage: "xmark.circle")
                         }
                         .buttonStyle(.bordered)
@@ -103,9 +103,9 @@ struct MultiSelectionView: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .confirmationDialog(cancelable.count == 1 ? "Cancel this hold?" : "Cancel \(cancelable.count) holds?",
+        .confirmationDialog(cancelable.count == 1 ? "Cancel this hold?" : "Cancel ^[\(cancelable.count) hold](inflect: true)?",
                             isPresented: $confirmCancel) {
-            Button(cancelable.count == 1 ? "Cancel Hold" : "Cancel \(cancelable.count) Holds", role: .destructive) {
+            Button(cancelable.count == 1 ? "Cancel Hold" : "Cancel ^[\(cancelable.count) Hold](inflect: true)", role: .destructive) {
                 working = true
                 Task {
                     await session.cancel(cancelable)

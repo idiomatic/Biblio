@@ -17,7 +17,8 @@ final class MergedListModel {
     }
 
     let models: [ItemListModel]
-    @ObservationIgnored private let merge: OpaquePointer
+    /// Only touched on the main actor, and by `deinit` once nothing else can.
+    @ObservationIgnored private nonisolated(unsafe) let merge: OpaquePointer
     /// The logins shown.
     private(set) var cards: Set<Int>
     /// The lists' sort, which the merge follows (a server sort, once the first page names it).

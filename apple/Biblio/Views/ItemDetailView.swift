@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Inspector pane for one item. Availability by location loads in the background.
-/// The cover and the title block can be dragged onto Holds or onto any window's search field.
+/// The cover can be dragged onto Holds or onto any window's search field.
 struct ItemDetailView: View {
     @Bindable var session: WindowSession
     var bib: Bib
@@ -95,7 +95,7 @@ struct ItemDetailView: View {
                 // Format, year, and edition, in the list row's style but a line each, using the room
                 // beside the cover. The brief record keeps only the first edition statement; the full
                 // record has them all.
-                let edition = fields.first(where: { $0.label == "Edition" })?.values.joined(separator: " · ") ?? bib.edition
+                let edition = fields.first(where: \.isEdition)?.values.joined(separator: " · ") ?? bib.edition
                 ForEach([session.library.formatName(bib.format), bib.displayDate, edition]
                     .compactMap { $0 }
                     .filter { !$0.isEmpty }, id: \.self) { line in
@@ -132,7 +132,7 @@ struct ItemDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 AvailabilityBadge(bib: bib)
                 if !hold.canCancel {
-                    Label(hold.status == "READY_FOR_PICKUP"
+                    Label(hold.isReady
                           ? "This library doesn’t allow canceling a hold that’s ready for pickup."
                           : "This library doesn’t allow canceling this hold online.",
                           systemImage: "info.circle")
@@ -158,7 +158,7 @@ struct ItemDetailView: View {
                         }
                         Button("Keep Hold", role: .cancel) {}
                     } message: {
-                        if hold.status == "READY_FOR_PICKUP" {
+                        if hold.isReady {
                             Text("This item is waiting for you. Canceling releases it to the next person.")
                         } else if let p = hold.position {
                             Text("You’ll lose your place (#\(p)) in line.")
@@ -214,6 +214,12 @@ struct ItemDetailView: View {
         return text
     }
 
+    /// Where a copy sits: its collection and call number, if the library gives them.
+    private func shelf(_ copy: CopyAvailability, separator: String) -> String? {
+        let parts = [copy.collection, copy.callNumber].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: separator)
+    }
+
     /// Whether the pane is too narrow for side-by-side columns: a phone, or a narrow pane on an
     /// iPad or Mac, whatever the size class says.
     private var compact: Bool { paneWidth < 460 }
@@ -235,26 +241,31 @@ struct ItemDetailView: View {
                                     .foregroundStyle(StatusColors.copy(copy))
                                     .imageScale(copy.kind == .available ? .medium : .small)
                                     .frame(minWidth: 18)
-                                if compact {
-                                    // Status under the branch: three columns would clip on a phone.
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(copy.branch).lineLimit(2)
-                                        copyStatus(copy).font(.subheadline)
+                                // Status under the branch when compact: three columns would clip on a phone.
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(copy.branch).lineLimit(2)
+                                    #if os(iOS)
+                                    // No hover on a touch screen, so the shelf shows under the branch.
+                                    if let shelf = shelf(copy, separator: " · ") {
+                                        Text(shelf).font(.caption).foregroundStyle(.secondary)
                                     }
-                                } else {
-                                    Text(copy.branch)
-                                        .lineLimit(2)
-                                    copyStatus(copy)
+                                    #endif
+                                    if compact { copyStatus(copy).font(.subheadline) }
                                 }
+                                if !compact { copyStatus(copy) }
                             }
                             .font(.callout)
-                            .help([copy.collection, copy.callNumber].compactMap { $0 }.joined(separator: "\n"))
+                            #if os(macOS)
+                            .help(shelf(copy, separator: "\n") ?? "")
                             .accessibilityElement(children: .combine)
-                            .accessibilityHint([copy.collection, copy.callNumber].compactMap { $0 }.joined(separator: ", "))
+                            .accessibilityHint(shelf(copy, separator: ", ") ?? "")
+                            #else
+                            .accessibilityElement(children: .combine)
+                            #endif
                         }
                     }
                     if copies.count > shown.count || showAllCopies && copies.count > 12 {
-                        Button(showAllCopies ? "Show Fewer" : "Show All \(copies.count) Copies") {
+                        Button(showAllCopies ? "Show Fewer" : "Show All ^[\(copies.count) Copy](inflect: true)") {
                             withAnimation { showAllCopies.toggle() }
                         }
                         .buttonStyle(.borderless)

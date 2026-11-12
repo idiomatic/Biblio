@@ -152,22 +152,27 @@ final class CombinedSession {
                         }
                         break
                     }
-                    let message = "\(name(c))’s card: \(error.localizedDescription)"
+                    let message = String(localized: "\(name(c))’s card: \(error.localizedDescription)")
                     if !refusals.contains(message) { refusals.append(message) }
                     // The library refuses everything after its hold limit; stop asking that card.
-                    if error.localizedDescription.localizedCaseInsensitiveContains("maximum") { full.insert(c) }
+                    if case BiblioError.holdLimit = error { full.insert(c) }
                 }
             }
         }
         let total = placed.values.reduce(0, +)
         let by = placed.sorted { $0.key < $1.key }.map { "\(name($0.key)) \($0.value)" }.joined(separator: ", ")
-        let skippedNote = skipped == 0 ? "" : " \(skipped) skipped: that card already has them."
+        var parts: [String] = []
         if refusals.isEmpty {
-            let placedText = total == 1 ? "Hold placed (\(by))." : "\(total) holds placed (\(by))."
-            primary.show(total == 0 ? "No holds placed.\(skippedNote)" : placedText + skippedNote, isError: total == 0)
+            parts.append(total == 0 ? String(localized: "No holds placed.")
+                         : total == 1 ? String(localized: "Hold placed (\(by)).")
+                         : inflected("^[\(total) hold](inflect: true) placed (\(by))."))
         } else {
-            primary.show("Placed \(total) of \(bibs.count) holds\(total > 0 ? " (\(by))" : ""). \(refusals.joined(separator: " "))\(skippedNote)", isError: true)
+            parts.append(total == 0 ? inflected("Placed 0 of ^[\(bibs.count) hold](inflect: true).")
+                         : inflected("Placed \(total) of ^[\(bibs.count) hold](inflect: true) (\(by))."))
+            parts += refusals
         }
+        if skipped > 0 { parts.append(String(localized: "\(skipped) skipped: that card already has them.")) }
+        primary.show(parts.joined(separator: " "), isError: total == 0 || !refusals.isEmpty)
         for (c, _) in placed { Task { await sessions[c].holdsList.reloadAll() } }
     }
 

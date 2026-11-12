@@ -12,7 +12,7 @@ import Security
 nonisolated enum Keychain {
     private static func service(_ subdomain: String) -> String { "com.rbrian.Biblio.\(subdomain)" }
     private static let cardsService = "com.rbrian.Biblio.cards"
-    private static let accessible = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+    private static var accessible: CFString { kSecAttrAccessibleWhenUnlockedThisDeviceOnly }
 
     /// `legacy` addresses macOS's file-based login keychain instead of the data-protection one.
     private static func query(_ service: String, _ account: String, legacy: Bool = false) -> [String: Any] {

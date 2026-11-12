@@ -36,6 +36,12 @@ nonisolated extension Hold {
                   expiryDate: string(c.expiry_date), pickupByDate: string(c.pickup_by_date),
                   suspendEndDate: string(c.suspend_end_date), canCancel: c.can_cancel)
     }
+
+    /// Where the hold's status falls: ready, in transit, waiting, or paused.
+    var rank: biblio_hold_rank { biblio_hold_status_rank(status) }
+    var isReady: Bool { rank == BIBLIO_HOLD_READY }
+    /// "Ready for pickup", "In transit", "On hold", or "Paused".
+    var statusName: String { String(cString: biblio_hold_status_name(status)) }
 }
 
 nonisolated extension Checkout {
@@ -95,14 +101,20 @@ nonisolated extension CopyAvailability {
     init(_ c: biblio_copy_t) {
         self.init(id: string(c.id) ?? "", branch: string(c.branch) ?? "", status: string(c.status) ?? "",
                   isAvailable: c.is_available, collection: string(c.collection), callNumber: string(c.call_number),
-                  dueDate: string(c.due_date), isOnOrder: c.is_on_order)
+                  dueDate: string(c.due_date), isOnOrder: c.is_on_order,
+                  kind: string(c.kind).flatMap(CopyKind.init(rawValue:)) ?? .other)
     }
 }
 
 nonisolated extension DetailField {
-    init(_ c: biblio_detail_field_t) {
-        self.init(label: string(c.label) ?? "", values: strings(c.values, c.values_count))
+    init(_ c: biblio_detail_field_t, isEdition: Bool) {
+        self.init(label: string(c.label) ?? "", values: strings(c.values, c.values_count), isEdition: isEdition)
     }
+}
+
+nonisolated extension Bib {
+    /// The year the publication date names ("c2019." gives "2019"), else the date as given.
+    var displayDate: String? { Core.take(biblio_year(publicationDate)) }
 }
 
 nonisolated extension Location {

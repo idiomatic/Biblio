@@ -94,7 +94,7 @@ struct AdvancedSearchView: View {
                         layout {
                             HStack {
                                 if term.id != terms.first?.id {
-                                    Picker("", selection: $term.op) {
+                                    Picker("Operator", selection: $term.op) {
                                         Text("and").tag("AND")
                                         Text("or").tag("OR")
                                         Text("not").tag("NOT")
@@ -102,7 +102,7 @@ struct AdvancedSearchView: View {
                                     .labelsHidden()
                                     .fixedSize()
                                 }
-                                Picker("", selection: $term.field) {
+                                Picker("Search In", selection: $term.field) {
                                     ForEach(Self.fields, id: \.0) { Text($0.1).tag($0.0) }
                                 }
                                 .labelsHidden()
@@ -343,6 +343,16 @@ struct HoldFilterBar: View {
     @Namespace private var selectionSpace
 
     var body: some View {
+        // At large text sizes on a narrow phone the segments scroll rather than overflow.
+        ViewThatFits(in: .horizontal) {
+            bar
+            ScrollView(.horizontal, showsIndicators: false) { bar }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Show")
+    }
+
+    private var bar: some View {
         HStack(spacing: 2) {
             segment(nil, title: "All", count: nil)
             ForEach(ItemListModel.HoldFilter.allCases) { f in
@@ -351,8 +361,6 @@ struct HoldFilterBar: View {
         }
         .padding(2)
         .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Show")
     }
 
     private func segment(_ filter: ItemListModel.HoldFilter?, title: String, count: Int?) -> some View {
@@ -397,11 +405,11 @@ struct HoldFilterBar: View {
 struct BorrowingListView: View {
     @Bindable var session: WindowSession
     var section: AppSection
+    var model: ItemListModel
 
     @State private var dropTargeted = false
 
     var body: some View {
-        let model = session.list(for: section)!
         ItemListView(session: session, model: model,
                      emptyTitle: emptyTitle, emptySystemImage: section.systemImage) {
             if section == .holds {

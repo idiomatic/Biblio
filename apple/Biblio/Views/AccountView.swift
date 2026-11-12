@@ -109,12 +109,12 @@ struct AccountView: View {
                     }
                     Button("Sign Out", role: .destructive) { confirmSignOut = true }
                         .disabled(isBusy)
+                        .confirmationDialog("Sign out of \(library.shortName ?? library.name)?",
+                                            isPresented: $confirmSignOut, titleVisibility: .visible) {
+                            Button("Sign Out", role: .destructive) { actions.removeCard(username) }
+                        }
                 } footer: {
                     Text("Signing out removes this card and its saved password from this device.")
-                }
-                .confirmationDialog("Sign out of \(library.shortName ?? library.name)?",
-                                    isPresented: $confirmSignOut, titleVisibility: .visible) {
-                    Button("Sign Out", role: .destructive) { actions.removeCard(username) }
                 }
             }
         }
@@ -238,6 +238,13 @@ struct AccountView: View {
                             if on { setHistory(true) } else { confirmHistoryOff = true }
                         }))
                     .disabled(working != nil)
+                    .confirmationDialog("Turn off borrowing history?", isPresented: $confirmHistoryOff,
+                                        titleVisibility: .visible) {
+                        Button("Turn Off", role: .destructive) { setHistory(false) }
+                        Button("Keep History", role: .cancel) {}
+                    } message: {
+                        Text("The library may permanently delete your existing borrowing history.")
+                    }
                     if working == "history" { ProgressView().controlSize(.small) }
                 }
                 if enabled, let session {
@@ -247,13 +254,6 @@ struct AccountView: View {
                 Text("Borrowing History")
             } footer: {
                 Text("When on, the library keeps a list of the items you check out, and Biblio marks what you’ve borrowed before. Refreshing fetches it all again.")
-            }
-            .confirmationDialog("Turn off borrowing history?", isPresented: $confirmHistoryOff,
-                                titleVisibility: .visible) {
-                Button("Turn Off", role: .destructive) { setHistory(false) }
-                Button("Keep History", role: .cancel) {}
-            } message: {
-                Text("The library may permanently delete your existing borrowing history.")
             }
         }
     }

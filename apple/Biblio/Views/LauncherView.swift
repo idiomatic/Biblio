@@ -34,11 +34,11 @@ struct LauncherView: View {
                             }
                             .disabled(isInUse(library))
                         }
+                        .deleteDisabled(isInUse(library))
                     }
                     .onDelete { offsets in
                         if let i = offsets.first { requestRemoval(store.libraries[i]) }
                     }
-                    .deleteDisabled(store.libraries.contains(where: isInUse))
                 } header: {
                     Text("Libraries")
                 } footer: {

@@ -107,8 +107,9 @@ struct ItemListView<Header: View>: View {
             }
             #endif
         }
-        .confirmationDialog(confirmCancel.count == 1 ? "Cancel this hold?" : "Cancel \(confirmCancel.count) holds?",
-                            isPresented: .constant(!confirmCancel.isEmpty), presenting: confirmCancel) { holds in
+        .confirmationDialog(confirmCancel.count == 1 ? "Cancel this hold?" : "Cancel ^[\(confirmCancel.count) hold](inflect: true)?",
+                            isPresented: Binding(get: { !confirmCancel.isEmpty }, set: { if !$0 { confirmCancel = [] } }),
+                            presenting: confirmCancel) { holds in
             cancelActions(holds)
         }
         .sheet(isPresented: Binding(get: { assigning != nil }, set: { if !$0 { assigning = nil } })) {
@@ -141,7 +142,7 @@ struct ItemListView<Header: View>: View {
         let cancelable = selected.cancelableHolds
         return HStack {
             if !holdable.isEmpty {
-                let title = holdable.count == 1 ? "Hold 1 Item" : "Hold \(holdable.count) Items"
+                let title: LocalizedStringKey = "Hold ^[\(holdable.count) Item](inflect: true)"
                 if cards != nil {
                     // Which card gets which title is settled in the sheet.
                     Button(title) { assigning = holdable.map(\.bib) }
@@ -154,11 +155,11 @@ struct ItemListView<Header: View>: View {
             }
             Spacer()
             if !cancelable.isEmpty {
-                Button(cancelable.count == 1 ? "Cancel 1 Hold" : "Cancel \(cancelable.count) Holds", role: .destructive) {
+                Button("Cancel ^[\(cancelable.count) Hold](inflect: true)", role: .destructive) {
                     confirmBarCancel = true
                 }
                 .tint(.red)
-                .confirmationDialog(cancelable.count == 1 ? "Cancel this hold?" : "Cancel \(cancelable.count) holds?",
+                .confirmationDialog(cancelable.count == 1 ? "Cancel this hold?" : "Cancel ^[\(cancelable.count) hold](inflect: true)?",
                                     isPresented: $confirmBarCancel) {
                     cancelActions(cancelable)
                 }
@@ -171,9 +172,10 @@ struct ItemListView<Header: View>: View {
 
     @ViewBuilder
     private func cancelActions(_ holds: [Hold]) -> some View {
-        Button(holds.count == 1 ? "Cancel Hold" : "Cancel \(holds.count) Holds", role: .destructive) {
+        Button(holds.count == 1 ? "Cancel Hold" : "Cancel ^[\(holds.count) Hold](inflect: true)", role: .destructive) {
             Task { await session.cancel(holds) }
-            selection.subtract(holds.map { "hold-\($0.id)" })
+            let canceled = Set(holds.map(\.id))
+            selection.subtract(model.entries.filter { $0.hold.map { canceled.contains($0.id) } ?? false }.map(\.id))
             confirmCancel = []
             endSelecting()
         }
@@ -284,12 +286,12 @@ struct ItemListView<Header: View>: View {
             Button("Show Details", systemImage: "info.circle") { session.select(entry.bib) }
         }
         if !holdable.isEmpty && !session.isGuest {
-            Button(holdable.count == 1 ? "Hold" : "Hold \(holdable.count) Items", systemImage: "tray.and.arrow.down") {
+            Button(holdable.count == 1 ? "Hold" : "Hold ^[\(holdable.count) Item](inflect: true)", systemImage: "tray.and.arrow.down") {
                 Task { await placeHolds(holdable.map(\.bib)) }
             }
         }
         if !cancelable.isEmpty {
-            Button(cancelable.count == 1 ? "Cancel Hold…" : "Cancel \(cancelable.count) Holds…",
+            Button(cancelable.count == 1 ? "Cancel Hold…" : "Cancel ^[\(cancelable.count) Hold](inflect: true)…",
                    systemImage: "xmark.circle", role: .destructive) { confirmCancel = cancelable }
         }
         if selected.count == 1, let entry = selected.first {
@@ -306,6 +308,39 @@ struct ItemListView<Header: View>: View {
 extension ItemListView where Header == EmptyView {
     init(session: WindowSession, model: ItemListModel, emptyTitle: String, emptySystemImage: String) {
         self.init(session: session, model: model, emptyTitle: emptyTitle, emptySystemImage: emptySystemImage) { EmptyView() }
+    }
+}
+
+/// A row's background, tinted by the account's status. On iPhone and iPad it is inset and
+/// rounded, selection included, like the sidebar's: iPadOS mirrors the content column's edges
+/// under the floating sidebar and inspector, so a full-width fill would smear into both.
+/// macOS's inset list keeps the system highlight.
+struct RowBackground: View {
+    var isSelected: Bool
+    var tint: Color?
+
+    var body: some View {
+        #if os(iOS)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(isSelected ? AnyShapeStyle(.tint.opacity(0.22)) : AnyShapeStyle((tint ?? .clear).opacity(0.08)))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+        #else
+        if !isSelected, let tint { tint.opacity(0.08) }
+        #endif
+    }
+}
+
+extension View {
+    /// Keeps a row's own text colors when selected: on iPhone and iPad, `RowBackground`'s light
+    /// highlight replaces the dark system one that the list's white text was for.
+    func rowForeground() -> some View {
+        #if os(iOS)
+        foregroundStyle(Color.primary)
+            .environment(\.backgroundProminence, .standard)
+        #else
+        self
+        #endif
     }
 }
 
@@ -334,11 +369,10 @@ private struct ListRow: View {
             case .placeholder: PlaceholderRow()
             }
         }
+        .rowForeground()
         .tag(row.id)
         .selectionDisabled(row.entry == nil)
-
-        // Tint by this account's status; selected rows keep the system highlight.
-        .listRowBackground(isSelected ? nil : tint.map { StatusColors.account($0).opacity(0.08) })
+        .listRowBackground(RowBackground(isSelected: isSelected, tint: tint.map(StatusColors.account)))
         .onAppear {
             switch row {
             case .item(let entry): model.itemAppeared(entry)
@@ -495,7 +529,7 @@ struct ItemRow: View {
             AvailabilityBadge(bib: bib, borrowed: borrowed.map { BorrowedMark(match: $0, library: library) })
             // Items wrap onto further lines on a narrow screen instead of squeezing each other.
             WrapLayout(spacing: 6, lineSpacing: 2) {
-                AccountStatusTag(status: .onHold(ready: h.status == "READY_FOR_PICKUP", position: h.position), hold: h)
+                AccountStatusTag(status: .onHold(ready: h.isReady, position: h.position), hold: h)
                 if let loc = h.pickupLocation {
                     HStack(spacing: 2) {
                         Image(systemName: "mappin").imageScale(.small)
@@ -629,12 +663,12 @@ struct AvailabilityBadge: View {
     }
 
     private var peopleWaiting: String {
-        let copies = bib.totalCopies == 1 ? "1 copy" : "\(bib.totalCopies) copies"
-        let waiting = bib.heldCopies == 1 ? "1 hold" : "\(bib.heldCopies) holds"
+        let copies = inflected("^[\(bib.totalCopies) copy](inflect: true)")
+        let waiting = inflected("^[\(bib.heldCopies) hold](inflect: true)")
         // Only what's there to say: no holds, just the copies; no copies yet, just the holds.
         if bib.heldCopies == 0 { return copies }
         if bib.totalCopies == 0 { return waiting }
-        return "\(waiting) on \(copies)"
+        return String(localized: "\(waiting) on \(copies)")
     }
 }
 
@@ -701,22 +735,23 @@ struct CoverImage: View {
 }
 
 nonisolated enum DateText {
-    private static let input: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    static func date(_ s: String) -> Date? { input.date(from: String(s.prefix(10))) }
+    /// Local midnight of an ISO date ("2026-03-14…").
+    static func date(_ s: String) -> Date? { date(s, in: .current) }
 
     /// Days since 1970-01-01 of an ISO date, or 0.
     static func dayNumber(_ s: String) -> Int {
-        let parts = s.prefix(10).split(separator: "-").compactMap { Int($0) }
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(identifier: "UTC")!
-        guard parts.count == 3, let d = utc.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else { return 0 }
+        guard let utc = TimeZone(identifier: "UTC"), let d = date(s, in: utc) else { return 0 }
         return Int(d.timeIntervalSince1970 / 86400)
+    }
+
+    private static func date(_ s: String, in zone: TimeZone) -> Date? {
+        let parts = s.prefix(10).split(separator: "-", omittingEmptySubsequences: false).compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let components = DateComponents(year: parts[0], month: parts[1], day: parts[2])
+        guard components.isValidDate(in: calendar) else { return nil }
+        return calendar.date(from: components)
     }
 
     static func format(_ s: String) -> String {

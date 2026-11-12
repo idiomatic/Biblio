@@ -155,9 +155,9 @@ struct CombinedMainView: View {
         switch combined.section ?? .holds {
         case .search: SearchView(session: combined.primary)
         case .newTitles: NewTitlesView(session: combined.primary)
-        case .holds: CombinedListView(combined: combined, section: .holds)
-        case .checkouts: CombinedListView(combined: combined, section: .checkouts)
-        case .history: CombinedListView(combined: combined, section: .history)
+        case .holds: CombinedListView(combined: combined, section: .holds, model: combined.holds)
+        case .checkouts: CombinedListView(combined: combined, section: .checkouts, model: combined.checkouts)
+        case .history: CombinedListView(combined: combined, section: .history, model: combined.history)
         case .account(let user):
             // One view whether the card is on or off, so switching it keeps the page (and its scroll).
             AccountView(library: combined.library, username: user, session: combined.sessions.first { $0.username == user },
@@ -171,13 +171,12 @@ struct CombinedMainView: View {
 struct CombinedListView: View {
     @Bindable var combined: CombinedSession
     var section: AppSection
+    var model: MergedListModel
 
     @State private var selection: MergedListModel.Row.ID?
     @State private var dropTargeted = false
     @State private var confirmCancel: (hold: Hold, login: Int)?
     @Environment(\.scenePhase) private var scenePhase
-
-    private var model: MergedListModel { combined.list(for: section)! }
 
     var body: some View {
         let rows = model.rows
@@ -227,7 +226,8 @@ struct CombinedListView: View {
                 Task { await combined.placeHolds([item.bib], target: .auto) }
             }
         }
-        .confirmationDialog("Cancel this hold?", isPresented: .constant(confirmCancel != nil), presenting: confirmCancel) { target in
+        .confirmationDialog("Cancel this hold?", isPresented: Binding(get: { confirmCancel != nil }, set: { if !$0 { confirmCancel = nil } }),
+                            presenting: confirmCancel) { target in
             Button("Cancel Hold", role: .destructive) {
                 Task { await combined.cancel([target.hold], login: target.login) }
                 confirmCancel = nil
@@ -303,9 +303,10 @@ private struct CombinedRow: View {
                 PlaceholderRow()
             }
         }
+        .rowForeground()
         .tag(row.id)
         .selectionDisabled(row.entry == nil)
-        .listRowBackground(isSelected ? nil : row.entry?.accountStatus.map { StatusColors.account($0).opacity(0.08) })
+        .listRowBackground(RowBackground(isSelected: isSelected, tint: row.entry?.accountStatus.map(StatusColors.account)))
         .onAppear {
             if row.entry != nil { model.itemAppeared(row) } else { model.placeholderAppeared(row) }
         }
@@ -423,7 +424,7 @@ struct CardsHoldSection: View {
         let session = combined.sessions[login]
         return HStack(spacing: 8) {
             CardChip(style: combined.style(login))
-            AccountStatusTag(status: .onHold(ready: hold.status == "READY_FOR_PICKUP", position: hold.position), hold: hold)
+            AccountStatusTag(status: .onHold(ready: hold.isReady, position: hold.position), hold: hold)
             Spacer(minLength: 0)
             if hold.canCancel {
                 Button(role: .destructive) {

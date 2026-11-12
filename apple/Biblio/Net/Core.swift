@@ -6,10 +6,16 @@ import Foundation
 /// The app uses the core's typed C interface (see core/include/biblio.h): each operation
 /// returns a `biblio_result` and fills a C struct that CoreModels.swift copies into the app's
 /// models. Calls block, so they run on a queue of their own rather than Swift's cooperative
-/// pool. The core's HTTP goes through URLSession so requests use the system trust store,
-/// proxies and VPNs.
+/// pool, a few at a time: each holds its thread while it waits for the network, and calls
+/// beyond the limit wait in the queue without a thread. The core's HTTP goes through URLSession
+/// so requests use the system trust store, proxies and VPNs.
 nonisolated enum Core {
-    private static let queue = DispatchQueue(label: "com.rbrian.Biblio.core", attributes: .concurrent)
+    private static let queue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.rbrian.Biblio.core"
+        queue.maxConcurrentOperationCount = 8
+        return queue
+    }()
 
     /// Installs the URLSession transport once, before the first client is created.
     static let setUp: Void = {
@@ -23,7 +29,7 @@ nonisolated enum Core {
     static func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         _ = setUp
         return try await withCheckedThrowingContinuation { continuation in
-            queue.async { continuation.resume(with: Result { try work() }) }
+            queue.addOperation { continuation.resume(with: Result { try work() }) }
         }
     }
 
@@ -50,6 +56,7 @@ nonisolated enum Core {
         case BIBLIO_SIGN_IN_REQUIRED: throw BiblioError.signInRequired
         case BIBLIO_LOGIN_FAILED: throw BiblioError.loginFailed(message)
         case BIBLIO_HTTP: throw BiblioError.http(Int(err.status), message)
+        case BIBLIO_HOLD_LIMIT: throw BiblioError.holdLimit(message)
         default: throw BiblioError.unexpected(message)
         }
     }
@@ -154,8 +161,11 @@ nonisolated private final class Transport: NSObject, URLSessionTaskDelegate, @un
     }
 
     private func copy(_ data: Data, length: inout Int) -> UnsafeMutableRawPointer? {
+        guard let p = biblio_alloc(max(data.count, 1)) else {
+            length = 0
+            return nil
+        }
         length = data.count
-        guard let p = biblio_alloc(max(data.count, 1)) else { return nil }
         data.withUnsafeBytes { if let base = $0.baseAddress { p.copyMemory(from: base, byteCount: data.count) } }
         return p
     }

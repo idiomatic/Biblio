@@ -70,15 +70,16 @@ final class LibraryIcons {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         let w = image.width, h = image.height
-        var pixels = [UInt8](repeating: 0, count: w * h * 4)
-        guard let context = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+        // The context owns its pixels, so they live as long as it does.
+        guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
         context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         var b = [Int](repeating: 0, count: 4)
-        guard biblio_logo_bounds(pixels, w, h, w * 4, 4, &b),
+        guard biblio_logo_bounds(pixels, w, h, context.bytesPerRow, 4, &b),
               let cropped = context.makeImage()?.cropping(to: CGRect(x: b[0], y: b[1], width: b[2], height: b[3])) else { return nil }
         let out = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(out, "public.png" as CFString, 1, nil) else { return nil }

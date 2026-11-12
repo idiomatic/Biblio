@@ -12,39 +12,64 @@ extension EnvironmentValues {
     }
 }
 
-/// How "borrowed before" reads.
+/// How "borrowed before" reads, each phrase a whole localizable string.
 enum BorrowedText {
     private static func formatted(_ date: String?, _ style: Date.FormatStyle) -> String? {
         date.flatMap(DateText.date).map { $0.formatted(style) }
     }
 
-    /// "the audiobook", "on Blu-ray", "the book", or "as Kit".
-    static func borrowedFormat(_ code: String, library: LibraryInfo) -> String {
-        let name = library.formatName(code)
-        switch code {
-        case "AB", "BOOK_CD", "PLAYAWAY_AUDIOBOOK", "AUDIOBOOK": return "the audiobook"
-        case "DVD", "BLURAY", "UK", "DVD_PBLURAY", "VIDEO_ONLINE": return "on \(name)"
-        case "BK", "LPRINT", "EBOOK": return "the \(name.lowercased())"
-        default: return "as \(name)"
+    /// What was borrowed: this item, or the work in another format, which reads "the audiobook",
+    /// "on Blu-ray", "the book", or "as Kit".
+    private enum What {
+        case this, audiobook
+        case on(String), the(String), `as`(String)
+
+        init(_ m: BorrowedIndex.Match, library: LibraryInfo) {
+            if m.sameFormat { self = .this; return }
+            let name = library.formatName(m.format)
+            switch m.format {
+            case "AB", "BOOK_CD", "PLAYAWAY_AUDIOBOOK", "AUDIOBOOK": self = .audiobook
+            case "DVD", "BLURAY", "UK", "DVD_PBLURAY", "VIDEO_ONLINE": self = .on(name)
+            case "BK", "LPRINT", "EBOOK": self = .the(name.lowercased())
+            default: self = .as(name)
+            }
         }
     }
 
     /// For a row's tooltip: "Borrowed before · returned Mar 2024", or "Borrowed the audiobook".
     static func short(_ m: BorrowedIndex.Match, library: LibraryInfo) -> String {
         let when = formatted(m.lastReturned ?? m.lastCheckout, .dateTime.month(.abbreviated).year())
-        if m.sameFormat {
-            let returned = m.lastReturned != nil ? "returned" : "borrowed"
-            return ["Borrowed before", when.map { "\(returned) \($0)" }].compactMap { $0 }.joined(separator: " · ")
+        let what: String
+        var detail = when
+        switch What(m, library: library) {
+        case .this:
+            what = String(localized: "Borrowed before")
+            detail = when.map { m.lastReturned != nil ? String(localized: "returned \($0)") : String(localized: "borrowed \($0)") }
+        case .audiobook: what = String(localized: "Borrowed the audiobook")
+        case .on(let name): what = String(localized: "Borrowed on \(name)")
+        case .the(let name): what = String(localized: "Borrowed the \(name)")
+        case .as(let name): what = String(localized: "Borrowed as \(name)")
         }
-        return ["Borrowed \(borrowedFormat(m.format, library: library))", when].compactMap { $0 }.joined(separator: " · ")
+        return [what, detail].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// For item detail: "You borrowed this in March 2024 · 3 times", or "You borrowed the DVD in March 2024".
     static func sentence(_ m: BorrowedIndex.Match, library: LibraryInfo) -> String {
-        let what = m.sameFormat ? "this" : borrowedFormat(m.format, library: library)
-        var text = "You borrowed \(what)"
-        if let when = formatted(m.lastCheckout ?? m.lastReturned, .dateTime.month(.wide).year()) { text += " in \(when)" }
-        if m.count > 1 { text += " · \(m.count) times" }
+        let when = formatted(m.lastCheckout ?? m.lastReturned, .dateTime.month(.wide).year())
+        var text: String
+        switch (What(m, library: library), when) {
+        case (.this, let when?): text = String(localized: "You borrowed this in \(when)")
+        case (.this, nil): text = String(localized: "You borrowed this")
+        case (.audiobook, let when?): text = String(localized: "You borrowed the audiobook in \(when)")
+        case (.audiobook, nil): text = String(localized: "You borrowed the audiobook")
+        case (.on(let name), let when?): text = String(localized: "You borrowed on \(name) in \(when)")
+        case (.on(let name), nil): text = String(localized: "You borrowed on \(name)")
+        case (.the(let name), let when?): text = String(localized: "You borrowed the \(name) in \(when)")
+        case (.the(let name), nil): text = String(localized: "You borrowed the \(name)")
+        case (.as(let name), let when?): text = String(localized: "You borrowed as \(name) in \(when)")
+        case (.as(let name), nil): text = String(localized: "You borrowed as \(name)")
+        }
+        if m.count > 1 { text += " · " + inflected("^[\(m.count) time](inflect: true)") }
         return text
     }
 }

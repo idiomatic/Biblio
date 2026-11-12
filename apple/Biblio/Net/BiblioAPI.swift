@@ -51,8 +51,10 @@ extension BiblioClient {
 
     /// Full record fields ("Details", "About", …). Opinion/UGC sections are never requested.
     func detailFields(_ metadataId: String) async throws -> [DetailField] {
-        try await fetch({ biblio_details($0, metadataId, $1, $2) }, free: biblio_detail_list_free) {
-            buffer($0.items, $0.items_count).map(DetailField.init)
+        try await fetch({ biblio_details($0, metadataId, $1, $2) }, free: biblio_detail_list_free) { list in
+            buffer(list.items, list.items_count).enumerated().map { i, field in
+                DetailField(field, isEdition: Int64(i) == list.edition_index)
+            }
         }
     }
 
@@ -108,13 +110,6 @@ extension BiblioClient {
     }
 
     // MARK: Settings
-
-    /// Current values as shown on the account settings pages.
-    func accountSettings() async throws -> (email: String?, pickup: String?, language: String?) {
-        try await fetch({ biblio_account_settings($0, $1, $2) }, free: biblio_account_settings_free) {
-            (string($0.email), string($0.pickup), string($0.language))
-        }
-    }
 
     /// Sets the first preferred pickup location (used for new holds).
     func setDefaultPickupLocation(_ branchId: String) async throws {

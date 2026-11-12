@@ -1,12 +1,13 @@
 const std = @import("std");
 
-/// zig build           libbiblio (../core) as zig-out/BiblioCore.xcframework, which the Biblio
-///                     Xcode project links; Xcode runs it before compiling. A Debug configuration
+/// zig build           libbiblio (../core) as zig-out/lib/PLATFORM/libbiblio.a, with the BiblioCore
+///                     module in zig-out/include, which the Biblio Xcode project links; Xcode runs
+///                     it with -Dplatform=$PLATFORM_NAME before compiling. A Debug configuration
 ///                     (CONFIGURATION=Debug, as Xcode sets) builds ReleaseSafe, others ReleaseFast.
 /// zig build libs      just the static libraries, one per platform and architecture
 ///
 /// Every step is cached, and installing rewrites only files whose contents changed, so with nothing
-/// new Xcode finds the framework untouched.
+/// new Xcode finds the library untouched.
 pub fn build(b: *std.Build) void {
     const debug = std.mem.eql(u8, b.graph.environ_map.get("CONFIGURATION") orelse "Release", "Debug");
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimize mode (default: ReleaseSafe for Debug, else ReleaseFast)") orelse
@@ -19,6 +20,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "ios-sim-arm64", .query = .{ .cpu_arch = .aarch64, .os_tag = .ios, .abi = .simulator } },
         .{ .name = "ios-sim-x86_64", .query = .{ .cpu_arch = .x86_64, .os_tag = .ios, .abi = .simulator } },
     };
+    const only = b.option([]const u8, "platform", "Install only this Xcode platform: macosx, iphoneos, or iphonesimulator (default: all)");
     const libs_step = b.step("libs", "Build the static libraries for macOS, iOS, and the iOS simulator");
     var libs: [targets.len]*std.Build.Step.Compile = undefined;
     for (targets, &libs) |t, *slot| {
@@ -39,31 +41,27 @@ pub fn build(b: *std.Build) void {
         libs_step.dependOn(&install.step);
     }
 
-    const macos = fat(b, libs[0], libs[1]);
-    const ios_sim = fat(b, libs[3], libs[4]);
-    const headers = b.addWriteFiles();
-    _ = headers.addCopyFile(b.path("../core/include/biblio.h"), "biblio.h");
-    _ = headers.add("module.modulemap",
+    // One library per Xcode platform (PLATFORM_NAME), beside the module map Swift imports. Plain
+    // files, unlike an XCFramework, need not exist before Xcode plans a build, so a clean build
+    // recovers by running this first.
+    const platforms = [_]struct { name: []const u8, lib: std.Build.LazyPath }{
+        .{ .name = "macosx", .lib = fat(b, libs[0], libs[1]) },
+        .{ .name = "iphoneos", .lib = libs[2].getEmittedBin() },
+        .{ .name = "iphonesimulator", .lib = fat(b, libs[3], libs[4]) },
+    };
+    for (platforms) |p| {
+        if (only) |name| if (!std.mem.eql(u8, name, p.name)) continue;
+        b.getInstallStep().dependOn(&b.addInstallFile(p.lib, b.fmt("lib/{s}/libbiblio.a", .{p.name})).step);
+    }
+    b.getInstallStep().dependOn(&b.addInstallFile(b.path("../core/include/biblio.h"), "include/biblio.h").step);
+    const modulemap = b.addWriteFiles().add("module.modulemap",
         \\module BiblioCore {
         \\    header "biblio.h"
         \\    export *
         \\}
         \\
     );
-    // xcodebuild refuses an existing output, so it writes inside a fresh directory.
-    const package = b.addSystemCommand(&.{ "sh", "-c", "out=\"$1\"; shift; xcodebuild -create-xcframework \"$@\" -output \"$out/BiblioCore.xcframework\" >/dev/null", "_" });
-    const out = package.addOutputDirectoryArg("xcframework");
-    for ([_]std.Build.LazyPath{ macos, libs[2].getEmittedBin(), ios_sim }) |lib| {
-        package.addArg("-library");
-        package.addFileArg(lib);
-        package.addArg("-headers");
-        package.addDirectoryArg(headers.getDirectory());
-    }
-    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
-        .source_dir = out.path(b, "BiblioCore.xcframework"),
-        .install_dir = .prefix,
-        .install_subdir = "BiblioCore.xcframework",
-    }).step);
+    b.getInstallStep().dependOn(&b.addInstallFile(modulemap, "include/module.modulemap").step);
 }
 
 /// One library for both architectures of an Apple platform.

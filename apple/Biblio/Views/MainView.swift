@@ -50,6 +50,9 @@ struct MainView: View {
     /// Which column a compact window shows; a scope change reopens on the sidebar it came from.
     @State private var preferredColumn: NavigationSplitViewColumn
     @State private var holdsDropTargeted = false
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     init(session: WindowSession, scope: CardScope?, signOut: @escaping () -> Void, signIn: @escaping (String) -> Void,
          startOnSidebar: Bool = false) {
@@ -77,6 +80,9 @@ struct MainView: View {
             .id(ObjectIdentifier(session))
         }
         .modifier(ItemInspector(isPresented: $session.showInspector) { inspector.id(ObjectIdentifier(session)) })
+        #if os(iOS)
+        .onChange(of: sizeClass, initial: true) { _, size in session.inspectorIsSheet = size == .compact }
+        #endif
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .principal) {
@@ -101,7 +107,9 @@ struct MainView: View {
         .sheet(isPresented: $session.showingSignIn, onDismiss: session.signInDismissed) {
             LoginPicker(library: session.library, signIn: signIn)
         }
-        .alert("Couldn’t Sign In", isPresented: .constant(session.loginError != nil && session.patron == nil)) {
+        // Dismissing clears the error, so "Try Again" shows the alert again only if the retry fails.
+        .alert("Couldn’t Sign In", isPresented: Binding(get: { session.loginError != nil && session.patron == nil },
+                                                        set: { if !$0 { session.loginError = nil } })) {
             Button("Try Again") { Task { await session.start() } }
             Button("Choose Another User", role: .cancel) { signOut() }
         } message: {
@@ -202,9 +210,9 @@ struct MainView: View {
         switch session.section ?? .search {
         case .search: SearchView(session: session)
         case .newTitles: NewTitlesView(session: session)
-        case .holds: BorrowingListView(session: session, section: .holds)
-        case .checkouts: BorrowingListView(session: session, section: .checkouts)
-        case .history: BorrowingListView(session: session, section: .history)
+        case .holds: BorrowingListView(session: session, section: .holds, model: session.holdsList)
+        case .checkouts: BorrowingListView(session: session, section: .checkouts, model: session.checkoutsList)
+        case .history: BorrowingListView(session: session, section: .history, model: session.historyList)
         case .account(let user):
             // One view whether the card is on or off, so switching it keeps the page (and its scroll).
             AccountView(library: session.library, username: user, session: user == session.username ? session : nil,
@@ -227,7 +235,13 @@ struct ItemInspector<Panel: View>: ViewModifier {
         // An inspector is a sheet on iPhone anyway, and as one it leaves a window restored at
         // launch with its sidebar under the navigation bar.
         if sizeClass == .compact {
-            content.sheet(isPresented: $isPresented) { panel }
+            content.sheet(isPresented: $isPresented) {
+                NavigationStack {
+                    panel.toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { isPresented = false } }
+                    }
+                }
+            }
         } else {
             content.inspector(isPresented: $isPresented) { panel }
         }
@@ -381,6 +395,9 @@ struct BannerView: View {
                 .padding(.bottom, 16)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .task(id: banner.id) {
+                    var announcement = AttributedString(banner.message)
+                    announcement.accessibilitySpeechAnnouncementPriority = banner.isError ? .high : .default
+                    AccessibilityNotification.Announcement(announcement).post()
                     try? await Task.sleep(for: .seconds(banner.isError ? 6 : 3))
                     withAnimation { session.banner = nil }
                 }
