@@ -29,11 +29,11 @@ enum About {
 struct AboutCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
-            Button("About Biblio") { MainActor.assumeIsolated { About.showPanel() } }
+            Button("About Biblio", systemImage: "info.circle") { MainActor.assumeIsolated { About.showPanel() } }
         }
         CommandGroup(after: .help) {
             Divider()
-            Button("Copy Diagnostic Log") { ThrottleLog.copyReport() }
+            Button("Copy Diagnostic Log", systemImage: "doc.on.doc") { ThrottleLog.copyReport() }
         }
     }
 }

@@ -114,6 +114,17 @@ final class MergedListModel {
         for model in models { model.setHoldFilter(value) }
     }
 
+    var isNotBorrowed: Bool { !(models.first?.notBorrowed.isEmpty ?? true) }
+
+    /// Every list hides what any of the cards borrowed before in that format.
+    func setNotBorrowed(_ indexes: [BorrowedIndex]) {
+        for model in models { model.setNotBorrowed(indexes) }
+    }
+
+    func notBorrowedChanged() {
+        for model in models { model.notBorrowedChanged() }
+    }
+
     func setSort(_ new: ItemListModel.Sort) {
         guard new != sort else { return }
         for model in models { model.setSort(new) }
@@ -143,6 +154,8 @@ extension ItemListModel.Sort {
             switch id {
             case "due_date": BIBLIO_LIST_SORT_DUE_DATE
             case "status": BIBLIO_LIST_SORT_STATUS
+            case "title": BIBLIO_LIST_SORT_SERVER_TITLE
+            case "author": BIBLIO_LIST_SORT_AUTHOR
             default: BIBLIO_LIST_SORT_SERVER
             }
         case .peopleWaiting: BIBLIO_LIST_SORT_PEOPLE_WAITING

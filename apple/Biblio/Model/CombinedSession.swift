@@ -181,8 +181,7 @@ final class CombinedSession {
     }
 
     func style(_ login: Int) -> CardStyle {
-        CardStyle.of(library: library, username: sessions[login].username,
-                     name: sessions[login].patron?.name ?? sessions[login].username)
+        CardStyle.of(library: library, username: sessions[login].username, name: sessions[login].callName)
     }
 
     /// What the card is called here: the user's own name for it, or the account holder's first name.
@@ -192,6 +191,29 @@ final class CombinedSession {
     func start() async {
         await withTaskGroup(of: Void.self) { group in
             for session in sessions { group.addTask { await session.start() } }
+        }
+    }
+
+    private var accountListsLoaded = false
+
+    /// Each card's relationship to a catalog item: the cards that hold or have borrowed it.
+    func statuses(for bibID: String) -> [(login: Int, status: AccountStatus)] {
+        sessions.indices.compactMap { login in
+            sessions[login].accountStatus(for: bibID).map { (login, $0) }
+        }
+    }
+
+    /// The library marks a catalog row only for the card that searched, so the other cards'
+    /// holds and checkouts are loaded in full to mark theirs. The cards load side by side, and
+    /// a list already loaded (the Holds section's) is not fetched again, only its missing pages.
+    func loadAccountLists() async {
+        guard !accountListsLoaded else { return }
+        accountListsLoaded = true
+        await withTaskGroup(of: Void.self) { group in
+            for session in sessions.dropFirst() {
+                group.addTask { await session.holdsList.loadAllPages() }
+                group.addTask { await session.checkoutsList.loadAllPages() }
+            }
         }
     }
 

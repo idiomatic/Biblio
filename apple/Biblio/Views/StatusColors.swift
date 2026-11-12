@@ -85,7 +85,7 @@ extension AccountStatus {
     var label: String {
         switch self {
         case .onHold(ready: true, _): "Ready for pickup"
-        case .onHold(_, let position?): "On hold · #\(position)"
+        case .onHold(_, let position?): "On hold · #\(position) in line"
         case .onHold: "On hold"
         case .checkedOut(let due?): DateText.isPast(due) ? "Overdue" : "Checked out · due \(DateText.format(due))"
         case .checkedOut: "Checked out"
@@ -101,24 +101,42 @@ extension AccountStatus {
     }
 }
 
-/// Small capsule naming this account's status for an item in catalog lists and the detail pane.
+/// Small capsule naming this account's status for an item, wherever the item shows: list rows
+/// and the detail pane. With the account's hold, it names the hold's own state.
 struct AccountStatusTag: View {
     var status: AccountStatus
+    /// The hold itself, when known, for its state ("In transit", "Paused") and pickup date.
+    var hold: Hold? = nil
 
     var body: some View {
-        let color = StatusColors.account(status)
+        let (label, symbol, color) = hold.map(Self.describe) ?? (status.label, status.systemImage, StatusColors.account(status))
         HStack(spacing: 4) {
-            Image(systemName: status.systemImage)
+            Image(systemName: symbol)
                 .imageScale(.small)
-            Text(status.label)
+            Text(label)
                 .lineLimit(1)
         }
-        .font(.caption.weight(.medium))
+        .font(.callout.weight(.medium))
         .foregroundStyle(color)
         .padding(.horizontal, 7)
         .padding(.vertical, 2)
         .background(color.opacity(0.12), in: Capsule())
         .fixedSize(horizontal: true, vertical: true)
         .accessibilityElement(children: .combine)
+    }
+
+    /// A hold's words, symbol, and color: ready, in transit, paused, or waiting, with its place in line.
+    nonisolated static func describe(_ hold: Hold) -> (String, String, Color) {
+        let place = hold.position.map { " · #\($0) in line" } ?? ""
+        switch hold.status {
+        case "READY_FOR_PICKUP":
+            return ("Ready for pickup" + (hold.pickupByDate.map { " by \(DateText.format($0))" } ?? ""), "bag.fill", .green)
+        case "IN_TRANSIT", "SHIPPED":
+            return ("In transit" + place, "shippingbox.fill", .orange)
+        case "SUSPENDED", "INACTIVE":
+            return ("Paused" + place, "pause.circle.fill", .secondary)
+        default:
+            return ("On hold" + place, "tray.and.arrow.down.fill", .blue)
+        }
     }
 }

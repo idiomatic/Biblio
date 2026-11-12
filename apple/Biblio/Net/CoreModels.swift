@@ -25,6 +25,7 @@ nonisolated extension Bib {
         availableCopies = Int(c.available_copies)
         totalCopies = Int(c.total_copies)
         onOrderCopies = Int(c.on_order_copies)
+        libraryFormat = string(c.library_format) ?? format
     }
 }
 

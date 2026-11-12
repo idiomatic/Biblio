@@ -157,7 +157,7 @@ struct LoginPicker: View {
                                 signIn(user)
                             } label: {
                                 // The card as it appears elsewhere: its chip and name, then the login.
-                                let name = store.cards[CardInfo.id(subdomain: library.subdomain, username: user)]?.name ?? user
+                                let name = store.callName(subdomain: library.subdomain, username: user)
                                 HStack(spacing: 12) {
                                     CardChip(style: CardStyle.of(library: library, username: user, name: name), size: 28)
                                     VStack(alignment: .leading, spacing: 1) {

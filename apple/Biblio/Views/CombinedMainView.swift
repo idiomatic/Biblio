@@ -37,9 +37,6 @@ struct CombinedMainView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
     @State private var preferredColumn: NavigationSplitViewColumn
     @State private var holdsDropTargeted = false
-    #if os(macOS)
-    @Environment(\.controlActiveState) private var controlActiveState
-    #endif
 
     init(combined: CombinedSession, scope: CardScope?, signOut: @escaping () -> Void, startOnSidebar: Bool = false) {
         self.combined = combined
@@ -71,16 +68,10 @@ struct CombinedMainView: View {
         #endif
         .environment(\.combinedHolds, combined)
         .focusedSceneValue(\.addAnother, combined.windowActions.map { RefreshAction(perform: $0.addCard) })
-        #if os(macOS)
-        // Settings (⌘,) shows the card this window last used.
-        .onChange(of: controlActiveState, initial: true) { _, state in
-            if state == .key { SessionRegistry.shared.activate(combined.cardSession) }
-        }
-        .onChange(of: combined.lastUsed) {
-            if controlActiveState == .key { SessionRegistry.shared.activate(combined.cardSession) }
-        }
-        #endif
         .task { await combined.start() }
+        .task(id: combined.section) {
+            if combined.section == .search || combined.section == .newTitles { await combined.loadAccountLists() }
+        }
         .tint(combined.library.tint)
     }
 
@@ -110,11 +101,11 @@ struct CombinedMainView: View {
             if let scope {
                 CardsSection(scope: scope)
             }
-            Section("Catalog") {
+            Section("Catalog", isExpanded: LibraryStore.shared.sidebarSection("Catalog", in: combined.library.subdomain)) {
                 sidebarRow(.search)
                 sidebarRow(.newTitles)
             }
-            Section("My Library") {
+            Section("My Library", isExpanded: LibraryStore.shared.sidebarSection("My Library", in: combined.library.subdomain)) {
                 // An item dropped on Holds is held for each title's default card.
                 sidebarRow(.holds)
                     .onDrop(of: [.biblioItem], isTargeted: $holdsDropTargeted) { providers in
@@ -135,7 +126,6 @@ struct CombinedMainView: View {
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .navigation) { LibrariesBackButton(action: signOut) }
-            ToolbarItem { LibraryCardButton(session: combined.cardSession) }
             #else
             ToolbarItem(placement: .topBarLeading) { LibrariesBackButton(action: signOut) }
             ToolbarItem(placement: .topBarTrailing) { LibraryCardButton(session: combined.cardSession) }
@@ -145,8 +135,12 @@ struct CombinedMainView: View {
 
     private func sidebarRow(_ section: AppSection) -> some View {
         NavigationLink(value: section) {
-            Label(section.title, systemImage: section.systemImage)
-                .badge(badge(for: section))
+            if section == .history {
+                HistorySidebarLabel(indexes: combined.borrowedIndexes)
+            } else {
+                Label(section.title, systemImage: section.systemImage)
+                    .badge(badge(for: section))
+            }
         }
     }
 
@@ -165,11 +159,10 @@ struct CombinedMainView: View {
         case .checkouts: CombinedListView(combined: combined, section: .checkouts)
         case .history: CombinedListView(combined: combined, section: .history)
         case .account(let user):
-            if combined.sessions.contains(where: { $0.username == user }) || scope == nil {
-                CombinedAccountView(combined: combined, user: user)
-            } else if let scope {
-                InactiveCardView(scope: scope, user: user) { combined.windowActions?.removeCard($0) }
-            }
+            // One view whether the card is on or off, so switching it keeps the page (and its scroll).
+            AccountView(library: combined.library, username: user, session: combined.sessions.first { $0.username == user },
+                        actions: combined.windowActions, isBusy: scope?.isBusy(user) ?? false)
+                .id(user)
         }
     }
 }
@@ -208,11 +201,13 @@ struct CombinedListView: View {
             if let row = rows.first(where: { $0.id == id }) { combined.select(row) }
         }
         .task { model.loadIfNeeded() }
+        .onChange(of: combined.borrowedIndexes.map(\.generation)) { model.notBorrowedChanged() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.loadIfNeeded() }
         }
         .toolbar {
-            CombinedControls(model: model, library: combined.library, showsHoldFilter: section == .holds)
+            CombinedControls(model: model, library: combined.library, showsHoldFilter: section == .holds,
+                             borrowed: section == .holds ? combined.borrowedIndexes : [])
             #if os(macOS)
             ToolbarItem { InspectorToggle(session: combined.active) }
             #endif
@@ -246,6 +241,7 @@ struct CombinedListView: View {
     private func refresh() async {
         for s in combined.sessions { s.detailsRevision += 1 }
         await model.refresh()
+        for s in combined.sessions { s.syncBorrowed() }
     }
 
     @ViewBuilder
@@ -334,6 +330,8 @@ private struct CombinedControls: ToolbarContent {
     var model: MergedListModel
     var library: LibraryInfo
     var showsHoldFilter: Bool
+    /// The cards' indexes for the "Not Borrowed" filter; none hides it.
+    var borrowed: [BorrowedIndex] = []
 
     var body: some ToolbarContent {
         ToolbarItemGroup {
@@ -346,6 +344,11 @@ private struct CombinedControls: ToolbarContent {
                         }
                     }
                     .pickerStyle(.inline)
+                    if !borrowed.isEmpty, borrowed.allSatisfy(\.isComplete) || model.isNotBorrowed {
+                        Divider()
+                        Toggle("Not Borrowed", isOn: Binding(get: { model.isNotBorrowed },
+                                                             set: { model.setNotBorrowed($0 ? borrowed : []) }))
+                    }
                 } label: {
                     Label("Status", systemImage: model.holdFilter == nil ? "tray" : "tray.fill")
                 }
@@ -385,17 +388,6 @@ private struct CombinedControls: ToolbarContent {
     }
 }
 
-/// Account settings of the card whose row was opened.
-private struct CombinedAccountView: View {
-    var combined: CombinedSession
-    var user: String
-
-    var body: some View {
-        let session = combined.sessions.first { $0.username == user } ?? combined.primary
-        AccountView(session: session)
-            .id(session.username)
-    }
-}
 
 /// An item's hold controls in a combined window: each card's hold or checkout with its own
 /// Cancel Hold, and for a card that can still hold it, "For:" and the pickup location.
@@ -417,7 +409,7 @@ struct CardsHoldSection: View {
                 } else if let status = combined.sessions[login].accountStatus(for: bib.id) {
                     HStack {
                         CardChip(style: combined.style(login))
-                        AccountStatusTag(status: status)
+                        AccountStatusTag(status: status, hold: combined.sessions[login].hold(for: bib.id))
                     }
                 }
             }
@@ -431,7 +423,7 @@ struct CardsHoldSection: View {
         let session = combined.sessions[login]
         return HStack(spacing: 8) {
             CardChip(style: combined.style(login))
-            AccountStatusTag(status: .onHold(ready: hold.status == "READY_FOR_PICKUP", position: hold.position))
+            AccountStatusTag(status: .onHold(ready: hold.status == "READY_FOR_PICKUP", position: hold.position), hold: hold)
             Spacer(minLength: 0)
             if hold.canCancel {
                 Button(role: .destructive) {
@@ -502,7 +494,8 @@ struct CardsHoldSection: View {
             if able.count > 1 {
                 Rectangle().fill(.white.opacity(0.45)).frame(width: 1, height: 18)
                 Menu {
-                    ForEach(able, id: \.self) { card in
+                    // The default card is the button itself.
+                    ForEach(able.filter { $0 != login }, id: \.self) { card in
                         Button("Hold for \(combined.name(card))") { place(for: card, default: login) }
                     }
                 } label: {

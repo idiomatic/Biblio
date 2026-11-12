@@ -14,8 +14,8 @@ struct SearchView: View {
             if case .search(let q) = session.searchList.source, !q.isEmpty {
                 FacetFilterBar(model: session.searchList, session: session, includeDetailedFacets: true)
                     .listRowSeparator(.hidden)
-                if session.searchList.total > 0 {
-                    Text("\(session.searchList.total.formatted()) results for “\(q.query)”")
+                if session.searchList.shownTotal > 0 {
+                    Text("^[\(session.searchList.shownTotal) result](inflect: true) for “\(q.query)”")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .listRowSeparator(.hidden)
@@ -233,7 +233,15 @@ struct FacetFilterBar<Leading: View>: View {
     var includeDetailedFacets = false
     @ViewBuilder var leading: () -> Leading
 
+    @Environment(\.combinedHolds) private var cards
+
     private var library: LibraryInfo { session.library }
+
+    /// The cards whose borrowing "Not Borrowed" hides: every card of a combined window.
+    private var indexes: [BorrowedIndex] {
+        if let cards { return cards.borrowedIndexes }
+        return session.isGuest ? [] : [session.borrowed]
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -253,6 +261,11 @@ struct FacetFilterBar<Leading: View>: View {
                     facetMenu("PUBLISHED_DATE", title: "Published") { $0 }
                     facetMenu("NEWLY_ACQUIRED", title: "Added") { $0.replacingOccurrences(of: "PAST_", with: "Past ").prettified }
                 }
+                if !indexes.isEmpty, indexes.allSatisfy(\.isComplete) || !model.notBorrowed.isEmpty {
+                    NotBorrowedChip(isOn: !model.notBorrowed.isEmpty) {
+                        model.setNotBorrowed(model.notBorrowed.isEmpty ? indexes : [])
+                    }
+                }
                 if !model.facetFilters.isEmpty {
                     Button("Clear") {
                         for key in model.facetFilters.keys { model.setFacet(key, nil) }
@@ -263,6 +276,7 @@ struct FacetFilterBar<Leading: View>: View {
             }
             .padding(.vertical, 2)
         }
+        .onChange(of: indexes.map(\.generation)) { model.notBorrowedChanged() }
     }
 
     private func availabilityName(_ value: String) -> String {
@@ -282,7 +296,8 @@ struct FacetFilterBar<Leading: View>: View {
                 Picker(title, selection: Binding(get: { selected }, set: { model.setFacet(id, $0) })) {
                     Text("Any \(title)").tag(String?.none)
                     ForEach(values, id: \.value) { v in
-                        Text("\(name(v.value)) (\(v.count.formatted()))").tag(Optional(v.value))
+                        // A refined format (4K) has no count until its items are fetched.
+                        Text(v.count < 0 ? name(v.value) : "\(name(v.value)) (\(v.count.formatted()))").tag(Optional(v.value))
                     }
                 }
                 .pickerStyle(.inline)

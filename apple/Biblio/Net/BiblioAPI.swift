@@ -16,6 +16,13 @@ nonisolated struct SearchQuery: Hashable, Sendable {
     }
 }
 
+/// A list page in the core's own form, freed with it.
+nonisolated final class CorePage: @unchecked Sendable {
+    let pointer: UnsafeMutablePointer<biblio_list_page_t>
+    init(_ pointer: UnsafeMutablePointer<biblio_list_page_t>) { self.pointer = pointer }
+    deinit { biblio_list_page_free(pointer) }
+}
+
 /// The library operations the app uses, each one libbiblio call.
 extension BiblioClient {
     // MARK: Catalog
@@ -67,6 +74,16 @@ extension BiblioClient {
 
     func borrowingHistory(page: Int, sort: String?) async throws -> ListPage {
         try await fetch({ biblio_history($0, Int64(page), sort, $1, $2) }, free: biblio_list_page_free, ListPage.init)
+    }
+
+    /// A history page as the core returned it, for the borrowed-before index to read.
+    func borrowingHistoryCorePage(page: Int) async throws -> CorePage {
+        try await run { client in
+            var out: UnsafeMutablePointer<biblio_list_page_t>?
+            try Core.check { biblio_history(client, Int64(page), nil, &out, $0) }
+            guard let out else { throw BiblioError.unexpected("The library returned an unexpected response.") }
+            return CorePage(out)
+        }
     }
 
     // MARK: Holds

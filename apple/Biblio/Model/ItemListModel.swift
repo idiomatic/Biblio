@@ -116,6 +116,8 @@ final class ItemListModel {
     private(set) var localFormat: String?
     /// Hold-status filter for the holds list, applied locally.
     private(set) var holdFilter: HoldFilter?
+    /// "Not Borrowed": hides what these cards borrowed before in the item's format.
+    private(set) var notBorrowed: [BorrowedIndex] = []
     private(set) var sort: Sort
 
     private let defaultSort: String?
@@ -136,6 +138,13 @@ final class ItemListModel {
     /// Format choices with counts: the server's FORMAT facet for searches, or the loaded rows' formats otherwise.
     var formatChoices: [(value: String, count: Int)] {
         source.isSearch ? facets.first { $0.id == "FORMAT" }?.values ?? [] : localFormats
+    }
+
+    /// How many results a search shows: the server's count, or what a local filter (a refined
+    /// format, "Not Borrowed") kept of the pages fetched so far.
+    var shownTotal: Int {
+        let refined = format.map { biblio_format_is_refined($0) } ?? false
+        return refined || !notBorrowed.isEmpty ? rows.count : total
     }
 
     /// The core list, which a `MergedListModel` borrows.
@@ -235,6 +244,18 @@ final class ItemListModel {
     }
 
     /// Reloads and fetches every page (for short lists like holds, after a change).
+    /// Fetches whatever pages of the list are missing, without refetching what is loaded or
+    /// already on its way (the first page only if the list was never loaded or has gone stale).
+    func loadAllPages() async {
+        loadIfNeeded()
+        await firstPageTask?.value
+        let state = biblio_list_state(list.pointer)
+        guard state.loaded, state.pages > 1 else { return }
+        for page in 2...state.pages where biblio_list_request(list.pointer, page) {
+            await fetch(page: Int(page), generation: state.generation).value
+        }
+    }
+
     func reloadAll() async {
         reload(keepingContent: true)
         await firstPageTask?.value
@@ -293,7 +314,7 @@ final class ItemListModel {
         if page == 1 && biblio_list_state(list.pointer).refreshing { entriesByID = [:] }
         // An item that moved between pages while fetching is kept at its first position.
         for entry in result.entries where entriesByID[entry.id] == nil { entriesByID[entry.id] = entry }
-        let strings = result.entries.flatMap { [$0.id, $0.bib.title, $0.bib.format] }
+        let strings = result.entries.flatMap { [$0.id, $0.bib.title, $0.bib.format, $0.bib.primaryAuthor ?? ""] }
         Core.withCStrings(strings) { c in
             let items = result.entries.enumerated().map { i, e in
                 var ready = false
@@ -311,11 +332,11 @@ final class ItemListModel {
                     }
                 }
                 if case .checkout(let c) = e.kind, let due = c.dueDate { dueDay = DateText.dayNumber(due) }
-                return biblio_list_item(id: c[3 * i], title: c[3 * i + 1], format: c[3 * i + 2],
+                return biblio_list_item(id: c[4 * i], title: c[4 * i + 1], format: c[4 * i + 2],
                                         held_copies: Int64(e.bib.heldCopies), server_index: Int64(e.serverIndex),
                                         is_hold: isHold, ready: ready,
                                         on_order: e.bib.status == "ON_ORDER" || e.bib.onOrderCopies > 0,
-                                        due_day: Int64(dueDay), status_rank: rank)
+                                        due_day: Int64(dueDay), status_rank: rank, author: c[4 * i + 3])
             }
             _ = biblio_list_apply(list.pointer, generation, Int64(page), items, items.count, Int64(result.count),
                                   Int64(result.pageSize), Self.now)
@@ -384,6 +405,8 @@ final class ItemListModel {
 
     func setFormat(_ value: String?) {
         if source.isSearch {
+            // The server can't filter a refined format (4K filed as Blu-ray); the core list does.
+            Core.withCStrings([value]) { biblio_list_set_format(list.pointer, $0[0]) }
             setFacet("FORMAT", value)
         } else {
             withAnimation {
@@ -402,6 +425,27 @@ final class ItemListModel {
             syncContent()
         }
         if biblio_list_needs_all_pages(list.pointer) { startBackgroundFetch() }
+    }
+
+    /// Shows only what none of `indexes` borrowed in the item's format; none turns it off.
+    func setNotBorrowed(_ indexes: [BorrowedIndex]) {
+        withAnimation {
+            notBorrowed = indexes
+            applyNotBorrowed()
+        }
+        if biblio_list_needs_all_pages(list.pointer) { startBackgroundFetch() }
+    }
+
+    /// The indexes changed (a sync added to them): filter again.
+    func notBorrowedChanged() {
+        guard !notBorrowed.isEmpty else { return }
+        withAnimation { applyNotBorrowed() }
+    }
+
+    private func applyNotBorrowed() {
+        let pointers: [OpaquePointer?] = notBorrowed.map(\.pointer)
+        pointers.withUnsafeBufferPointer { biblio_list_set_not_borrowed(list.pointer, $0.baseAddress, $0.count) }
+        syncContent()
     }
 
     func setFacet(_ id: String, _ value: String?) {

@@ -21,11 +21,13 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
     var availableCopies: Int
     var totalCopies: Int
     var onOrderCopies: Int
+    /// The library's own format code; `format` may refine it (4K filed as Blu-ray).
+    var libraryFormat: String
 
     private enum CodingKeys: String, CodingKey {
         case id, title, subtitle, authors, format, publicationDate, edition, callNumber, summary
         case jacketSmall, jacketLarge, materialType, holdable, status
-        case heldCopies, availableCopies, totalCopies, onOrderCopies
+        case heldCopies, availableCopies, totalCopies, onOrderCopies, libraryFormat
     }
 
     /// Decodes a bib from a drag-and-drop transfer. A malformed jacket URL
@@ -50,6 +52,7 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
         availableCopies = try c.decodeIfPresent(Int.self, forKey: .availableCopies) ?? 0
         totalCopies = try c.decodeIfPresent(Int.self, forKey: .totalCopies) ?? 0
         onOrderCopies = try c.decodeIfPresent(Int.self, forKey: .onOrderCopies) ?? 0
+        libraryFormat = try c.decodeIfPresent(String.self, forKey: .libraryFormat) ?? format
     }
 
     /// Minimal bib for entries whose catalog record was not returned (e.g. old history rows).
@@ -64,6 +67,7 @@ nonisolated struct Bib: Identifiable, Hashable, Sendable, Codable {
         availableCopies = 0
         totalCopies = 0
         onOrderCopies = 0
+        libraryFormat = format
     }
 
     var fullTitle: String {

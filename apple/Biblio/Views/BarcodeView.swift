@@ -92,8 +92,9 @@ struct BarcodeWithPicker: View {
     }
 }
 
+#if os(iOS)
 /// A toolbar button that shows the library card's barcode, for scanning at the library:
-/// a popover on macOS and iPad, a sheet on iPhone.
+/// a popover on iPad, a sheet on iPhone.
 struct LibraryCardButton: View {
     @Bindable var session: WindowSession
     @Environment(\.isShort) private var isShort
@@ -118,8 +119,8 @@ struct LibraryCardButton: View {
     }
 }
 
-/// The library cards of the current card's library, its login first. On iOS and iPadOS, swipe
-/// left or right to rotate between them; macOS shows only the current card.
+/// The library cards of the current card's library, its login first; swipe left or right to
+/// rotate between them.
 struct LibraryCardPager: View {
     var current: CardInfo
     @State private var selection: String
@@ -131,19 +132,14 @@ struct LibraryCardPager: View {
 
     /// The remembered card of every login at the library, the current one first.
     private var cards: [CardInfo] {
-        #if os(iOS)
         let store = LibraryStore.shared
         let others = (store.library(current.subdomain)?.users ?? [])
             .compactMap { store.cards[CardInfo.id(subdomain: current.subdomain, username: $0)] }
             .filter { $0.id != current.id }
         return [current] + others
-        #else
-        [current]
-        #endif
     }
 
     var body: some View {
-        #if os(iOS)
         let cards = cards
         TabView(selection: $selection) {
             ForEach(cards) { card in
@@ -152,9 +148,6 @@ struct LibraryCardPager: View {
         }
         .tabViewStyle(.page(indexDisplayMode: cards.count > 1 ? .always : .never))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
-        #else
-        page(current)
-        #endif
     }
 
     private func page(_ card: CardInfo) -> some View {
@@ -176,3 +169,4 @@ struct LibraryCardPager: View {
         .padding(.bottom, 24)
     }
 }
+#endif

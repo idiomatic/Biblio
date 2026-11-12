@@ -25,12 +25,21 @@ struct ItemDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 if cards == nil, let status = session.accountStatus(for: bib.id) {
-                    AccountStatusTag(status: status)
+                    AccountStatusTag(status: status, hold: session.hold(for: bib.id))
                 }
                 if let cards {
                     CardsHoldSection(combined: cards, bib: bib)
+                    ForEach(cards.borrowed(for: bib), id: \.login) { mark in
+                        HStack(spacing: 6) {
+                            CardChip(style: cards.style(mark.login), size: 16)
+                            BorrowedLine(match: mark.match, library: session.library)
+                        }
+                    }
                 } else {
                     holdSection
+                    if let borrowed = session.borrowed.match(bib) {
+                        BorrowedLine(match: borrowed, library: session.library)
+                    }
                 }
                 if let summary = bib.summary {
                     Text(summary)
@@ -75,22 +84,25 @@ struct ItemDetailView: View {
                     .font(.title2.weight(.semibold))
                     .textSelection(.enabled)
                 if let subtitle = bib.subtitle {
-                    Text(subtitle).font(.headline).foregroundStyle(.secondary)
+                    // Regular weight, as in the list: a subtitle, not a second title.
+                    Text(subtitle).font(.headline.weight(.regular)).foregroundStyle(.secondary)
                 }
                 ForEach(bib.authors.prefix(3), id: \.self) { author in
                     Button(author) { session.runSearch("contributor:(\(author))", searchType: "bl") }
                         .buttonStyle(.borderless)
                         .help("Search for this author")
                 }
-                Label(session.library.formatName(bib.format), systemImage: "square.stack")
-                    .font(.subheadline)
-                if let year = bib.displayDate {
-                    Text(year).font(.subheadline).foregroundStyle(.secondary)
+                // Format, year, and edition, in the list row's style but a line each, using the room
+                // beside the cover. The brief record keeps only the first edition statement; the full
+                // record has them all.
+                let edition = fields.first(where: { $0.label == "Edition" })?.values.joined(separator: " · ") ?? bib.edition
+                ForEach([session.library.formatName(bib.format), bib.displayDate, edition]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }, id: \.self) { line in
+                    Text(line)
                 }
-                // The brief record keeps only the first edition statement; the full record has them all.
-                if let edition = fields.first(where: { $0.label == "Edition" })?.values.joined(separator: " · ") ?? bib.edition {
-                    Text(edition).font(.caption).foregroundStyle(.secondary)
-                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
         }
     }

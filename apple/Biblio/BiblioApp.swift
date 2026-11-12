@@ -18,12 +18,6 @@ struct BiblioApp: App {
         #if os(macOS)
         .defaultSize(width: 1180, height: 760)
         #endif
-
-        #if os(macOS)
-        Settings {
-            SettingsWindow()
-        }
-        #endif
     }
 }
 
@@ -183,7 +177,6 @@ struct WindowRoot: View {
         }
         for s in sessions { s.windowActions = windowActions }
         if let first = sessions.first, let previous, first !== previous { first.continueBrowsing(from: previous) }
-        for old in existing.values where !sessions.contains(where: { $0 === old }) { SessionRegistry.shared.unregister(old) }
         openUser = users.isEmpty ? "" : ordered.joined(separator: "\n")
         LibraryStore.shared.noteScope(subdomain: library.subdomain, usernames: ordered)
         // The card last used stays the one the barcode shows, if it is still here.
@@ -210,7 +203,6 @@ struct WindowRoot: View {
             session = sessions[0]
             combined = nil
         }
-        for s in sessions { SessionRegistry.shared.register(s) }
     }
 
     /// Changes the window's cards in place.
@@ -244,6 +236,8 @@ struct WindowRoot: View {
         // Leave the removed card's page.
         if case .account(user)? = session?.section { session?.section = nil }
         if case .account(user)? = combined?.section { combined?.section = nil }
+        // Its borrowing history goes too, and a sync still running mustn't save it again.
+        for s in combined?.sessions ?? (session.map { [$0] } ?? []) where s.username == user { s.borrowed.clear() }
         LibraryStore.shared.removeUser(user, from: subdomain)
         if scope.contains(user) {
             if remaining.isEmpty { leaveForMenus() } else { setScope(remaining) }
@@ -317,7 +311,6 @@ struct WindowRoot: View {
     private func releaseLogin() {
         for s in combined?.sessions ?? (session.map { [$0] } ?? []) {
             ClientPool.shared.release(subdomain: s.library.subdomain, username: s.username, window: windowID)
-            SessionRegistry.shared.unregister(s)
         }
         combined = nil
         session = nil

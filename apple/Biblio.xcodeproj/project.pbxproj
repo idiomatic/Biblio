@@ -37,7 +37,7 @@
 
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* Biblio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Biblio.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000000000000000000021 /* BiblioCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BiblioCore.xcframework; path = build/BiblioCore.xcframework; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000021 /* BiblioCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BiblioCore.xcframework; path = "zig-out/BiblioCore.xcframework"; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000031 /* BiblioControls.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BiblioControls.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -223,7 +223,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/build-core.sh\"\n";
+			shellScript = "cd \"$SRCROOT\" && \"${ZIG:-$(command -v zig || echo /opt/homebrew/bin/zig)}\" build\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

@@ -100,7 +100,7 @@ final class WindowSession {
     var loginError: String?
     /// Whether the library card barcode is showing; the Lock Screen control sets it.
     var showingLibraryCard = false
-    /// What the window's Settings can do beyond editing the account; set by the window's root.
+    /// What a card's page can do beyond editing the account; set by the window's root.
     var windowActions: WindowActions?
     /// Switching sections closes the inspector and clears its item, which belonged to the old list.
     var section: AppSection? = .search {
@@ -129,6 +129,8 @@ final class WindowSession {
     let holdsList: ItemListModel
     let checkoutsList: ItemListModel
     let historyList: ItemListModel
+    /// What this card borrowed before, from its borrowing history.
+    let borrowed: BorrowedIndex
     var locations: [Location] = []
 
     struct Banner: Identifiable, Equatable {
@@ -147,6 +149,7 @@ final class WindowSession {
         holdsList = ItemListModel(client: client, source: .holds)
         checkoutsList = ItemListModel(client: client, source: .checkouts)
         historyList = ItemListModel(client: client, source: .history)
+        borrowed = BorrowedIndex(subdomain: library.subdomain, username: username)
     }
 
     var isGuest: Bool { username.isEmpty }
@@ -155,16 +158,8 @@ final class WindowSession {
     /// What the card is called in a window with several cards ("Hold for …"): the name the user
     /// gave it, else the library's first name for the account, else the first word of its name.
     var callName: String {
-        let chosen = LibraryStore.shared.look(subdomain: library.subdomain, username: username).name
-        if let chosen, !chosen.isEmpty { return chosen }
-        if let first = patron?.firstName, !first.isEmpty { return Self.tidied(first) }
-        let name = displayName
-        return Self.tidied(name.split(separator: " ").first.map(String.init) ?? name)
-    }
-
-    /// A name a library keeps in capitals (or all lowercase) reads as a name; mixed case is left alone.
-    static func tidied(_ name: String) -> String {
-        name == name.uppercased() || name == name.lowercased() ? name.capitalized : name
+        LibraryStore.shared.callName(subdomain: library.subdomain, username: username,
+                                     firstName: patron?.firstName, name: patron?.name)
     }
 
     func start() async {
@@ -180,6 +175,8 @@ final class WindowSession {
             holdsList.loadIfNeeded()
             checkoutsList.loadIfNeeded()
             if locations.isEmpty { locations = (try? await client.locations()) ?? [] }
+            // After the other launch requests: holds and search mark what was borrowed before.
+            borrowed.start(client: client, historyEnabled: patron?.borrowingHistoryEnabled)
         } catch {
             loginError = error.localizedDescription
         }
@@ -372,6 +369,13 @@ final class WindowSession {
     func refreshPatron() async {
         patron = await client.patron
         rememberCard()
+        if patron?.borrowingHistoryEnabled == false { borrowed.clear() }
+    }
+
+    /// After the account lists refresh: brings what was borrowed before up to date too.
+    func syncBorrowed() {
+        guard !isGuest, patron?.borrowingHistoryEnabled != false else { return }
+        borrowed.sync(client: client)
     }
 
     /// Keeps this user's card for the card view's rotation between logins.

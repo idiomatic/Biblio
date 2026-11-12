@@ -18,7 +18,7 @@ struct AddAnotherCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             if let addAnother {
-                Button("Add Another Card…") { addAnother.perform() }
+                Button("Add Another Card…", systemImage: "person.crop.circle.badge.plus") { addAnother.perform() }
             }
         }
     }
@@ -30,7 +30,7 @@ struct RefreshCommands: Commands {
 
     var body: some Commands {
         CommandGroup(before: .sidebar) {
-            Button("Refresh") { refresh?.perform() }
+            Button("Refresh", systemImage: "arrow.clockwise") { refresh?.perform() }
                 .keyboardShortcut("r")
                 .disabled(refresh == nil)
             Divider()
@@ -50,9 +50,6 @@ struct MainView: View {
     /// Which column a compact window shows; a scope change reopens on the sidebar it came from.
     @State private var preferredColumn: NavigationSplitViewColumn
     @State private var holdsDropTargeted = false
-    #if os(macOS)
-    @Environment(\.controlActiveState) private var controlActiveState
-    #endif
 
     init(session: WindowSession, scope: CardScope?, signOut: @escaping () -> Void, signIn: @escaping (String) -> Void,
          startOnSidebar: Bool = false) {
@@ -65,15 +62,6 @@ struct MainView: View {
 
     var body: some View {
         content
-            #if os(macOS)
-            // The Settings window edits the account of whichever window was last in front.
-            .onChange(of: controlActiveState, initial: true) { _, state in
-                if state == .key { SessionRegistry.shared.activate(session) }
-            }
-            .onChange(of: ObjectIdentifier(session)) {
-                if controlActiveState == .key { SessionRegistry.shared.activate(session) }
-            }
-            #endif
     }
 
     // A guest signing in swaps the session. On macOS the split view stays (replacing it leaves
@@ -107,6 +95,7 @@ struct MainView: View {
         .navigationSubtitle(session.displayName)
         #endif
         .task(id: ObjectIdentifier(session)) { await session.start() }
+        .environment(\.borrowedIndex, session.isGuest ? nil : session.borrowed)
         .focusedSceneValue(\.addAnother, session.isGuest ? nil
                            : session.windowActions.map { RefreshAction(perform: $0.addCard) })
         .sheet(isPresented: $session.showingSignIn, onDismiss: session.signInDismissed) {
@@ -140,12 +129,12 @@ struct MainView: View {
             if let scope, !session.isGuest {
                 CardsSection(scope: scope)
             }
-            Section("Catalog") {
+            Section("Catalog", isExpanded: LibraryStore.shared.sidebarSection("Catalog", in: session.library.subdomain)) {
                 sidebarRow(.search)
                 sidebarRow(.newTitles)
             }
             if !session.isGuest {
-                Section("My Library") {
+                Section("My Library", isExpanded: LibraryStore.shared.sidebarSection("My Library", in: session.library.subdomain)) {
                     sidebarRow(.holds)
                         .onDrop(of: [.biblioItem], isTargeted: $holdsDropTargeted) { providers in
                             BibTransfer.load(from: providers) { item in Task { await session.placeHold(item) } }
@@ -155,7 +144,7 @@ struct MainView: View {
                     sidebarRow(.history)
                 }
             }
-            // Account settings live in the Settings window (⌘,) on macOS, a sidebar row on iOS, and
+            // Account settings live on each card's page (the Cards rows), and
             // a guest signs in from the toolbar.
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { VersionLabel() }
@@ -164,14 +153,14 @@ struct MainView: View {
         .navigationSplitViewColumnWidth(min: 190, ideal: 220)
         .toolbar {
             ToolbarItem(placement: .navigation) { LibrariesBackButton(action: signOut) }
-            ToolbarItem {
-                if session.isGuest {
+            // No library card button: nobody brings a Mac to the checkout desk, and each card's
+            // page shows its barcode.
+            if session.isGuest {
+                ToolbarItem {
                     Button(action: session.requestSignIn) {
                         Label("Sign In", systemImage: "person.crop.circle")
                     }
                     .help("Sign in to place holds and see your account")
-                } else {
-                    LibraryCardButton(session: session)
                 }
             }
         }
@@ -191,8 +180,12 @@ struct MainView: View {
 
     private func sidebarRow(_ section: AppSection) -> some View {
         NavigationLink(value: section) {
-            Label(section.title, systemImage: section.systemImage)
-                .badge(badge(for: section))
+            if section == .history {
+                HistorySidebarLabel(indexes: [session.borrowed])
+            } else {
+                Label(section.title, systemImage: section.systemImage)
+                    .badge(badge(for: section))
+            }
         }
     }
 
@@ -213,11 +206,10 @@ struct MainView: View {
         case .checkouts: BorrowingListView(session: session, section: .checkouts)
         case .history: BorrowingListView(session: session, section: .history)
         case .account(let user):
-            if user == session.username || scope == nil {
-                AccountView(session: session)
-            } else if let scope {
-                InactiveCardView(scope: scope, user: user) { session.windowActions?.removeCard($0) }
-            }
+            // One view whether the card is on or off, so switching it keeps the page (and its scroll).
+            AccountView(library: session.library, username: user, session: user == session.username ? session : nil,
+                        actions: session.windowActions, isBusy: scope?.isBusy(user) ?? false)
+                .id(user)
         }
     }
 }

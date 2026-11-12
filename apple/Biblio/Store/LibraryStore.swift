@@ -95,6 +95,8 @@ nonisolated struct CardInfo: Identifiable, Hashable, Codable, Sendable {
     var name: String
     var library: String
     var barcode: String
+    /// The first name in the library's contact record, if it gave one.
+    var firstName: String?
 
     var id: String { Self.id(subdomain: subdomain, username: username) }
 
@@ -104,15 +106,16 @@ nonisolated struct CardInfo: Identifiable, Hashable, Codable, Sendable {
     init?(library: LibraryInfo, username: String, patron: Patron) {
         guard let barcode = patron.barcode else { return nil }
         self.init(subdomain: library.subdomain, username: username, name: patron.name,
-                  library: library.shortName ?? library.name, barcode: barcode)
+                  library: library.shortName ?? library.name, barcode: barcode, firstName: patron.firstName)
     }
 
-    init(subdomain: String, username: String, name: String, library: String, barcode: String) {
+    init(subdomain: String, username: String, name: String, library: String, barcode: String, firstName: String? = nil) {
         self.subdomain = subdomain
         self.username = username
         self.name = name
         self.library = library
         self.barcode = barcode
+        self.firstName = firstName
     }
 }
 
@@ -133,8 +136,11 @@ final class LibraryStore {
     /// The cards each library's window last showed, so reopening it picks up where it was left.
     private(set) var scopes: [String: [String]] = [:]
     private let sectionsKey = "lastSections.v1"
+    private let collapsedKey = "collapsedSidebarSections.v1"
     /// The sidebar item each library last had selected, as JSON.
     private var sections: [String: String] = [:]
+    /// The sidebar sections collapsed in each library's windows ("Cards", "Catalog", "My Library").
+    private var collapsed: [String: [String]] = [:]
 
     /// The remembered library cards, by `CardInfo.id`, kept in the Keychain.
     private(set) var cards: [String: CardInfo] = [:]
@@ -163,6 +169,7 @@ final class LibraryStore {
         UserDefaults.standard.removeObject(forKey: "cards.v1")
         scopes = UserDefaults.standard.dictionary(forKey: scopesKey) as? [String: [String]] ?? [:]
         sections = UserDefaults.standard.dictionary(forKey: sectionsKey) as? [String: String] ?? [:]
+        collapsed = UserDefaults.standard.dictionary(forKey: collapsedKey) as? [String: [String]] ?? [:]
         if let data = UserDefaults.standard.data(forKey: looksKey),
            let saved = try? JSONDecoder().decode([String: CardLook].self, from: data) { looks = saved }
         if let pair = UserDefaults.standard.stringArray(forKey: lastLoginKey), pair.count == 2 {
@@ -189,6 +196,23 @@ final class LibraryStore {
         UserDefaults.standard.set(scopes, forKey: scopesKey)
     }
 
+    /// What a card is called (its name in the sidebar and "Hold for …", and its chip's initial):
+    /// the name chosen in its Appearance, else the library's first name for the account, else the
+    /// first word of the account's name, else the username. `firstName` and `name` are the signed-in
+    /// patron's, when there is one; otherwise those remembered with the card.
+    func callName(subdomain: String, username: String, firstName: String? = nil, name: String? = nil) -> String {
+        if let chosen = look(subdomain: subdomain, username: username).name, !chosen.isEmpty { return chosen }
+        let card = cards[CardInfo.id(subdomain: subdomain, username: username)]
+        if let first = firstName ?? card?.firstName, !first.isEmpty { return Self.tidied(first) }
+        let full = name ?? card?.name ?? username
+        return Self.tidied(full.split(separator: " ").first.map(String.init) ?? full)
+    }
+
+    /// A name a library keeps in capitals (or all lowercase) reads as a name; mixed case is left alone.
+    static func tidied(_ name: String) -> String {
+        name == name.uppercased() || name == name.lowercased() ? name.capitalized : name
+    }
+
     func look(subdomain: String, username: String) -> CardLook {
         looks[CardInfo.id(subdomain: subdomain, username: username)] ?? CardLook()
     }
@@ -204,6 +228,16 @@ final class LibraryStore {
               sections[subdomain] != text else { return }
         sections[subdomain] = text
         UserDefaults.standard.set(sections, forKey: sectionsKey)
+    }
+
+    /// Whether a sidebar section is expanded in this library's windows; all start expanded.
+    func sidebarSection(_ name: String, in subdomain: String) -> Binding<Bool> {
+        Binding(get: { !(self.collapsed[subdomain] ?? []).contains(name) }, set: { expanded in
+            var names = (self.collapsed[subdomain] ?? []).filter { $0 != name }
+            if !expanded { names.append(name) }
+            self.collapsed[subdomain] = names.isEmpty ? nil : names
+            UserDefaults.standard.set(self.collapsed, forKey: self.collapsedKey)
+        })
     }
 
     func section(for subdomain: String) -> AppSection? {
@@ -248,6 +282,7 @@ final class LibraryStore {
     func remove(_ subdomain: String) {
         for user in library(subdomain)?.users ?? [] {
             Keychain.delete(subdomain: subdomain, username: user)
+            BorrowedIndex.deleteFile(subdomain: subdomain, username: user)
         }
         libraries.removeAll { $0.subdomain == subdomain }
         cards = cards.filter { $0.value.subdomain != subdomain }
@@ -264,6 +299,7 @@ final class LibraryStore {
     func removeUser(_ username: String, from subdomain: String) {
         guard let i = libraries.firstIndex(where: { $0.subdomain == subdomain }) else { return }
         Keychain.delete(subdomain: subdomain, username: username)
+        BorrowedIndex.deleteFile(subdomain: subdomain, username: username)
         libraries[i].users.removeAll { $0 == username }
         cards[CardInfo.id(subdomain: subdomain, username: username)] = nil
         setLook(CardLook(), subdomain: subdomain, username: username)

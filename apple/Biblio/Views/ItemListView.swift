@@ -76,12 +76,13 @@ struct ItemListView<Header: View>: View {
         }
         #endif
         .task { model.loadIfNeeded() }
+        .onChange(of: holdsBorrowedIndexes.map(\.generation)) { model.notBorrowedChanged() }
         // A list left open while the app was in the background may have gone stale.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.loadIfNeeded() }
         }
         .toolbar {
-            ListControls(model: model, library: session.library)
+            ListControls(model: model, library: session.library, borrowed: holdsBorrowedIndexes)
             #if os(macOS)
             ToolbarItem { InspectorToggle(session: session) }
             #endif
@@ -184,10 +185,17 @@ struct ItemListView<Header: View>: View {
         if let cards { await cards.placeHolds(bibs, target: .auto) } else { await session.placeHolds(bibs) }
     }
 
+    /// The indexes the holds list's "Not Borrowed" filter uses.
+    private var holdsBorrowedIndexes: [BorrowedIndex] {
+        guard model.source == .holds, !session.isGuest else { return [] }
+        return cards?.borrowedIndexes ?? [session.borrowed]
+    }
+
     /// Reloads the list and the open item's details, which may have changed with it.
     private func refresh() async {
         session.detailsRevision += 1
         await model.refresh()
+        if !model.source.isSearch { session.syncBorrowed() }
     }
 
     private func endSelecting() {
@@ -308,6 +316,14 @@ private struct ListRow: View {
     var library: LibraryInfo
     var isSelected: Bool
     var confirmCancel: (Hold) -> Void
+    @Environment(\.combinedHolds) private var cards
+
+    /// The status that tints the row: the first card's, in a window with several cards.
+    private var tint: AccountStatus? {
+        guard let entry = row.entry else { return nil }
+        if let cards, entry.kind == .catalog { return cards.statuses(for: entry.bib.id).first?.status }
+        return entry.accountStatus
+    }
 
     // Every row has the same shape and modifiers (items and placeholders alike), so SwiftUI
     // can identify the rows of a long list cheaply.
@@ -322,7 +338,7 @@ private struct ListRow: View {
         .selectionDisabled(row.entry == nil)
 
         // Tint by this account's status; selected rows keep the system highlight.
-        .listRowBackground(isSelected ? nil : row.entry?.accountStatus.map { StatusColors.account($0).opacity(0.08) })
+        .listRowBackground(isSelected ? nil : tint.map { StatusColors.account($0).opacity(0.08) })
         .onAppear {
             switch row {
             case .item(let entry): model.itemAppeared(entry)
@@ -353,6 +369,10 @@ extension ItemListModel.Row {
 struct ListControls: ToolbarContent {
     var model: ItemListModel
     var library: LibraryInfo
+    /// The cards' indexes for the "Not Borrowed" filter (holds); none hides it.
+    var borrowed: [BorrowedIndex] = []
+
+    private var filtered: Bool { model.format != nil || !model.notBorrowed.isEmpty }
 
     var body: some ToolbarContent {
         ToolbarItemGroup {
@@ -365,11 +385,16 @@ struct ListControls: ToolbarContent {
                     }
                 }
                 .pickerStyle(.inline)
+                if !borrowed.isEmpty, borrowed.allSatisfy(\.isComplete) || !model.notBorrowed.isEmpty {
+                    Divider()
+                    Toggle("Not Borrowed", isOn: Binding(get: { !model.notBorrowed.isEmpty },
+                                                         set: { model.setNotBorrowed($0 ? borrowed : []) }))
+                }
             } label: {
-                Label("Format", systemImage: model.format == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                Label("Format", systemImage: filtered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
             }
             .help("Filter by format")
-            .disabled(model.formatChoices.isEmpty && model.format == nil)
+            .disabled(model.formatChoices.isEmpty && model.format == nil && borrowed.isEmpty)
             }
 
             Menu {
@@ -395,25 +420,38 @@ struct ListControls: ToolbarContent {
 struct ItemRow: View {
     var entry: ListEntry
     var library: LibraryInfo
+    /// In a window with several cards, a catalog row marks each card's hold or checkout.
+    @Environment(\.combinedHolds) private var cards
+    @Environment(\.borrowedIndex) private var borrowedIndex
 
     private var bib: Bib { entry.bib }
+
+    /// Borrowed before (catalog and hold rows): by any card in a window with several.
+    private var borrowed: BorrowedIndex.Match? {
+        switch entry.kind {
+        case .catalog, .hold: break
+        case .checkout, .history: return nil
+        }
+        if let cards { return cards.borrowed(for: bib).first?.match }
+        return borrowedIndex?.match(bib)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             CoverImage(url: bib.jacketSmall, format: bib.format)
-                .frame(width: 48, height: 68)
+                .frame(width: 56, height: 80)
             VStack(alignment: .leading, spacing: 3) {
                 Text(bib.title)
                     .font(.headline)
                     .lineLimit(2)
                 if let subtitle = bib.subtitle {
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
                 }
                 if let author = bib.primaryAuthor {
-                    Text(author).font(.subheadline).lineLimit(1)
+                    Text(author).font(.callout).lineLimit(1)
                 }
                 Text(details)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 status
@@ -436,14 +474,28 @@ struct ItemRow: View {
     private var status: some View {
         switch entry.kind {
         case .catalog:
-            AvailabilityBadge(bib: bib)
-            if let status = entry.catalogStatus { AccountStatusTag(status: status) }
+            AvailabilityBadge(bib: bib, borrowed: borrowed.map { BorrowedMark(match: $0, library: library) })
+            if let cards {
+                let marks = cards.statuses(for: bib.id)
+                if !marks.isEmpty {
+                    WrapLayout(spacing: 6, lineSpacing: 2) {
+                        ForEach(marks, id: \.login) { mark in
+                            HStack(spacing: 4) {
+                                CardChip(style: cards.style(mark.login), size: 16)
+                                AccountStatusTag(status: mark.status, hold: cards.sessions[mark.login].hold(for: bib.id))
+                            }
+                        }
+                    }
+                }
+            } else if let status = entry.catalogStatus {
+                AccountStatusTag(status: status, hold: entry.catalogHold)
+            }
         case .hold(let h):
+            // As a catalog row: the title's availability, then the hold, as item detail shows them.
+            AvailabilityBadge(bib: bib, borrowed: borrowed.map { BorrowedMark(match: $0, library: library) })
             // Items wrap onto further lines on a narrow screen instead of squeezing each other.
             WrapLayout(spacing: 6, lineSpacing: 2) {
-                HoldStatusBadge(hold: h).fixedSize()
-                OnOrderNote(bib: bib)
-                if let p = h.position { Text("#\(p) in line").foregroundStyle(.secondary).fixedSize() }
+                AccountStatusTag(status: .onHold(ready: h.status == "READY_FOR_PICKUP", position: h.position), hold: h)
                 if let loc = h.pickupLocation {
                     HStack(spacing: 2) {
                         Image(systemName: "mappin").imageScale(.small)
@@ -452,19 +504,19 @@ struct ItemRow: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .font(.caption)
+            .font(.callout)
         case .checkout(let c):
             if let due = c.dueDate {
                 HStack(spacing: 4) {
                     Image(systemName: "calendar").imageScale(.small)
                     Text("Due \(DateText.format(due))")
                 }
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(DateText.isPast(due) ? .red : .secondary)
             }
         case .history(let h):
             if let d = h.checkoutDate ?? h.returnedDate {
-                Text("Borrowed \(DateText.format(d))").font(.caption).foregroundStyle(.secondary)
+                Text("Borrowed \(DateText.format(d))").font(.callout).foregroundStyle(.secondary)
             }
         }
     }
@@ -517,11 +569,11 @@ struct PlaceholderRow: View {
         HStack(alignment: .top, spacing: 12) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(.quaternary)
-                .frame(width: 48, height: 68)
+                .frame(width: 56, height: 80)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Loading title placeholder").font(.headline)
-                Text("Author name").font(.subheadline)
-                Text("Format · 2000").font(.caption)
+                Text("Author name").font(.callout)
+                Text("Format · 2000").font(.callout)
             }
             .redacted(reason: .placeholder)
             Spacer(minLength: 0)
@@ -533,6 +585,8 @@ struct PlaceholderRow: View {
 
 struct AvailabilityBadge: View {
     var bib: Bib
+    /// A list row's "borrowed before" mark, last on the line.
+    var borrowed: BorrowedMark? = nil
 
     var body: some View {
         // The pieces wrap as whole items on a narrow screen.
@@ -558,8 +612,9 @@ struct AvailabilityBadge: View {
                 .foregroundStyle(.secondary)
                 .fixedSize()
             }
+            if let borrowed { borrowed }
         }
-        .font(.caption)
+        .font(.callout)
         .labelStyle(.titleAndIcon)
     }
 
@@ -604,21 +659,6 @@ struct OnOrderNote: View {
         if bib.status == "ON_ORDER" { return "On order" }
         if bib.onOrderCopies > 0 { return "\(bib.onOrderCopies) on order" }
         return nil
-    }
-}
-
-struct HoldStatusBadge: View {
-    var hold: Hold
-
-    var body: some View {
-        let (text, color): (String, Color) = switch hold.status {
-        case "READY_FOR_PICKUP": ("Ready for pickup" + (hold.pickupByDate.map { " by \(DateText.format($0))" } ?? ""), .green)
-        case "IN_TRANSIT": ("In transit", .orange)
-        case "SUSPENDED": ("Paused", .secondary)
-        case "NOT_YET_AVAILABLE": ("Not yet available", .secondary)
-        default: (hold.status.prettified, .secondary)
-        }
-        Text(text).foregroundStyle(color).fontWeight(hold.status == "READY_FOR_PICKUP" ? .semibold : .regular)
     }
 }
 
