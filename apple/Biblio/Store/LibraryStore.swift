@@ -78,6 +78,15 @@ private nonisolated final class DisplayNames: @unchecked Sendable {
     }
 }
 
+/// A card's chosen color (a palette index) and monogram; either is the default until chosen.
+nonisolated struct CardLook: Codable, Hashable, Sendable {
+    var color: Int?
+    var monogram: String?
+    /// What the card is called in "Hold for …", instead of the library's first name.
+    var name: String?
+    var isDefault: Bool { color == nil && monogram == nil && name == nil }
+}
+
 /// A signed-in user's library card, remembered from the last sign-in so the cards can be
 /// shown, and rotated between, without signing in to each.
 nonisolated struct CardInfo: Identifiable, Hashable, Codable, Sendable {
@@ -115,6 +124,17 @@ final class LibraryStore {
     private(set) var libraries: [LibraryInfo] = []
     private let key = "libraries.v1"
     private let lastLoginKey = "lastLogin.v1"
+    private let scopesKey = "lastScopes.v1"
+    private let looksKey = "cardLooks.v1"
+
+    /// The colors and monograms the user chose for cards, by `CardInfo.id`.
+    private(set) var looks: [String: CardLook] = [:]
+
+    /// The cards each library's window last showed, so reopening it picks up where it was left.
+    private(set) var scopes: [String: [String]] = [:]
+    private let sectionsKey = "lastSections.v1"
+    /// The sidebar item each library last had selected, as JSON.
+    private var sections: [String: String] = [:]
 
     /// The remembered library cards, by `CardInfo.id`, kept in the Keychain.
     private(set) var cards: [String: CardInfo] = [:]
@@ -141,6 +161,10 @@ final class LibraryStore {
         }
         // Prerelease builds kept the cards in the defaults.
         UserDefaults.standard.removeObject(forKey: "cards.v1")
+        scopes = UserDefaults.standard.dictionary(forKey: scopesKey) as? [String: [String]] ?? [:]
+        sections = UserDefaults.standard.dictionary(forKey: sectionsKey) as? [String: String] ?? [:]
+        if let data = UserDefaults.standard.data(forKey: looksKey),
+           let saved = try? JSONDecoder().decode([String: CardLook].self, from: data) { looks = saved }
         if let pair = UserDefaults.standard.stringArray(forKey: lastLoginKey), pair.count == 2 {
             lastLogin = (pair[0], pair[1])
         }
@@ -158,8 +182,44 @@ final class LibraryStore {
         UserDefaults.standard.set([subdomain, username], forKey: lastLoginKey)
     }
 
+    /// Remembers the cards a window shows for a library (a guest's none is not remembered).
+    func noteScope(subdomain: String, usernames: [String]) {
+        guard !usernames.isEmpty, scopes[subdomain] != usernames else { return }
+        scopes[subdomain] = usernames
+        UserDefaults.standard.set(scopes, forKey: scopesKey)
+    }
+
+    func look(subdomain: String, username: String) -> CardLook {
+        looks[CardInfo.id(subdomain: subdomain, username: username)] ?? CardLook()
+    }
+
+    func setLook(_ look: CardLook, subdomain: String, username: String) {
+        let id = CardInfo.id(subdomain: subdomain, username: username)
+        if look.isDefault { looks[id] = nil } else { looks[id] = look }
+        if let data = try? JSONEncoder().encode(looks) { UserDefaults.standard.set(data, forKey: looksKey) }
+    }
+
+    func noteSection(_ section: AppSection, for subdomain: String) {
+        guard let data = try? JSONEncoder().encode(section), let text = String(data: data, encoding: .utf8),
+              sections[subdomain] != text else { return }
+        sections[subdomain] = text
+        UserDefaults.standard.set(sections, forKey: sectionsKey)
+    }
+
+    func section(for subdomain: String) -> AppSection? {
+        sections[subdomain].flatMap { $0.data(using: .utf8) }.flatMap { try? JSONDecoder().decode(AppSection.self, from: $0) }
+    }
+
     func library(_ subdomain: String) -> LibraryInfo? {
         libraries.first { $0.subdomain == subdomain }
+    }
+
+    var isSoleLogin: Bool { soleLogin != nil }
+
+    /// The one library and user when that is all there is; the app then skips its menus.
+    var soleLogin: (library: LibraryInfo, username: String)? {
+        guard libraries.count == 1, let library = libraries.first, library.users.count == 1 else { return nil }
+        return (library, library.users[0])
     }
 
     /// The barcode type shown for the library's cards.
@@ -206,6 +266,7 @@ final class LibraryStore {
         Keychain.delete(subdomain: subdomain, username: username)
         libraries[i].users.removeAll { $0 == username }
         cards[CardInfo.id(subdomain: subdomain, username: username)] = nil
+        setLook(CardLook(), subdomain: subdomain, username: username)
         save()
     }
 

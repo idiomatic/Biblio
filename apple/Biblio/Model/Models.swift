@@ -218,4 +218,6 @@ nonisolated struct Patron: Hashable, Sendable {
     var preferredPickup: String?
     /// Whether the library keeps this account's borrowing history; nil if it didn't say.
     var borrowingHistoryEnabled: Bool?
+    /// The first name in the library's contact record for the account, if it has one.
+    var firstName: String? = nil
 }

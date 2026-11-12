@@ -7,7 +7,23 @@ struct RefreshAction {
 
 extension FocusedValues {
     @Entry var refreshList: RefreshAction?
+    /// Set in a window whose only login lets it add another card or library.
+    @Entry var addAnother: RefreshAction?
 }
+
+#if os(macOS)
+struct AddAnotherCommands: Commands {
+    @FocusedValue(\.addAnother) private var addAnother
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            if let addAnother {
+                Button("Add Another Card…") { addAnother.perform() }
+            }
+        }
+    }
+}
+#endif
 
 struct RefreshCommands: Commands {
     @FocusedValue(\.refreshList) private var refresh
@@ -24,15 +40,28 @@ struct RefreshCommands: Commands {
 
 struct MainView: View {
     @Bindable var session: WindowSession
+    /// The library's cards, when it has two or more.
+    var scope: CardScope?
     var signOut: () -> Void
     /// Switches this guest window to a signed-in user.
     var signIn: (String) -> Void
 
     @State private var columnVisibility = NavigationSplitViewVisibility.automatic
+    /// Which column a compact window shows; a scope change reopens on the sidebar it came from.
+    @State private var preferredColumn: NavigationSplitViewColumn
     @State private var holdsDropTargeted = false
     #if os(macOS)
     @Environment(\.controlActiveState) private var controlActiveState
     #endif
+
+    init(session: WindowSession, scope: CardScope?, signOut: @escaping () -> Void, signIn: @escaping (String) -> Void,
+         startOnSidebar: Bool = false) {
+        self.session = session
+        self.scope = scope
+        self.signOut = signOut
+        self.signIn = signIn
+        _preferredColumn = State(initialValue: startOnSidebar ? .sidebar : .detail)
+    }
 
     var body: some View {
         content
@@ -51,7 +80,7 @@ struct MainView: View {
     // the window's toolbar without its sidebar section), and only the detail and inspector,
     // which keep per-session state, start afresh.
     private var content: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $preferredColumn) {
             sidebar
         } detail: {
             NavigationStack {
@@ -72,12 +101,14 @@ struct MainView: View {
             #endif
         }
         .overlay(alignment: .bottom) { BannerView(session: session) }
-        .safeAreaInset(edge: .bottom, spacing: 0) { StatusBar(status: session.client.status) }
+        .modifier(StatusBarPlacement(status: session.client.status))
         .navigationTitle(session.library.shortName ?? session.library.name)
         #if os(macOS)
         .navigationSubtitle(session.displayName)
         #endif
         .task(id: ObjectIdentifier(session)) { await session.start() }
+        .focusedSceneValue(\.addAnother, session.isGuest ? nil
+                           : session.windowActions.map { RefreshAction(perform: $0.addCard) })
         .sheet(isPresented: $session.showingSignIn, onDismiss: session.signInDismissed) {
             LoginPicker(library: session.library, signIn: signIn)
         }
@@ -106,6 +137,9 @@ struct MainView: View {
 
     private var sidebar: some View {
         List(selection: $session.section) {
+            if let scope, !session.isGuest {
+                CardsSection(scope: scope)
+            }
             Section("Catalog") {
                 sidebarRow(.search)
                 sidebarRow(.newTitles)
@@ -121,28 +155,15 @@ struct MainView: View {
                     sidebarRow(.history)
                 }
             }
-            // Account settings live in the Settings window (⌘,) on macOS, and a guest signs in
-            // from the toolbar.
-            #if os(iOS)
-            if !session.isGuest {
-                Section {
-                    NavigationLink(value: AppSection.account) {
-                        Label(session.displayName, systemImage: AppSection.account.systemImage)
-                    }
-                    .accessibilityHint(AppSection.account.title)
-                    Button(action: signOut) {
-                        Label("Switch User or Library", systemImage: "arrow.left.arrow.right")
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            #endif
+            // Account settings live in the Settings window (⌘,) on macOS, a sidebar row on iOS, and
+            // a guest signs in from the toolbar.
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { VersionLabel() }
         .navigationTitle(session.library.shortName ?? "Library")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 190, ideal: 220)
         .toolbar {
+            ToolbarItem(placement: .navigation) { LibrariesBackButton(action: signOut) }
             ToolbarItem {
                 if session.isGuest {
                     Button(action: session.requestSignIn) {
@@ -156,10 +177,10 @@ struct MainView: View {
         }
         #else
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) { LibrariesBackButton(action: signOut) }
             ToolbarItem(placement: .topBarTrailing) {
                 if session.isGuest {
-                    // Back to the library and user menu, to pick a user or another library.
-                    Button("Sign In", systemImage: "person.crop.circle", action: signOut)
+                    Button("Sign In", systemImage: "person.crop.circle", action: session.requestSignIn)
                 } else {
                     LibraryCardButton(session: session)
                 }
@@ -191,13 +212,18 @@ struct MainView: View {
         case .holds: BorrowingListView(session: session, section: .holds)
         case .checkouts: BorrowingListView(session: session, section: .checkouts)
         case .history: BorrowingListView(session: session, section: .history)
-        case .account: AccountView(session: session)
+        case .account(let user):
+            if user == session.username || scope == nil {
+                AccountView(session: session)
+            } else if let scope {
+                InactiveCardView(scope: scope, user: user) { session.windowActions?.removeCard($0) }
+            }
         }
     }
 }
 
 /// Item details: an inspector beside the window's content, or a sheet at compact width.
-private struct ItemInspector<Panel: View>: ViewModifier {
+struct ItemInspector<Panel: View>: ViewModifier {
     @Binding var isPresented: Bool
     @ViewBuilder var panel: Panel
     #if os(iOS)
@@ -235,7 +261,7 @@ struct InspectorToggle: View {
 }
 
 /// The app's version, subtly at the foot of the sidebar; it opens the About box.
-private struct VersionLabel: View {
+struct VersionLabel: View {
     @State private var showingAbout = false
 
     var body: some View {
@@ -304,6 +330,9 @@ struct SearchField: View {
 struct StatusBar: View {
     var status: FetchStatus
     @State private var isShown = false
+    /// The bar's height; on iOS the margin on each side is half as much again, clear of the
+    /// screen's rounded corners (the iPhone 17's clip anything nearer at the bottom edge).
+    @State private var barHeight: CGFloat = 24
     static let fadeDelay: Duration = .seconds(2)
 
     var body: some View {
@@ -324,8 +353,13 @@ struct StatusBar: View {
         .monospacedDigit()
         .foregroundStyle(.secondary)
         .frame(minHeight: 16)
-        .padding(.horizontal, 10)
         .padding(.vertical, 4)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
+        #if os(macOS)
+        .padding(.horizontal, 10)
+        #else
+        .padding(.horizontal, barHeight * 1.5)
+        #endif
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
         .opacity(isShown ? 1 : 0)
@@ -360,5 +394,34 @@ struct BannerView: View {
                 }
                 .onTapGesture { withAnimation { session.banner = nil } }
         }
+    }
+}
+
+/// The bottom of the navigation stack is the library menu; this is its back button.
+struct LibrariesBackButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) { Label("Libraries", systemImage: "chevron.backward") }
+            .help("Choose another library, or browse one as a guest")
+    }
+}
+
+/// macOS: a bar under the window's content. iOS: the same full-width bar over its bottom edge,
+/// reaching the screen's edge so its text sits where the home indicator's blank zone would be
+/// (an inset would stop above it and leave two lines of nothing under the text).
+struct StatusBarPlacement: ViewModifier {
+    var status: FetchStatus
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.safeAreaInset(edge: .bottom, spacing: 0) { StatusBar(status: status) }
+        #else
+        content.overlay(alignment: .bottom) {
+            StatusBar(status: status)
+                .ignoresSafeArea(.container, edges: .bottom)
+                .allowsHitTesting(false)
+        }
+        #endif
     }
 }

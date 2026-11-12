@@ -115,7 +115,8 @@ nonisolated extension Patron {
         self.init(userId: Int(c.user_id), accountId: Int(c.account_id), name: string(c.name) ?? "",
                   email: string(c.email), language: string(c.language) ?? "", barcode: string(c.barcode),
                   preferredPickup: string(c.preferred_pickup),
-                  borrowingHistoryEnabled: c.has_borrowing_history_enabled ? c.borrowing_history_enabled : nil)
+                  borrowingHistoryEnabled: c.has_borrowing_history_enabled ? c.borrowing_history_enabled : nil,
+                  firstName: string(c.first_name))
     }
 }
 

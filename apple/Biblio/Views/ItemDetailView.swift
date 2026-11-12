@@ -5,6 +5,8 @@ import SwiftUI
 struct ItemDetailView: View {
     @Bindable var session: WindowSession
     var bib: Bib
+    /// In a combined window, every card's relationship to the item shows, and holds pick a card.
+    var cards: CombinedSession?
 
     @State private var copies: [CopyAvailability]?
     @State private var copiesError: String?
@@ -14,6 +16,7 @@ struct ItemDetailView: View {
     @State private var canceling = false
     @State private var confirmCancel = false
     @State private var showAllCopies = false
+    @State private var paneWidth: CGFloat = 500
 
     private var transfer: BibTransfer { BibTransfer(subdomain: session.library.subdomain, bib: bib) }
 
@@ -21,10 +24,14 @@ struct ItemDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                if let status = session.accountStatus(for: bib.id) {
+                if cards == nil, let status = session.accountStatus(for: bib.id) {
                     AccountStatusTag(status: status)
                 }
-                holdSection
+                if let cards {
+                    CardsHoldSection(combined: cards, bib: bib)
+                } else {
+                    holdSection
+                }
                 if let summary = bib.summary {
                     Text(summary)
                         .font(.callout)
@@ -34,8 +41,11 @@ struct ItemDetailView: View {
                 detailsSection
             }
             .padding()
+            // A comfortable reading width on a landscape phone or a wide sheet.
+            .frame(maxWidth: 700, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paneWidth = $0 }
         .navigationTitle(bib.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -150,7 +160,7 @@ struct ItemDetailView: View {
         } else if bib.holdable {
             VStack(alignment: .leading, spacing: 8) {
                 AvailabilityBadge(bib: bib)
-                HStack {
+                let picker = Group {
                     if !session.locations.isEmpty {
                         Picker("Pick up at", selection: $pickup) {
                             ForEach(session.locations) { Text($0.name).tag(Optional($0.id)) }
@@ -159,24 +169,42 @@ struct ItemDetailView: View {
                         .lineLimit(1)
                         .fixedSize()
                     }
-                    Button {
-                        placing = true
-                        Task {
-                            await session.placeHold(bib, pickup: pickup)
-                            placing = false
-                        }
-                    } label: {
-                        if placing { ProgressView().controlSize(.small) }
-                        else { Label("Hold", systemImage: "tray.and.arrow.down").fixedSize() }
+                }
+                let hold = Button {
+                    placing = true
+                    Task {
+                        await session.placeHold(bib, pickup: pickup)
+                        placing = false
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(placing)
+                } label: {
+                    if placing { ProgressView().controlSize(.small) }
+                    else { Label("Hold", systemImage: "tray.and.arrow.down").fixedSize() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(placing)
+                // Side by side when they fit, else one above the other (a long branch name on a phone).
+                ViewThatFits(in: .horizontal) {
+                    HStack { picker; hold }
+                    VStack(alignment: .leading, spacing: 8) { picker; hold }
                 }
             }
         } else {
             AvailabilityBadge(bib: bib)
         }
     }
+
+    /// A copy's status, with its due date when it's checked out.
+    private func copyStatus(_ copy: CopyAvailability) -> Text {
+        var text = Text(copy.status).foregroundStyle(StatusColors.copy(copy))
+        if let due = copy.dueDate {
+            text = text + Text(" · due \(DateText.format(due))").foregroundStyle(.secondary)
+        }
+        return text
+    }
+
+    /// Whether the pane is too narrow for side-by-side columns: a phone, or a narrow pane on an
+    /// iPad or Mac, whatever the size class says.
+    private var compact: Bool { paneWidth < 460 }
 
     private var availabilitySection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -195,13 +223,16 @@ struct ItemDetailView: View {
                                     .foregroundStyle(StatusColors.copy(copy))
                                     .imageScale(copy.kind == .available ? .medium : .small)
                                     .frame(minWidth: 18)
-                                Text(copy.branch)
-                                    .lineLimit(2)
-                                HStack(spacing: 4) {
-                                    Text(copy.status).foregroundStyle(StatusColors.copy(copy))
-                                    if let due = copy.dueDate {
-                                        Text("· due \(DateText.format(due))").foregroundStyle(.secondary)
+                                if compact {
+                                    // Status under the branch: three columns would clip on a phone.
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(copy.branch).lineLimit(2)
+                                        copyStatus(copy).font(.subheadline)
                                     }
+                                } else {
+                                    Text(copy.branch)
+                                        .lineLimit(2)
+                                    copyStatus(copy)
                                 }
                             }
                             .font(.callout)
@@ -232,16 +263,29 @@ struct ItemDetailView: View {
         if !fields.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Details").font(.headline)
-                Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 6) {
-                    ForEach(fields) { field in
-                        GridRow {
-                            Text(field.label)
-                                .foregroundStyle(.secondary)
-                                .gridColumnAlignment(.trailing)
-                            Text(field.values.joined(separator: "\n"))
-                                .textSelection(.enabled)
+                if compact {
+                    // Label over value: a phone's width is better spent on the values.
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(fields) { field in
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(field.label).font(.caption).foregroundStyle(.secondary)
+                                Text(field.values.joined(separator: "\n")).textSelection(.enabled)
+                            }
+                            .font(.callout)
                         }
-                        .font(.callout)
+                    }
+                } else {
+                    Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 6) {
+                        ForEach(fields) { field in
+                            GridRow {
+                                Text(field.label)
+                                    .foregroundStyle(.secondary)
+                                    .gridColumnAlignment(.trailing)
+                                Text(field.values.joined(separator: "\n"))
+                                    .textSelection(.enabled)
+                            }
+                            .font(.callout)
+                        }
                     }
                 }
             }

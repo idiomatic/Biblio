@@ -12,6 +12,7 @@ struct AccountView: View {
     @State private var language: String?
     @State private var working: String?
     @State private var confirmHistoryOff = false
+    @State private var confirmSignOut = false
 
     var body: some View {
         Form {
@@ -31,6 +32,9 @@ struct AccountView: View {
                         Text("Show this at the library’s self-checkout or desk.")
                     }
                 }
+
+                CardAppearanceSection(library: session.library, username: session.username, name: patron.name,
+                                      firstName: patron.firstName)
 
                 Section {
                     TextField("Email address", text: $email)
@@ -131,6 +135,21 @@ struct AccountView: View {
                         Button("Keep History", role: .cancel) {}
                     } message: {
                         Text("The library may permanently delete your existing borrowing history.")
+                    }
+                }
+
+                if !session.isGuest, let actions = session.windowActions {
+                    Section {
+                        if LibraryStore.shared.libraries.count > 1 || LibraryStore.shared.isSoleLogin {
+                            Button("Use a Different Library", action: actions.useDifferentLibrary)
+                        }
+                        Button("Sign Out", role: .destructive) { confirmSignOut = true }
+                    } footer: {
+                        Text("Signing out removes this card and its saved password from this device.")
+                    }
+                    .confirmationDialog("Sign out of \(session.library.shortName ?? session.library.name)?",
+                                        isPresented: $confirmSignOut, titleVisibility: .visible) {
+                        Button("Sign Out", role: .destructive) { actions.removeCard(session.username) }
                     }
                 }
             } else {

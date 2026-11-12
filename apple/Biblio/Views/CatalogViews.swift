@@ -70,6 +70,12 @@ struct AdvancedSearchView: View {
     ]
 
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var compact: Bool { horizontalSizeClass == .compact }
+    #else
+    private var compact: Bool { false }
+    #endif
     @State private var terms = [Term(), Term(field: "title"), Term(field: "contributor")]
     @State private var format: String?
     @State private var audience: String?
@@ -82,21 +88,26 @@ struct AdvancedSearchView: View {
             Form {
                 Section("Search For") {
                     ForEach($terms) { $term in
-                        HStack {
-                            if term.id != terms.first?.id {
-                                Picker("", selection: $term.op) {
-                                    Text("and").tag("AND")
-                                    Text("or").tag("OR")
-                                    Text("not").tag("NOT")
+                        // On a phone the terms get their own line, as wide as the row.
+                        let layout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                                             : AnyLayout(HStackLayout())
+                        layout {
+                            HStack {
+                                if term.id != terms.first?.id {
+                                    Picker("", selection: $term.op) {
+                                        Text("and").tag("AND")
+                                        Text("or").tag("OR")
+                                        Text("not").tag("NOT")
+                                    }
+                                    .labelsHidden()
+                                    .fixedSize()
+                                }
+                                Picker("", selection: $term.field) {
+                                    ForEach(Self.fields, id: \.0) { Text($0.1).tag($0.0) }
                                 }
                                 .labelsHidden()
                                 .fixedSize()
                             }
-                            Picker("", selection: $term.field) {
-                                ForEach(Self.fields, id: \.0) { Text($0.1).tag($0.0) }
-                            }
-                            .labelsHidden()
-                            .fixedSize()
                             TextField("Terms", text: $term.text)
                                 .autocorrectionDisabled()
                         }

@@ -138,6 +138,12 @@ final class ItemListModel {
         source.isSearch ? facets.first { $0.id == "FORMAT" }?.values ?? [] : localFormats
     }
 
+    /// The core list, which a `MergedListModel` borrows.
+    var corePointer: OpaquePointer { list.pointer }
+
+    /// The fetched entry with this id.
+    func entry(id: String) -> ListEntry? { entriesByID[id] }
+
     /// How many loaded holds fall under each hold filter.
     func holdCount(_ filter: HoldFilter) -> Int {
         Int(biblio_list_hold_count(list.pointer, filter.core))
@@ -292,14 +298,24 @@ final class ItemListModel {
             let items = result.entries.enumerated().map { i, e in
                 var ready = false
                 var isHold = false
+                var dueDay = 0
+                var rank: UInt8 = 0
                 if case .hold(let h) = e.kind {
                     isHold = true
                     ready = h.status == "READY_FOR_PICKUP"
+                    rank = switch h.status {
+                    case "READY_FOR_PICKUP", "READY": 0
+                    case "IN_TRANSIT", "SHIPPED", "READY_SOON": 1
+                    case "SUSPENDED", "INACTIVE": 3
+                    default: 2
+                    }
                 }
+                if case .checkout(let c) = e.kind, let due = c.dueDate { dueDay = DateText.dayNumber(due) }
                 return biblio_list_item(id: c[3 * i], title: c[3 * i + 1], format: c[3 * i + 2],
                                         held_copies: Int64(e.bib.heldCopies), server_index: Int64(e.serverIndex),
                                         is_hold: isHold, ready: ready,
-                                        on_order: e.bib.status == "ON_ORDER" || e.bib.onOrderCopies > 0)
+                                        on_order: e.bib.status == "ON_ORDER" || e.bib.onOrderCopies > 0,
+                                        due_day: Int64(dueDay), status_rank: rank)
             }
             _ = biblio_list_apply(list.pointer, generation, Int64(page), items, items.count, Int64(result.count),
                                   Int64(result.pageSize), Self.now)

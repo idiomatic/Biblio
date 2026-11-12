@@ -13,6 +13,10 @@ struct ItemListView<Header: View>: View {
     /// The selection bar's Cancel button asked, so its dialog appears there.
     @State private var confirmBarCancel = false
     @Environment(\.scenePhase) private var scenePhase
+    /// Set in a combined window, where holds choose a card.
+    @Environment(\.combinedHolds) private var cards
+    /// The titles being given to cards one by one (see `PlaceHoldsView`).
+    @State private var assigning: [Bib]?
     #if os(iOS)
     /// Owned here (not by the system Edit button) so window updates can't reset it mid-selection.
     @State private var editMode: EditMode = .inactive
@@ -64,6 +68,13 @@ struct ItemListView<Header: View>: View {
         .onChange(of: selection) { _, ids in
             if !selectingInPlace { session.select(entries: entries(ids)) }
         }
+        #if os(iOS)
+        // The inspector is dismissed by a swipe, or by rotating a pad to portrait. Forget the
+        // selection then, so tapping the same row shows its details again.
+        .onChange(of: session.showInspector) { _, shown in
+            if !shown, !editMode.isEditing, !selection.isEmpty { selection = [] }
+        }
+        #endif
         .task { model.loadIfNeeded() }
         // A list left open while the app was in the background may have gone stale.
         .onChange(of: scenePhase) { _, phase in
@@ -99,6 +110,26 @@ struct ItemListView<Header: View>: View {
                             isPresented: .constant(!confirmCancel.isEmpty), presenting: confirmCancel) { holds in
             cancelActions(holds)
         }
+        .sheet(isPresented: Binding(get: { assigning != nil }, set: { if !$0 { assigning = nil } })) {
+            if let cards, let bibs = assigning {
+                NavigationStack {
+                    ScrollView {
+                        PlaceHoldsView(combined: cards, bibs: bibs) {
+                            assigning = nil
+                            endSelecting()
+                        }
+                        .padding()
+                    }
+                    .navigationTitle("Place Holds")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { assigning = nil } }
+                    }
+                }
+            }
+        }
     }
 
     #if os(iOS)
@@ -109,9 +140,15 @@ struct ItemListView<Header: View>: View {
         let cancelable = selected.cancelableHolds
         return HStack {
             if !holdable.isEmpty {
-                Button(holdable.count == 1 ? "Hold 1 Item" : "Hold \(holdable.count) Items") {
-                    Task { await session.placeHolds(holdable.map(\.bib)) }
-                    endSelecting()
+                let title = holdable.count == 1 ? "Hold 1 Item" : "Hold \(holdable.count) Items"
+                if cards != nil {
+                    // Which card gets which title is settled in the sheet.
+                    Button(title) { assigning = holdable.map(\.bib) }
+                } else {
+                    Button(title) {
+                        Task { await placeHolds(holdable.map(\.bib)) }
+                        endSelecting()
+                    }
                 }
             }
             Spacer()
@@ -140,6 +177,11 @@ struct ItemListView<Header: View>: View {
             endSelecting()
         }
         Button(holds.count == 1 ? "Keep Hold" : "Keep Holds", role: .cancel) { confirmCancel = [] }
+    }
+
+    /// Holds for the selected items: on each title's default card in a combined window.
+    private func placeHolds(_ bibs: [Bib]) async {
+        if let cards { await cards.placeHolds(bibs, target: .auto) } else { await session.placeHolds(bibs) }
     }
 
     /// Reloads the list and the open item's details, which may have changed with it.
@@ -235,7 +277,7 @@ struct ItemListView<Header: View>: View {
         }
         if !holdable.isEmpty && !session.isGuest {
             Button(holdable.count == 1 ? "Hold" : "Hold \(holdable.count) Items", systemImage: "tray.and.arrow.down") {
-                Task { await session.placeHolds(holdable.map(\.bib)) }
+                Task { await placeHolds(holdable.map(\.bib)) }
             }
         }
         if !cancelable.isEmpty {
@@ -278,6 +320,7 @@ private struct ListRow: View {
         }
         .tag(row.id)
         .selectionDisabled(row.entry == nil)
+
         // Tint by this account's status; selected rows keep the system highlight.
         .listRowBackground(isSelected ? nil : row.entry?.accountStatus.map { StatusColors.account($0).opacity(0.08) })
         .onAppear {
@@ -372,7 +415,7 @@ struct ItemRow: View {
                 Text(details)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 status
             }
             Spacer(minLength: 0)
@@ -396,25 +439,74 @@ struct ItemRow: View {
             AvailabilityBadge(bib: bib)
             if let status = entry.catalogStatus { AccountStatusTag(status: status) }
         case .hold(let h):
-            HStack(spacing: 6) {
-                HoldStatusBadge(hold: h)
-                    .fixedSize()
+            // Items wrap onto further lines on a narrow screen instead of squeezing each other.
+            WrapLayout(spacing: 6, lineSpacing: 2) {
+                HoldStatusBadge(hold: h).fixedSize()
                 OnOrderNote(bib: bib)
-                if let p = h.position { Text("#\(p) in line").foregroundStyle(.secondary) }
-                if let loc = h.pickupLocation { Text("· \(loc)").foregroundStyle(.secondary).lineLimit(1) }
+                if let p = h.position { Text("#\(p) in line").foregroundStyle(.secondary).fixedSize() }
+                if let loc = h.pickupLocation {
+                    HStack(spacing: 2) {
+                        Image(systemName: "mappin").imageScale(.small)
+                        Text(loc).lineLimit(1)
+                    }
+                    .foregroundStyle(.secondary)
+                }
             }
             .font(.caption)
         case .checkout(let c):
             if let due = c.dueDate {
-                Label("Due \(DateText.format(due))", systemImage: "calendar")
-                    .font(.caption)
-                    .foregroundStyle(DateText.isPast(due) ? .red : .secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar").imageScale(.small)
+                    Text("Due \(DateText.format(due))")
+                }
+                .font(.caption)
+                .foregroundStyle(DateText.isPast(due) ? .red : .secondary)
             }
         case .history(let h):
             if let d = h.checkoutDate ?? h.returnedDate {
                 Text("Borrowed \(DateText.format(d))").font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// Lays its children out left to right, starting a new line when the next would overflow; a child
+/// wider than a line is squeezed to fit (so a long, single-line `Text` truncates).
+struct WrapLayout: Layout {
+    var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 2
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(width: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let placed = arrange(width: bounds.width, subviews: subviews)
+        for (subview, frame) in zip(subviews, placed.frames) {
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                          proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> (frames: [CGRect], size: CGSize) {
+        var frames: [CGRect] = []
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, widest: CGFloat = 0
+        for subview in subviews {
+            var size = subview.sizeThatFits(.unspecified)
+            if size.width > width { size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil)) }
+            // Empty children (such as an absent note) take no room.
+            if size == .zero { frames.append(CGRect(x: x, y: y, width: 0, height: 0)); continue }
+            if x > 0, x + size.width > width {
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (frames, CGSize(width: widest, height: y + lineHeight))
     }
 }
 
@@ -443,14 +535,15 @@ struct AvailabilityBadge: View {
     var bib: Bib
 
     var body: some View {
-        HStack(spacing: 6) {
+        // The pieces wrap as whole items on a narrow screen.
+        WrapLayout(spacing: 8, lineSpacing: 2) {
             switch bib.status {
             case "AVAILABLE":
-                Label("Available", systemImage: "checkmark.circle.fill").foregroundStyle(StatusColors.availability(bib.status)).fixedSize()
+                badge("Available", "checkmark.circle.fill")
             case "ON_ORDER":
-                Label("On order", systemImage: "shippingbox").foregroundStyle(StatusColors.availability(bib.status)).fixedSize()
+                badge("On order", "shippingbox")
             case "UNAVAILABLE", "NOT_AVAILABLE":
-                Label("All copies in use", systemImage: "clock").foregroundStyle(StatusColors.availability(bib.status)).fixedSize()
+                badge("All copies in use", "clock")
             case .some(let s):
                 Text(s.prettified).foregroundStyle(.secondary)
             case nil:
@@ -458,17 +551,35 @@ struct AvailabilityBadge: View {
             }
             if bib.status != "ON_ORDER" { OnOrderNote(bib: bib) }
             if bib.heldCopies > 0 || bib.totalCopies > 0 {
-                Text(peopleWaiting).foregroundStyle(.secondary)
+                HStack(spacing: 3) {
+                    Image(systemName: bib.heldCopies > 0 ? "person.2" : "books.vertical").imageScale(.small)
+                    Text(peopleWaiting)
+                }
+                .foregroundStyle(.secondary)
+                .fixedSize()
             }
         }
         .font(.caption)
         .labelStyle(.titleAndIcon)
     }
 
+    /// A plain icon and text, not a `Label`, which inside a List row spaces the two far apart.
+    private func badge(_ text: String, _ symbol: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+            Text(text)
+        }
+        .foregroundStyle(StatusColors.availability(bib.status))
+        .fixedSize()
+    }
+
     private var peopleWaiting: String {
         let copies = bib.totalCopies == 1 ? "1 copy" : "\(bib.totalCopies) copies"
         let waiting = bib.heldCopies == 1 ? "1 hold" : "\(bib.heldCopies) holds"
-        return "· \(waiting) on \(copies)"
+        // Only what's there to say: no holds, just the copies; no copies yet, just the holds.
+        if bib.heldCopies == 0 { return copies }
+        if bib.totalCopies == 0 { return waiting }
+        return "\(waiting) on \(copies)"
     }
 }
 
@@ -558,6 +669,15 @@ nonisolated enum DateText {
     }()
 
     static func date(_ s: String) -> Date? { input.date(from: String(s.prefix(10))) }
+
+    /// Days since 1970-01-01 of an ISO date, or 0.
+    static func dayNumber(_ s: String) -> Int {
+        let parts = s.prefix(10).split(separator: "-").compactMap { Int($0) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        guard parts.count == 3, let d = utc.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else { return 0 }
+        return Int(d.timeIntervalSince1970 / 86400)
+    }
 
     static func format(_ s: String) -> String {
         date(s)?.formatted(date: .abbreviated, time: .omitted) ?? s

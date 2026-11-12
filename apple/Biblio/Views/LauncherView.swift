@@ -3,23 +3,31 @@ import SwiftUI
 /// New-window menu: choose a library, then a user of that library.
 struct LauncherView: View {
     var preselectedLibrary: String?
-    var open: (LibraryInfo, String) -> Void
+    /// Shows the library list even with a single library, to add another.
+    var listLibraries = false
+    var open: (LibraryInfo, [String]) -> Void
 
     @State private var store = LibraryStore.shared
-    @State private var path: [String] = []
     @State private var addingLibrary = false
     @State private var pool = ClientPool.shared
     @State private var libraryToRemove: LibraryInfo?
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             List {
                 Section {
                     ForEach(store.libraries) { library in
-                        NavigationLink(value: library.subdomain) {
-                            LibraryRow(library: library)
+                        Button { choose(library) } label: {
+                            HStack {
+                                LibraryRow(library: library)
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .contextMenu {
+                            Button("Browse as Guest", systemImage: "person.crop.circle.dashed") { open(library, []) }
                             Button(library.users.isEmpty ? "Remove Library" : "Remove Library…",
                                    systemImage: "trash", role: .destructive) {
                                 requestRemoval(library)
@@ -40,12 +48,6 @@ struct LauncherView: View {
                 }
             }
             .navigationTitle("Choose a Library")
-            .navigationDestination(for: String.self) { subdomain in
-                if let library = store.library(subdomain) {
-                    UserPickerView(library: library, open: open,
-                                   canRemove: !isInUse(library)) { remove(library) }
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Add Library", systemImage: "plus") { addingLibrary = true }
@@ -67,18 +69,29 @@ struct LauncherView: View {
             .sheet(isPresented: $addingLibrary) {
                 AddLibraryView { info in
                     store.upsert(info)
-                    path = [info.subdomain]
+                    open(info, [])
                 }
             }
         }
         .macMinFrame(width: 360, height: 420)
         .task {
-            if path.isEmpty, let preselectedLibrary, store.library(preselectedLibrary) != nil, store.libraries.count > 1 {
-                path = [preselectedLibrary]
-            } else if path.isEmpty, store.libraries.count == 1, let only = store.libraries.first {
-                path = [only.subdomain]
+            if listLibraries { return }
+            if let preselectedLibrary, let library = store.library(preselectedLibrary), store.libraries.count > 1 {
+                choose(library)
+            } else if store.libraries.count == 1, let only = store.libraries.first {
+                choose(only)
             }
         }
+    }
+
+    /// Opens the library on the cards it last showed that no other window has (every free card
+    /// if none of those is), or as a guest when there are none to offer (no saved cards, or
+    /// every one open elsewhere); its Sign In adds or picks a card.
+    private func choose(_ library: LibraryInfo) {
+        let free = library.users.filter { !pool.isInUse(subdomain: library.subdomain, username: $0) }
+        let remembered = (store.scopes[library.subdomain] ?? []).filter(free.contains)
+        let users = remembered.isEmpty ? free : remembered
+        open(library, users)
     }
 
     /// A library can't be removed while one of its logins is open in a window.
@@ -93,7 +106,6 @@ struct LauncherView: View {
 
     private func remove(_ library: LibraryInfo) {
         guard !isInUse(library) else { return }
-        path.removeAll { $0 == library.subdomain }
         for user in library.users + [""] {
             pool.discard(subdomain: library.subdomain, username: user)
         }
@@ -116,100 +128,6 @@ struct LibraryRow: View {
             }
         }
         .padding(.vertical, 2)
-    }
-}
-
-struct UserPickerView: View {
-    var library: LibraryInfo
-    var open: (LibraryInfo, String) -> Void
-    var canRemove: Bool
-    /// Removes the library; called once the user confirms.
-    var remove: () -> Void
-
-    @State private var store = LibraryStore.shared
-    @State private var pool = ClientPool.shared
-    @State private var addingUser = false
-    @State private var libraryToRemove: LibraryInfo?
-
-    private var users: [String] { store.library(library.subdomain)?.users ?? [] }
-
-    var body: some View {
-        List {
-            Section {
-                ForEach(users, id: \.self) { user in
-                    let inUse = pool.isInUse(subdomain: library.subdomain, username: user)
-                    Button {
-                        open(store.library(library.subdomain) ?? library, user)
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading) {
-                                Text(user)
-                                if inUse {
-                                    Text("Open in another window")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        } icon: {
-                            Image(systemName: inUse ? "person.crop.circle.badge.clock" : "person.crop.circle")
-                        }
-                    }
-                    .disabled(inUse)
-                    .help(inUse ? "This login is already open in another window. Each login can be used in one window at a time." : "")
-                    .contextMenu {
-                        Button("Remove User", systemImage: "trash", role: .destructive) {
-                            store.removeUser(user, from: library.subdomain)
-                            ClientPool.shared.discard(subdomain: library.subdomain, username: user)
-                        }
-                        .disabled(pool.isInUse(subdomain: library.subdomain, username: user))
-                    }
-                }
-                .onDelete { offsets in
-                    for i in offsets where !pool.isInUse(subdomain: library.subdomain, username: users[i]) {
-                        store.removeUser(users[i], from: library.subdomain)
-                    }
-                }
-                Button {
-                    addingUser = true
-                } label: {
-                    Label("Add User…", systemImage: "person.badge.plus")
-                }
-            } header: {
-                Text("Users")
-            } footer: {
-                if users.isEmpty { Text("Sign in with your library card number or username.") }
-            }
-            Section {
-                Button {
-                    open(store.library(library.subdomain) ?? library, "")
-                } label: {
-                    Label("Browse as Guest", systemImage: "person.crop.circle.dashed")
-                }
-            } footer: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Guests can search and browse the catalog but can’t place holds or see an account.")
-                    if !canRemove { Text("Close windows signed in to this library to remove it.") }
-                }
-            }
-        }
-        .navigationTitle(library.shortName ?? library.name)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(users.isEmpty ? "Remove Library" : "Remove Library…",
-                       systemImage: "trash", role: .destructive) {
-                    if users.isEmpty { remove() } else { libraryToRemove = store.library(library.subdomain) ?? library }
-                }
-                .confirmRemoving($libraryToRemove) { _ in remove() }
-                .disabled(!canRemove)
-                .help(canRemove ? "Remove this library and its saved users"
-                                : "Close windows signed in to this library to remove it")
-            }
-        }
-        .sheet(isPresented: $addingUser) {
-            AddUserView(library: library) { user in
-                open(store.library(library.subdomain) ?? library, user)
-            }
-        }
     }
 }
 
@@ -238,15 +156,18 @@ struct LoginPicker: View {
                                 dismiss()
                                 signIn(user)
                             } label: {
-                                Label {
-                                    VStack(alignment: .leading) {
-                                        Text(user)
+                                // The card as it appears elsewhere: its chip and name, then the login.
+                                let name = store.cards[CardInfo.id(subdomain: library.subdomain, username: user)]?.name ?? user
+                                HStack(spacing: 12) {
+                                    CardChip(style: CardStyle.of(library: library, username: user, name: name), size: 28)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(name)
                                         if inUse {
                                             Text("Open in another window").font(.caption).foregroundStyle(.secondary)
+                                        } else if name != user {
+                                            Text(user).font(.caption).foregroundStyle(.secondary)
                                         }
                                     }
-                                } icon: {
-                                    Image(systemName: inUse ? "person.crop.circle.badge.clock" : "person.crop.circle")
                                 }
                             }
                             .disabled(inUse)
@@ -347,6 +268,11 @@ struct AddLibraryView: View {
             }
         }
         .macMinFrame(width: 420, height: 360)
+        #if os(iOS)
+        // Page sheet: a form sheet re-centers as the suggestions come and go, and as the keyboard
+        // and the Passwords bar change, so it would hop while typing.
+        .presentationSizing(.page)
+        #endif
         .onAppear { directory.loadIfNeeded() }
     }
 
@@ -446,6 +372,11 @@ struct AddUserView: View {
             }
         }
         .macMinFrame(width: 400, height: 280)
+        #if os(iOS)
+        // An iPad form sheet re-centers above the keyboard and the Passwords bar, so it hops as
+        // they change while typing; a page sheet stays put.
+        .presentationSizing(.page)
+        #endif
     }
 
     private func signIn() async {
@@ -464,18 +395,74 @@ struct AddUserView: View {
             error = "The password couldn't be saved to the Keychain."
             return
         }
-        let client = ClientPool.shared.client(subdomain: library.subdomain, username: user)
+        let subdomain = library.subdomain
+        let client = ClientPool.shared.client(subdomain: subdomain, username: user)
+        func undoNumberLogin() {
+            if let previous { Keychain.setPassword(previous, subdomain: subdomain, username: user) }
+            else { Keychain.delete(subdomain: subdomain, username: user) }
+            ClientPool.shared.discard(subdomain: subdomain, username: user)
+        }
         do {
-            try await client.login(force: true)
-            LibraryStore.shared.addUser(user, password: password, to: library.subdomain)
+            let patron = try await client.login(force: true)
+            var saved = user
+            // A card number is saved under the username the library knows the patron by, when
+            // that works too; one already saved under it keeps this fresher password.
+            var rekey: (handle: String, previous: String?)?
+            if user.allSatisfy(\.isNumber) {
+                let handle = patron.name.trimmingCharacters(in: .whitespaces)
+                let earlier = Keychain.password(subdomain: subdomain, username: handle)
+                if !handle.isEmpty, handle.caseInsensitiveCompare(user) != .orderedSame, await verifyLogin(as: handle) {
+                    rekey = (handle, earlier)
+                    saved = handle
+                }
+            }
+            // The same account saved under another login would show everything twice.
+            if let card = CardInfo(library: library, username: saved, patron: patron),
+               let other = LibraryStore.shared.cards.values.first(where: {
+                   $0.subdomain == subdomain && $0.barcode == card.barcode && $0.username != saved
+               }) {
+                if let rekey { restoreLogin(rekey.handle, to: rekey.previous) }
+                undoNumberLogin()
+                self.error = "This card is already saved as “\(other.username)”."
+                return
+            }
+            if rekey != nil {
+                // The number login is replaced by the username one.
+                Keychain.delete(subdomain: subdomain, username: user)
+                LibraryStore.shared.removeUser(user, from: subdomain)
+                ClientPool.shared.discard(subdomain: subdomain, username: user)
+            }
+            LibraryStore.shared.addUser(saved, password: password, to: subdomain)
             dismiss()
-            onAdd(user)
+            onAdd(saved)
         } catch {
-            if let previous { Keychain.setPassword(previous, subdomain: library.subdomain, username: user) }
-            else { Keychain.delete(subdomain: library.subdomain, username: user) }
-            ClientPool.shared.discard(subdomain: library.subdomain, username: user)
+            undoNumberLogin()
             self.error = error.localizedDescription
         }
+    }
+
+    /// Signs in as `handle` with the password just typed, keeping it in the Keychain if that
+    /// works; false if it doesn't, or another window has the login.
+    private func verifyLogin(as handle: String) async -> Bool {
+        let subdomain = library.subdomain
+        guard !ClientPool.shared.isInUse(subdomain: subdomain, username: handle) else { return false }
+        let previous = Keychain.password(subdomain: subdomain, username: handle)
+        guard Keychain.setPassword(password, subdomain: subdomain, username: handle) else { return false }
+        do {
+            _ = try await ClientPool.shared.client(subdomain: subdomain, username: handle).login(force: true)
+            return true
+        } catch {
+            restoreLogin(handle, to: previous)
+            return false
+        }
+    }
+
+    /// Puts a login's earlier saved password back, or forgets it if there was none.
+    private func restoreLogin(_ handle: String, to previous: String?) {
+        let subdomain = library.subdomain
+        if let previous { Keychain.setPassword(previous, subdomain: subdomain, username: handle) }
+        else { Keychain.delete(subdomain: subdomain, username: handle) }
+        ClientPool.shared.discard(subdomain: subdomain, username: handle)
     }
 }
 

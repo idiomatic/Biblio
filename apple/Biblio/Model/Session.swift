@@ -29,6 +29,12 @@ final class ClientPool {
         !username.isEmpty && owners[key(subdomain, username)] != nil
     }
 
+    /// Whether a window other than `window` uses the login.
+    func isInUse(subdomain: String, username: String, otherThan window: UUID) -> Bool {
+        guard !username.isEmpty, let owner = owners[key(subdomain, username)] else { return false }
+        return owner != window
+    }
+
     /// Reserves a login for a window. Fails if another window already uses it.
     func claim(subdomain: String, username: String, window: UUID) -> Bool {
         guard !username.isEmpty else { return true }
@@ -44,9 +50,12 @@ final class ClientPool {
     }
 }
 
-nonisolated enum AppSection: String, Hashable, CaseIterable, Identifiable, Codable {
-    case search, newTitles, holds, checkouts, history, account
-    var id: String { rawValue }
+nonisolated enum AppSection: Hashable, Identifiable, Codable {
+    case search, newTitles, holds, checkouts, history
+    /// A card's account page, by username.
+    case account(String)
+
+    var id: Self { self }
 
     var title: String {
         switch self {
@@ -74,6 +83,14 @@ nonisolated enum AppSection: String, Hashable, CaseIterable, Identifiable, Codab
 /// Everything one window shows: its signed-in patron and its own lists.
 @Observable
 final class WindowSession {
+    /// What a window's account view can do beyond editing the account.
+    struct WindowActions {
+        /// Removes a card and its saved password.
+        var removeCard: (String) -> Void
+        var useDifferentLibrary: () -> Void
+        var addCard: () -> Void
+    }
+
     let library: LibraryInfo
     /// Empty for a guest window, which browses the catalog without signing in.
     let username: String
@@ -83,6 +100,8 @@ final class WindowSession {
     var loginError: String?
     /// Whether the library card barcode is showing; the Lock Screen control sets it.
     var showingLibraryCard = false
+    /// What the window's Settings can do beyond editing the account; set by the window's root.
+    var windowActions: WindowActions?
     /// Switching sections closes the inspector and clears its item, which belonged to the old list.
     var section: AppSection? = .search {
         didSet {
@@ -133,6 +152,21 @@ final class WindowSession {
     var isGuest: Bool { username.isEmpty }
     var displayName: String { isGuest ? "Guest" : patron?.name ?? username }
 
+    /// What the card is called in a window with several cards ("Hold for …"): the name the user
+    /// gave it, else the library's first name for the account, else the first word of its name.
+    var callName: String {
+        let chosen = LibraryStore.shared.look(subdomain: library.subdomain, username: username).name
+        if let chosen, !chosen.isEmpty { return chosen }
+        if let first = patron?.firstName, !first.isEmpty { return Self.tidied(first) }
+        let name = displayName
+        return Self.tidied(name.split(separator: " ").first.map(String.init) ?? name)
+    }
+
+    /// A name a library keeps in capitals (or all lowercase) reads as a name; mixed case is left alone.
+    static func tidied(_ name: String) -> String {
+        name == name.uppercased() || name == name.lowercased() ? name.capitalized : name
+    }
+
     func start() async {
         if isGuest {
             if locations.isEmpty { locations = (try? await client.locations()) ?? [] }
@@ -162,7 +196,19 @@ final class WindowSession {
         }
     }
 
+    /// Set by a combined window, which runs every search on its first card and shows its results.
+    var searchRouter: ((String, String) -> Void)?
+
     func runSearch(_ text: String, searchType: String = "smart") {
+        if let searchRouter {
+            searchRouter(text, searchType)
+        } else {
+            performSearch(text, searchType: searchType)
+        }
+    }
+
+    /// Runs the search in this session's own list, showing the Search section.
+    func performSearch(_ text: String, searchType: String) {
         searchText = text
         section = .search
         searchList.source = .search(SearchQuery(query: text, searchType: searchType))
@@ -204,14 +250,31 @@ final class WindowSession {
         do {
             try await client.placeHold(bib, pickupBranch: pickup)
             show("Hold placed on “\(bib.title)”.")
-            for list in [searchList, newTitlesList] {
-                list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
-            }
+            markHeld(bib)
             // Load the whole (short) holds list so the new hold can be found and canceled.
             Task { await holdsList.reloadAll() }
         } catch {
-            show(error.localizedDescription, isError: true)
+            if await holdPlacedDespite(error, bib) {
+                show("Hold placed on “\(bib.title)”. The library reported an error first, but the hold is there.")
+                markHeld(bib)
+            } else {
+                show(error.localizedDescription, isError: true)
+            }
         }
+    }
+
+    private func markHeld(_ bib: Bib) {
+        for list in [searchList, newTitlesList] {
+            list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
+        }
+    }
+
+    /// After a hold request the library answered with a server error: it may have placed the
+    /// hold anyway, so reload the holds and look. False for any other kind of failure.
+    func holdPlacedDespite(_ error: Error, _ bib: Bib) async -> Bool {
+        guard case BiblioError.http(let status, _) = error, status >= 500 else { return false }
+        await holdsList.reloadAll()
+        return hold(for: bib.id) != nil
     }
 
     func placeHold(_ transfer: BibTransfer) async {
@@ -246,6 +309,11 @@ final class WindowSession {
                     list.setAccountStatus(.onHold(ready: false, position: nil), for: bib.id)
                 }
             } catch {
+                if await holdPlacedDespite(error, bib) {
+                    placed += 1
+                    markHeld(bib)
+                    continue
+                }
                 firstError = firstError ?? error.localizedDescription
                 // The library refuses everything after its hold limit; stop asking.
                 if error.localizedDescription.localizedCaseInsensitiveContains("maximum") { break }

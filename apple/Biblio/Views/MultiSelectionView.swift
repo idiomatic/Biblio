@@ -5,11 +5,14 @@ import SwiftUI
 struct MultiSelectionView: View {
     @Bindable var session: WindowSession
     var entries: [ListEntry]
+    /// In a combined window, holds choose their card.
+    var cards: CombinedSession?
 
     @State private var working = false
     @State private var confirmCancel = false
 
     private var holdable: [ListEntry] { entries.holdable }
+
     private var cancelable: [Hold] { entries.cancelableHolds }
     private var uncancelable: Int { entries.uncancelableHoldCount }
 
@@ -19,8 +22,15 @@ struct MultiSelectionView: View {
                 Text("\(entries.count) Items Selected")
                     .font(.title2.weight(.semibold))
 
+                if let cards, !holdable.isEmpty {
+                    PlaceHoldsView(combined: cards, bibs: holdable.map(\.bib))
+                        .id(holdable.map(\.bib.id))
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
-                    if !holdable.isEmpty && !session.isGuest {
+                    if cards != nil {
+                        // The sections above place holds.
+                    } else if !holdable.isEmpty && !session.isGuest {
                         Button {
                             working = true
                             Task {
@@ -66,7 +76,7 @@ struct MultiSelectionView: View {
 
                 Divider()
 
-                ForEach(entries.prefix(50)) { entry in
+                ForEach((cards == nil || holdable.isEmpty ? entries : entries.filter { e in !holdable.contains { $0.id == e.id } }).prefix(50)) { entry in
                     HStack(spacing: 10) {
                         CoverImage(url: entry.bib.jacketSmall, format: entry.bib.format)
                             .frame(width: 30, height: 44)

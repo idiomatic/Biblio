@@ -1,0 +1,540 @@
+import SwiftUI
+
+/// A combined window's cards, for the list actions that place holds.
+private struct CombinedHoldsKey: EnvironmentKey {
+    static let defaultValue: CombinedSession? = nil
+}
+
+extension EnvironmentValues {
+    var combinedHolds: CombinedSession? {
+        get { self[CombinedHoldsKey.self] }
+        set { self[CombinedHoldsKey.self] = newValue }
+    }
+}
+
+/// A card's monogram in its color, marking whose item a row is.
+struct CardChip: View {
+    var style: CardStyle
+    var size: CGFloat = 18
+
+    var body: some View {
+        Text(style.monogram)
+            .font(.system(size: size * 0.6, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(style.color, in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+/// The window of a library's cards combined: holds, checked out items, and history interlaced,
+/// with the catalog (search, new titles) on the first card.
+struct CombinedMainView: View {
+    @Bindable var combined: CombinedSession
+    var scope: CardScope?
+    var signOut: () -> Void
+
+    @State private var columnVisibility = NavigationSplitViewVisibility.automatic
+    @State private var preferredColumn: NavigationSplitViewColumn
+    @State private var holdsDropTargeted = false
+    #if os(macOS)
+    @Environment(\.controlActiveState) private var controlActiveState
+    #endif
+
+    init(combined: CombinedSession, scope: CardScope?, signOut: @escaping () -> Void, startOnSidebar: Bool = false) {
+        self.combined = combined
+        self.scope = scope
+        self.signOut = signOut
+        _preferredColumn = State(initialValue: startOnSidebar ? .sidebar : .detail)
+    }
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $preferredColumn) {
+            sidebar
+        } detail: {
+            NavigationStack { detail }
+        }
+        .modifier(ItemInspector(isPresented: inspectorShown) { inspector.id(ObjectIdentifier(combined.active)) })
+        .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .principal) {
+                SearchField(session: combined.primary)
+                    .frame(width: 280)
+            }
+            #endif
+        }
+        .overlay(alignment: .bottom) { BannerView(session: combined.active) }
+        .modifier(StatusBarPlacement(status: combined.primary.client.status))
+        .navigationTitle(combined.library.shortName ?? combined.library.name)
+        #if os(macOS)
+        .navigationSubtitle("All Cards")
+        #endif
+        .environment(\.combinedHolds, combined)
+        .focusedSceneValue(\.addAnother, combined.windowActions.map { RefreshAction(perform: $0.addCard) })
+        #if os(macOS)
+        // Settings (⌘,) shows the card this window last used.
+        .onChange(of: controlActiveState, initial: true) { _, state in
+            if state == .key { SessionRegistry.shared.activate(combined.cardSession) }
+        }
+        .onChange(of: combined.lastUsed) {
+            if controlActiveState == .key { SessionRegistry.shared.activate(combined.cardSession) }
+        }
+        #endif
+        .task { await combined.start() }
+        .tint(combined.library.tint)
+    }
+
+    private var inspectorShown: Binding<Bool> {
+        Binding(get: { combined.active.showInspector }, set: { combined.active.showInspector = $0 })
+    }
+
+    private var inspector: some View {
+        Group {
+            if combined.active.selectedEntries.count > 1 {
+                MultiSelectionView(session: combined.active, entries: combined.active.selectedEntries, cards: combined)
+            } else if let bib = combined.active.selection {
+                ItemDetailView(session: combined.active, bib: bib, cards: combined)
+                    .id(bib.id)
+            } else {
+                ContentUnavailableView("No Selection", systemImage: "book.closed",
+                                       description: Text("Select an item to see its details and availability."))
+            }
+        }
+        .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
+    }
+
+    // MARK: Sidebar
+
+    private var sidebar: some View {
+        List(selection: $combined.section) {
+            if let scope {
+                CardsSection(scope: scope)
+            }
+            Section("Catalog") {
+                sidebarRow(.search)
+                sidebarRow(.newTitles)
+            }
+            Section("My Library") {
+                // An item dropped on Holds is held for each title's default card.
+                sidebarRow(.holds)
+                    .onDrop(of: [.biblioItem], isTargeted: $holdsDropTargeted) { providers in
+                        BibTransfer.load(from: providers) { item in
+                            Task { await combined.placeHolds([item.bib], target: .auto) }
+                        }
+                    }
+                    .listRowBackground(holdsDropTargeted ? Color.accentColor.opacity(0.25) : nil)
+                sidebarRow(.checkouts)
+                sidebarRow(.history)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { VersionLabel() }
+        .navigationTitle(combined.library.shortName ?? "Library")
+        #if os(macOS)
+        .navigationSplitViewColumnWidth(min: 190, ideal: 230)
+        #endif
+        .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .navigation) { LibrariesBackButton(action: signOut) }
+            ToolbarItem { LibraryCardButton(session: combined.cardSession) }
+            #else
+            ToolbarItem(placement: .topBarLeading) { LibrariesBackButton(action: signOut) }
+            ToolbarItem(placement: .topBarTrailing) { LibraryCardButton(session: combined.cardSession) }
+            #endif
+        }
+    }
+
+    private func sidebarRow(_ section: AppSection) -> some View {
+        NavigationLink(value: section) {
+            Label(section.title, systemImage: section.systemImage)
+                .badge(badge(for: section))
+        }
+    }
+
+    /// The sum over the shown cards.
+    private func badge(for section: AppSection) -> Int {
+        guard let model = combined.list(for: section), section != .history else { return 0 }
+        return model.loaded ? model.total : 0
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch combined.section ?? .holds {
+        case .search: SearchView(session: combined.primary)
+        case .newTitles: NewTitlesView(session: combined.primary)
+        case .holds: CombinedListView(combined: combined, section: .holds)
+        case .checkouts: CombinedListView(combined: combined, section: .checkouts)
+        case .history: CombinedListView(combined: combined, section: .history)
+        case .account(let user):
+            if combined.sessions.contains(where: { $0.username == user }) || scope == nil {
+                CombinedAccountView(combined: combined, user: user)
+            } else if let scope {
+                InactiveCardView(scope: scope, user: user) { combined.windowActions?.removeCard($0) }
+            }
+        }
+    }
+}
+
+/// One of the account lists, interlaced across the shown cards.
+struct CombinedListView: View {
+    @Bindable var combined: CombinedSession
+    var section: AppSection
+
+    @State private var selection: MergedListModel.Row.ID?
+    @State private var dropTargeted = false
+    @State private var confirmCancel: (hold: Hold, login: Int)?
+    @Environment(\.scenePhase) private var scenePhase
+
+    private var model: MergedListModel { combined.list(for: section)! }
+
+    var body: some View {
+        let rows = model.rows
+        List(selection: $selection) {
+            ForEach(rows) { row in
+                CombinedRow(combined: combined, model: model, row: row, isSelected: selection == row.id) {
+                    confirmCancel = ($0, row.login)
+                }
+            }
+            footer
+        }
+        #if os(iOS)
+        .listStyle(.plain)
+        #else
+        .listStyle(.inset)
+        #endif
+        .overlay { emptyState }
+        .refreshable { await refresh() }
+        .focusedSceneValue(\.refreshList, RefreshAction { Task { await refresh() } })
+        .onChange(of: selection) { _, id in
+            if let row = rows.first(where: { $0.id == id }) { combined.select(row) }
+        }
+        .task { model.loadIfNeeded() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.loadIfNeeded() }
+        }
+        .toolbar {
+            CombinedControls(model: model, library: combined.library, showsHoldFilter: section == .holds)
+            #if os(macOS)
+            ToolbarItem { InspectorToggle(session: combined.active) }
+            #endif
+        }
+        .navigationTitle(section.title)
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8]))
+                    .padding(6)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDrop(of: section == .holds ? [.biblioItem] : [],
+                isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = section == .holds && $0 })) { providers in
+            BibTransfer.load(from: providers) { item in
+                Task { await combined.placeHolds([item.bib], target: .auto) }
+            }
+        }
+        .confirmationDialog("Cancel this hold?", isPresented: .constant(confirmCancel != nil), presenting: confirmCancel) { target in
+            Button("Cancel Hold", role: .destructive) {
+                Task { await combined.cancel([target.hold], login: target.login) }
+                confirmCancel = nil
+            }
+            Button("Keep Hold", role: .cancel) { confirmCancel = nil }
+        } message: { target in
+            Text("On \(combined.name(target.login))’s card.")
+        }
+    }
+
+    private func refresh() async {
+        for s in combined.sessions { s.detailsRevision += 1 }
+        await model.refresh()
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if model.isLoading || model.isBackgroundFetching {
+            HStack {
+                Spacer()
+                ProgressView().controlSize(.small)
+                if model.isBackgroundFetching {
+                    Text("Loading… \(model.loadedCount) of \(model.total)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .listRowSeparator(.hidden)
+        } else if let error = model.error {
+            HStack {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                Spacer()
+                Button("Retry") { model.retry() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if model.isEmpty && model.error == nil {
+            ContentUnavailableView(emptyTitle, systemImage: section.systemImage)
+        }
+    }
+
+    private var emptyTitle: String {
+        switch section {
+        case .holds: "No Holds"
+        case .checkouts: "Nothing Checked Out"
+        default: "No Borrowing History"
+        }
+    }
+}
+
+private struct CombinedRow: View {
+    var combined: CombinedSession
+    var model: MergedListModel
+    var row: MergedListModel.Row
+    var isSelected: Bool
+    var confirmCancel: (Hold) -> Void
+
+    var body: some View {
+        ZStack {
+            if let entry = row.entry {
+                HStack(alignment: .top, spacing: 8) {
+                    ItemRow(entry: entry, library: combined.library)
+                    CardChip(style: combined.style(row.login))
+                        .padding(.top, 6)
+                        .help(combined.name(row.login))
+                }
+            } else {
+                PlaceholderRow()
+            }
+        }
+        .tag(row.id)
+        .selectionDisabled(row.entry == nil)
+        .listRowBackground(isSelected ? nil : row.entry?.accountStatus.map { StatusColors.account($0).opacity(0.08) })
+        .onAppear {
+            if row.entry != nil { model.itemAppeared(row) } else { model.placeholderAppeared(row) }
+        }
+        .onDisappear { model.placeholderDisappeared(row) }
+        .contextMenu {
+            if case .hold(let h)? = row.entry?.kind, h.canCancel {
+                Button("Cancel Hold…", systemImage: "xmark.circle", role: .destructive) { confirmCancel(h) }
+            }
+        }
+        #if os(iOS)
+        .swipeActions {
+            if case .hold(let h)? = row.entry?.kind, h.canCancel {
+                Button("Cancel Hold", systemImage: "xmark", role: .destructive) { confirmCancel(h) }
+            }
+        }
+        #endif
+    }
+}
+
+/// Card, format, hold-status, and sort menus for a merged list.
+private struct CombinedControls: ToolbarContent {
+    var model: MergedListModel
+    var library: LibraryInfo
+    var showsHoldFilter: Bool
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup {
+            if showsHoldFilter {
+                Menu {
+                    Picker("Show", selection: Binding(get: { model.holdFilter }, set: { model.setHoldFilter($0) })) {
+                        Text("All Holds").tag(ItemListModel.HoldFilter?.none)
+                        ForEach(ItemListModel.HoldFilter.allCases) { f in
+                            Text("\(f.title) (\(model.holdCount(f)))").tag(Optional(f))
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Status", systemImage: model.holdFilter == nil ? "tray" : "tray.fill")
+                }
+                .help("Filter holds by status")
+            }
+            Menu {
+                Picker("Format", selection: Binding(get: { model.format }, set: { model.setFormat($0) })) {
+                    Text("All Formats").tag(String?.none)
+                    ForEach(model.formatChoices, id: \.value) { choice in
+                        Text("\(library.formatName(choice.value)) (\(choice.count))").tag(Optional(choice.value))
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label("Format", systemImage: model.format == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+            }
+            .help("Filter by format")
+            .disabled(model.formatChoices.isEmpty && model.format == nil)
+
+            Menu {
+                Picker("Sort By", selection: Binding(get: { model.sort }, set: { model.setSort($0) })) {
+                    ForEach(model.serverSorts, id: \.self) { s in
+                        Text(library.sortName(s)).tag(ItemListModel.Sort.server(s))
+                    }
+                    Divider()
+                    Text("People Waiting").tag(ItemListModel.Sort.peopleWaiting)
+                    if !model.serverSorts.contains("title") {
+                        Text("Title").tag(ItemListModel.Sort.clientTitle)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(model.isBackgroundFetching ? "Sort (loading all cards…)" : "Sort", systemImage: "arrow.up.arrow.down")
+            }
+            .help("Change sort order")
+        }
+    }
+}
+
+/// Account settings of the card whose row was opened.
+private struct CombinedAccountView: View {
+    var combined: CombinedSession
+    var user: String
+
+    var body: some View {
+        let session = combined.sessions.first { $0.username == user } ?? combined.primary
+        AccountView(session: session)
+            .id(session.username)
+    }
+}
+
+/// An item's hold controls in a combined window: each card's hold or checkout with its own
+/// Cancel Hold, and for a card that can still hold it, "For:" and the pickup location.
+struct CardsHoldSection: View {
+    var combined: CombinedSession
+    var bib: Bib
+
+    @State private var pickup: String?
+    @State private var placing = false
+    @State private var canceling: Int?
+    @State private var confirmCancel: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            AvailabilityBadge(bib: bib)
+            ForEach(combined.sessions.indices, id: \.self) { login in
+                if let hold = combined.sessions[login].hold(for: bib.id) {
+                    holdRow(login, hold)
+                } else if let status = combined.sessions[login].accountStatus(for: bib.id) {
+                    HStack {
+                        CardChip(style: combined.style(login))
+                        AccountStatusTag(status: status)
+                    }
+                }
+            }
+            if bib.holdable, let login = combined.cardForHold(bib) {
+                placeRow(login)
+            }
+        }
+    }
+
+    private func holdRow(_ login: Int, _ hold: Hold) -> some View {
+        let session = combined.sessions[login]
+        return HStack(spacing: 8) {
+            CardChip(style: combined.style(login))
+            AccountStatusTag(status: .onHold(ready: hold.status == "READY_FOR_PICKUP", position: hold.position))
+            Spacer(minLength: 0)
+            if hold.canCancel {
+                Button(role: .destructive) {
+                    confirmCancel = login
+                } label: {
+                    if canceling == login { ProgressView().controlSize(.small) }
+                    else { Label("Cancel Hold", systemImage: "xmark.circle").fixedSize() }
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .disabled(canceling != nil)
+                .confirmationDialog("Cancel \(combined.name(login))’s hold on “\(bib.title)”?",
+                                    isPresented: Binding(get: { confirmCancel == login }, set: { if !$0 { confirmCancel = nil } })) {
+                    Button("Cancel Hold", role: .destructive) {
+                        canceling = login
+                        Task {
+                            await session.cancel([hold])
+                            canceling = nil
+                        }
+                    }
+                    Button("Keep Hold", role: .cancel) {}
+                }
+            }
+        }
+    }
+
+    private func placeRow(_ login: Int) -> some View {
+        let session = combined.sessions[login]
+        let picker = Group {
+            if !session.locations.isEmpty {
+                Picker("Pick up at", selection: Binding(get: { pickup ?? session.patron?.preferredPickup },
+                                                        set: { pickup = $0 })) {
+                    ForEach(session.locations) { Text($0.name).tag(Optional($0.id)) }
+                }
+                .labelsHidden()
+                .lineLimit(1)
+                .fixedSize()
+            }
+        }
+        // Side by side when they fit, else one above the other (long branch or card names on a
+        // narrow phone).
+        return ViewThatFits(in: .horizontal) {
+            HStack { picker; splitHoldButton(default: login) }
+            VStack(alignment: .leading, spacing: 8) { picker; splitHoldButton(default: login) }
+        }
+    }
+
+    /// "Hold for <card>" for the default card, with a drop-down to hold for another card at once.
+    private func splitHoldButton(default login: Int) -> some View {
+        let able = combined.cardsAbleToHold(bib)
+        return HStack(spacing: 0) {
+            Button { place(for: login, default: login) } label: {
+                HStack(spacing: 6) {
+                    if placing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        CardChip(style: combined.style(login), size: 16)
+                            .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1))
+                        Text("Hold for \(combined.name(login))").lineLimit(1)
+                    }
+                }
+                .padding(.leading, 10)
+                .padding(.trailing, able.count > 1 ? 8 : 12)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if able.count > 1 {
+                Rectangle().fill(.white.opacity(0.45)).frame(width: 1, height: 18)
+                Menu {
+                    ForEach(able, id: \.self) { card in
+                        Button("Hold for \(combined.name(card))") { place(for: card, default: login) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hold for another card")
+            }
+        }
+        .foregroundStyle(.white)
+        .background(Color.accentColor, in: Capsule())
+        .fixedSize()
+        .disabled(placing)
+    }
+
+    /// Places the hold on `card`, which becomes the default for the next one. The pickup
+    /// location chosen applies to the default card; another card uses its own preferred branch.
+    private func place(for card: Int, default login: Int) {
+        let session = combined.sessions[card]
+        let branch = card == login ? (pickup ?? session.patron?.preferredPickup) : session.patron?.preferredPickup
+        placing = true
+        combined.stickyCard = card
+        pickup = nil
+        Task {
+            await session.placeHold(bib, pickup: branch)
+            placing = false
+        }
+    }
+}
