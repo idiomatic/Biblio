@@ -112,18 +112,7 @@ Bring the GNOME, Android, Windows, and terminal apps to the Apple app's features
   manifest and tile assets; the terminal app as release archives, a Homebrew formula, and an
   RPM spec.
 
-Paused work, uncommitted:
-
-- **CI cross build:** on GitHub's runner, each sub-build of `zig build cross` fails to start
-  (`FileNotFound`), likely the child's `chdir` to the relative `setCwd` folder (`core`,
-  `gnome`); it passes in an Alpine aarch64 guest. Try an absolute cwd
-  (`b.graph.cwdRelativePath(b.pathFromRoot("core"))`), or print `pwd` in a CI step first.
-
 ### Open
-
-#### Builds
-
-- The cross build fails on CI (see Paused work).
 
 #### All platforms but Apple
 
