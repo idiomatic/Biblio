@@ -246,7 +246,9 @@ struct ItemInspector<Panel: View>: ViewModifier {
             content.inspector(isPresented: $isPresented) { panel }
         }
         #else
-        content.inspector(isPresented: $isPresented) { panel }
+        content
+            .background(InspectorEdgeGuard())
+            .inspector(isPresented: $isPresented) { panel }
         #endif
     }
 }
