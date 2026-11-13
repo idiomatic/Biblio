@@ -11,7 +11,7 @@ Delete items under Next as they are resolved.
 | All | Zig 0.17 |
 | macOS, iOS, iPadOS | Xcode 26 or later |
 | GNOME | GTK 4, libadwaita 1.6 or later, libsecret |
-| Android | The Android SDK (API 36) and JDK 17 or later; the Gradle wrapper fetches Gradle |
+| Android | The Android SDK (API 36), NDK 29.0.14206865 (`sdkmanager "ndk;29.0.14206865"`), and JDK 17 or later; the Gradle wrapper fetches Gradle |
 | Windows | The .NET 10 SDK and the Windows App SDK |
 | Terminal | Nothing more |
 
@@ -81,9 +81,8 @@ Bring the GNOME, Android, Windows, and terminal apps to the Apple app's features
 
 | App | Missing |
 |---|---|
-| GNOME | guest sign-in sheet; multiple selection; status bar; Library Card button; primary menu, About, and Keyboard Shortcuts; Ctrl+R, Ctrl+F, Ctrl+W, Ctrl+Q; rows' edition and on-order symbol; advanced search and facets beyond format; metainfo screenshots |
-| Android | guest sign-in sheet; Code 128 choice; card swiping; multiple selection; About and version footer; "Use System Language"; rows' edition and on-order copies; New Titles filters (hard-codes `f_on_order=false`); advanced search and facets beyond format; `strings.xml` |
-| Windows | Code 128 choice on the account page; multiple-selection UI; dragging from item detail and dropping onto search; New Titles filters (hard-codes Just Arrived); rows' and detail's edition and on-order copies; advanced search and facets beyond format; "Use System Language" (guest sheet, About, and status bar are written, unbuilt) |
+| GNOME | metainfo screenshots |
+| Windows | advanced search |
 | Terminal | advanced search; facets beyond format; New Titles' On Order view; About |
 
 | Feature | GNOME | Android | Windows | Terminal |
@@ -115,80 +114,60 @@ Bring the GNOME, Android, Windows, and terminal apps to the Apple app's features
 
 Paused work, uncommitted:
 
-- **Android:** `android/native/src/jni.zig` is ahead of the Kotlin, so item details and
-  password changes fail at runtime. `Core.kt` and `Models.kt` need `DetailList`,
-  `FetchStatus`, `HttpResponse`, `ByteArray` passwords (zeroed after the call),
-  declarations for `nativeYear`, `nativeHoldStatusRank`, `nativeReadableTint`,
-  `nativeFormatCodes`, `nativeVersion`, `nativeIncidents`, and `nativeStatus`, and an OkHttp
-  `Core.send` installed with `nativeInstallTransport()` after `loadLibrary` (plus an explicit
-  `okhttp` dependency). A JDK 17 and the Android SDK are in `~/Library/Caches/biblio-android/`.
-- **Windows:** the C# changes have never been compiled. Build first
-  (`dotnet build -p:Platform=ARM64` in the guest); riskiest are `biblio_client_new`'s
-  `delegate* unmanaged[Cdecl]` parameter, `SafeHandle` parameters beside pointers, the
-  `Release<T>` free delegates, and the status bar's `OpacityTransition`.
-- **GNOME:** a `window.zig` draft (open leak, destroy notify, login retry banner,
-  `G_TYPE_BOOLEAN`, card button, menus, accelerators, sign-in sheet, multiple selection,
-  status bar) is at `~/Library/Caches/biblio-gnome-wip/`; it needs `multi.zig`,
-  `signin.zig`, and helpers in `main.zig`, `detail.zig`, and `list.zig`.
+- **CI cross build:** on GitHub's runner, each sub-build of `zig build cross` fails to start
+  (`FileNotFound`), likely the child's `chdir` to the relative `setCwd` folder (`core`,
+  `gnome`); it passes in an Alpine aarch64 guest. Try an absolute cwd
+  (`b.graph.cwdRelativePath(b.pathFromRoot("core"))`), or print `pwd` in a CI step first.
 
 ### Open
 
 #### Builds
 
-- The Android Kotlin, with AGP 8.13.2 and the Gradle wrapper, has never compiled; CI's
-  `./gradlew` job is the first check.
-- `zig fmt --check` fails on `gnome/src/store.zig`, `main.zig`, and `window.zig`.
+- The cross build fails on CI (see Paused work).
+
+#### All platforms but Apple
+
+- Item detail's Hold has a pickup location menu; drop it and hold at the preferred location.
+- Show a hold's pickup location in item detail below its status, not in list rows.
 
 #### GNOME
 
-- `window.zig:87`: `Window.open` creates the window before its failure returns, leaking an
-  unpresented window that keeps the process alive.
-- `detail.zig:346`: if the shown item changes during a hold request, the toast names the new
-  item.
-- `gtk.zig:19`: handlers get raw pointers with no destroy notify, safe only by free ordering
-  in `window.zig`.
-- `window.zig:250`: a failed sign-in only toasts; sections show empty states with no retry.
-- `window.zig:310`: `holdsChanged` reloads Search and New Titles in full, losing scroll.
-- `window.zig:221`: the inspector stays open when the section changes.
-- `main.zig:194`: Remove Library and Remove User aren't disabled while that login is open.
-- `list.zig:921`: `year` duplicates `biblio_year` (`core.year` wraps it, unused).
-- `list.zig:317`, `detail.zig:99`: jackets have no alternative text.
-- `window.zig:188`: `g_type_from_name("gboolean")` instead of `G_TYPE_BOOLEAN`.
+- Untested: facets other than Format (the mock has only format), the sign-in retry banner,
+  the hold-limit message, Sign In to Place Holds from the selection bar, Add User from the
+  sign-in sheet with no saved users, pickup locations after the patron changes, account
+  settings, Checked Out and Borrowing History, and the `.deb` and Flatpak packages.
+- Cancel Hold's confirmation is an `AdwAlertDialog` centered on the window, not on the button.
+- Item detail has no availability line.
+- Detail's jacket doesn't fall back to the small image when the large one fails.
+- The empty search can still ask for 363 px.
 
 #### Android
 
-- `ui/SessionScreen.kt:117`: sections share one `ListDetail` without `key(section)`; on a
-  phone, switching sections with a detail open shows an empty pane.
-- `MainActivity.kt:43`: `Session` lives in `remember`, so rotation re-signs in and leaks a
-  scope and client. Hold it in a `ViewModel`.
-- `ui/Session.kt:161`: only `Core.Failure` is caught; other throwables crash.
-- `data/LibraryStore.kt:80`: decryption failures read as "missing credentials", with no way
-  to re-enter the password. `:65`: `key()` isn't synchronized.
-- `AndroidManifest.xml:9`: the launcher icon is the system `ic_menu_agenda`, not `icon.png`;
-  the theme is platform `Theme.Material.NoActionBar`.
-- `core/Models.kt`, `ui/SessionScreen.kt:277`, `ui/LibraryIcon.kt:110`: year, format names,
-  availability labels, and the brand color (without `biblio_readable_tint`) duplicate the
-  core.
-- `ui/SessionScreen.kt:259`: `formatName` makes a JNI call per row per recomposition, and
-  the unstable `Session` keeps rows from skipping.
-- `ui/AccountScreen.kt:86`: the keyboard hides the password fields; add `imePadding()`.
-  `:210`: `fillMaxWidth().widthIn(max = 420.dp)` is in the wrong order. `:215`: barcode bars
-  land on fractional pixels.
-- `ui/ItemDetail.kt:148`: `remember { session.patron?.preferredPickup }` isn't keyed.
-- `ui/Launcher.kt:124`: the partner directory is fetched each time the sheet opens.
-- `ui/Session.kt:52`: guests request `locations()`, which fails.
-- `ui/SessionScreen.kt:106`: the badge has no TalkBack semantics.
+- Untested signed in (account, holds, several cards, Code 128, language); card swiping shows
+  only cards that signed in since it was added (it stores each card number at sign-in).
+- New Titles: tapping the selected Just Arrived or On Order shows both (no `f_on_order`);
+  untested against the server.
+- Availability labels live in `strings.xml`; a core helper would share them.
+- The debug APK is 84 MB.
 
 #### Windows
 
-- `Views/Dialogs.cs:14`: a failed first directory fetch is cached forever.
-- `Views/DetailPane.cs:177`: the cancel confirmation is a `ContentDialog`, not a `Flyout` on
-  the button.
+- Drag from item detail is wired (cover, title, author) but no drop fired in the guest; try
+  it on real hardware.
+- Untested: catalog Place Holds on a selection, "Filter by" (the mock has no facets beyond
+  format), and Use System Language (hidden when the languages match).
+- The sort menu doesn't offer `CoreList.Sort`'s Due Date, Status, Server Title, or Author;
+  of the new wrappers only `ExactFormatCounts` is called.
+- `Views/ItemListView.cs`: `StatusLine` is unused.
 
 #### Apple (found while taking screenshots)
 
+- Retake `iphone-04-detail.png`, `ipad-04-detail.png`, `iphone-03-flow.gif`, and the Holds
+  screenshots: item detail has no pickup location menu, and hold rows no longer show the
+  pickup location.
+- Test New Titles' Not Borrowed toggle: it appears to do nothing.
 - A refined format repeats in a row's details when the edition says the same thing ("4K Ultra
-  HD Blu-ray · 2024 · 4K Ultra HD Blu-ray").
+  HD Blu-ray · 2024 · 4K Ultra HD Blu-ray"); Android drops it, Apple and the core don't.
 - In a window with several cards, a list row shows one card's chip even when more than one card
   holds the title; item detail shows each.
 - In a window with several cards, there's no "Card" filter (AGENTS.md), and lists select one item
