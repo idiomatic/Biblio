@@ -11,7 +11,6 @@ struct ItemDetailView: View {
     @State private var copies: [CopyAvailability]?
     @State private var copiesError: String?
     @State private var fields: [DetailField] = []
-    @State private var pickup: String?
     @State private var placing = false
     @State private var canceling = false
     @State private var confirmCancel = false
@@ -25,7 +24,10 @@ struct ItemDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 if cards == nil, let status = session.accountStatus(for: bib.id) {
-                    AccountStatusTag(status: status, hold: session.hold(for: bib.id))
+                    VStack(alignment: .leading, spacing: 4) {
+                        AccountStatusTag(status: status, hold: session.hold(for: bib.id))
+                        if let hold = session.hold(for: bib.id) { PickupLine(hold: hold) }
+                    }
                 }
                 if let cards {
                     CardsHoldSection(combined: cards, bib: bib)
@@ -59,13 +61,8 @@ struct ItemDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        // The account may still be loading when the item opens, e.g. right after a guest signs in.
-        .onChange(of: session.patron?.preferredPickup, initial: true) { _, preferred in
-            if pickup == nil { pickup = preferred }
-        }
         // A list refresh bumps the revision, so the item's availability and details load again.
         .task(id: [bib.id, String(session.detailsRevision)]) {
-            pickup = pickup ?? session.patron?.preferredPickup
             async let avail: Void = loadAvailability()
             async let details: Void = loadFields()
             _ = await (avail, details)
@@ -172,20 +169,12 @@ struct ItemDetailView: View {
         } else if bib.holdable {
             VStack(alignment: .leading, spacing: 8) {
                 AvailabilityBadge(bib: bib)
-                let picker = Group {
-                    if !session.locations.isEmpty {
-                        Picker("Pick up at", selection: $pickup) {
-                            ForEach(session.locations) { Text($0.name).tag(Optional($0.id)) }
-                        }
-                        .labelsHidden()
-                        .lineLimit(1)
-                        .fixedSize()
-                    }
-                }
-                let hold = Button {
+                // At the preferred pickup location: a menu here read as changing an existing
+                // hold's location.
+                Button {
                     placing = true
                     Task {
-                        await session.placeHold(bib, pickup: pickup)
+                        await session.placeHold(bib)
                         placing = false
                     }
                 } label: {
@@ -194,11 +183,6 @@ struct ItemDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(placing)
-                // Side by side when they fit, else one above the other (a long branch name on a phone).
-                ViewThatFits(in: .horizontal) {
-                    HStack { picker; hold }
-                    VStack(alignment: .leading, spacing: 8) { picker; hold }
-                }
             }
         } else {
             AvailabilityBadge(bib: bib)
@@ -327,6 +311,19 @@ struct ItemDetailView: View {
     private func loadFields() async {
         if let result = try? await session.client.detailFields(bib.id) {
             withAnimation { fields = result }
+        }
+    }
+}
+
+/// Where a hold will be picked up, below its status.
+struct PickupLine: View {
+    var hold: Hold
+
+    var body: some View {
+        if let location = hold.pickupLocation {
+            Label(location, systemImage: "mappin")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

@@ -18,7 +18,7 @@
 * editions drop catalog punctuation: matching square brackets and a closing period, except one ending an abbreviation.
 * an inspector shows item detail, closing when the section changes; on macOS its toggle is the rightmost toolbar button.
 * item detail fetches "Availability by Location" in the background (collection and call number optional), with a colored symbol per copy status.
-* item detail has "Hold" with a pickup location menu (defaulting to the preferred location), or "Cancel Hold" for held items.
+* item detail has "Hold", placing it at the preferred pickup location (no location menu), or "Cancel Hold" for held items, with the hold's pickup location below its status (list rows don't show it).
 * dragging part of item detail onto any window's holds places a hold, or onto its search field searches for it; no drag hints.
 * the barcode is the everyday control: on iOS/iPadOS a toolbar button, never inside a menu (macOS has none: nobody brings a Mac to checkout), and the account view shows the library card as a scannable barcode, Codabar or Code 128.
 * the account view alone chooses the barcode type, a sticky choice per library that the toolbar button follows.

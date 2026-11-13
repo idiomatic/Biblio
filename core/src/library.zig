@@ -9,6 +9,7 @@ const http = @import("http.zig");
 const html = @import("html.zig");
 const json = @import("json.zig");
 const models = @import("models.zig");
+const formats = @import("formats.zig");
 const J = json.J;
 
 /// Accepts "wccls", "WCCLS", "https://smpl.bibliocommons.com/", "smpl.bibliocommons.com/v2/search?…".
@@ -185,7 +186,10 @@ pub const format_codes = blk: {
 };
 
 /// The library's own name for a format code, else a built-in English one, else the code prettified.
+/// A code the core refines to (formats.zig) keeps its built-in name: a library that files it
+/// under a broader code may label the code itself otherwise (WCCLS: `UK` is "Unknown").
 pub fn formatName(a: Allocator, labels: J, code: []const u8) []const u8 {
+    if (formats.isRefined(code)) if (fallback_format_names.get(code)) |name| return name;
     const lower = std.ascii.allocLowerString(a, code) catch code;
     const key = std.fmt.allocPrint(a, "FORMAT.{s}", .{lower}) catch "";
     if (labels.get(key).str(a)) |s| return s;
@@ -327,4 +331,14 @@ test "colors and names" {
     try testing.expectEqualStrings("Libro", formatName(a, labels, "BK"));
     try testing.expectEqualStrings("DVD", formatName(a, labels, "DVD"));
     try testing.expectEqualStrings("Some thing", formatName(a, labels, "SOME_THING"));
+}
+
+test "a refined code keeps its built-in name over the library's label" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"FORMAT.uk\":\"Unknown\",\"FORMAT.bk\":\"Libro\"}", .{});
+    const labels = J.of(parsed);
+    try testing.expectEqualStrings("4K Ultra HD Blu-ray", formatName(a, labels, "UK"));
+    try testing.expectEqualStrings("Libro", formatName(a, labels, "BK"));
 }

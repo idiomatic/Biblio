@@ -305,12 +305,7 @@ private struct CombinedRow: View {
     var body: some View {
         ZStack {
             if let entry = row.entry {
-                HStack(alignment: .top, spacing: 8) {
-                    ItemRow(entry: entry, library: combined.library)
-                    CardChip(style: combined.style(row.login))
-                        .padding(.top, 6)
-                        .help(combined.name(row.login))
-                }
+                ItemRow(entry: entry, library: combined.library, login: row.login)
             } else {
                 PlaceholderRow()
             }
@@ -391,15 +386,18 @@ private struct CombinedControls: ToolbarContent {
 
 
 /// An item's hold controls in a combined window: each card's hold or checkout with its own
-/// Cancel Hold, and for a card that can still hold it, "For:" and the pickup location.
+/// Cancel Hold, and "Hold for <card>" for the cards that can still hold it, each at its
+/// preferred pickup location.
 struct CardsHoldSection: View {
     var combined: CombinedSession
     var bib: Bib
 
-    @State private var pickup: String?
     @State private var placing = false
     @State private var canceling: Int?
     @State private var confirmCancel: Int?
+    /// Cancel Hold's height, which a hold's status line takes whether the button is beside it or
+    /// below it, so the status stays put as the inspector narrows.
+    @State private var cancelHeight: CGFloat?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -415,26 +413,31 @@ struct CardsHoldSection: View {
                 }
             }
             if bib.holdable, let login = combined.cardForHold(bib) {
-                placeRow(login)
+                splitHoldButton(default: login)
             }
         }
     }
 
     private func holdRow(_ login: Int, _ hold: Hold) -> some View {
-        let status = HStack(spacing: 8) {
+        let lineHeight = hold.canCancel ? cancelHeight : nil
+        let status = AccountStatusTag(status: .onHold(ready: hold.isReady, position: hold.position), hold: hold)
+            .frame(minHeight: lineHeight)
+        return HStack(alignment: .top, spacing: 8) {
             CardChip(style: combined.style(login))
-            AccountStatusTag(status: .onHold(ready: hold.isReady, position: hold.position), hold: hold)
-        }
-        // Cancel Hold beside the status when they fit, else below it (a narrow inspector).
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                status
-                Spacer(minLength: 0)
-                cancelButton(login, hold)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                status
-                cancelButton(login, hold)
+                .frame(minHeight: lineHeight)
+            VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        status
+                        Spacer(minLength: 0)
+                        cancelButton(login, hold)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        status
+                        cancelButton(login, hold)
+                    }
+                }
+                PickupLine(hold: hold)
             }
         }
     }
@@ -452,6 +455,7 @@ struct CardsHoldSection: View {
             .buttonStyle(.bordered)
             .tint(.red)
             .disabled(canceling != nil)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cancelHeight = $0 }
             .confirmationDialog("Cancel \(combined.name(login))’s hold on “\(bib.title)”?",
                                 isPresented: Binding(get: { confirmCancel == login }, set: { if !$0 { confirmCancel = nil } })) {
                 Button("Cancel Hold", role: .destructive) {
@@ -463,27 +467,6 @@ struct CardsHoldSection: View {
                 }
                 Button("Keep Hold", role: .cancel) {}
             }
-        }
-    }
-
-    private func placeRow(_ login: Int) -> some View {
-        let session = combined.sessions[login]
-        let picker = Group {
-            if !session.locations.isEmpty {
-                Picker("Pick up at", selection: Binding(get: { pickup ?? session.patron?.preferredPickup },
-                                                        set: { pickup = $0 })) {
-                    ForEach(session.locations) { Text($0.name).tag(Optional($0.id)) }
-                }
-                .labelsHidden()
-                .lineLimit(1)
-                .fixedSize()
-            }
-        }
-        // Side by side when they fit, else one above the other (long branch or card names on a
-        // narrow phone).
-        return ViewThatFits(in: .horizontal) {
-            HStack { picker; splitHoldButton(default: login) }
-            VStack(alignment: .leading, spacing: 8) { picker; splitHoldButton(default: login) }
         }
     }
 
@@ -533,16 +516,13 @@ struct CardsHoldSection: View {
         .disabled(placing)
     }
 
-    /// Places the hold on `card`, which becomes the default for the next one. The pickup
-    /// location chosen applies to the default card; another card uses its own preferred branch.
+    /// Places the hold on `card`, which becomes the default for the next one.
     private func place(for card: Int, default login: Int) {
         let session = combined.sessions[card]
-        let branch = card == login ? (pickup ?? session.patron?.preferredPickup) : session.patron?.preferredPickup
         placing = true
         combined.stickyCard = card
-        pickup = nil
         Task {
-            await session.placeHold(bib, pickup: branch)
+            await session.placeHold(bib)
             placing = false
         }
     }

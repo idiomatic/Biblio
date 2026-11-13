@@ -169,9 +169,6 @@
     "All Formats" : {
 
     },
-    "All Holds" : {
-
-    },
     "Allow camera access for Biblio in Settings to scan your library card." : {
 
     },
@@ -358,9 +355,6 @@
 
     },
     "Filter by format" : {
-
-    },
-    "Filter holds by status" : {
 
     },
     "For %@ · %lld" : {
@@ -563,9 +557,6 @@
     "People Waiting" : {
 
     },
-    "Pick up at" : {
-
-    },
     "Pickup location" : {
 
     },
@@ -762,9 +753,6 @@
 
     },
     "Split Evenly" : {
-
-    },
-    "Status" : {
 
     },
     "Suggestions" : {

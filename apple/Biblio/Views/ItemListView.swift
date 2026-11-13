@@ -454,6 +454,8 @@ struct ListControls: ToolbarContent {
 struct ItemRow: View {
     var entry: ListEntry
     var library: LibraryInfo
+    /// The card whose hold, checkout, or history this row is, in a list of several cards' rows.
+    var login: Int? = nil
     /// In a window with several cards, a catalog row marks each card's hold or checkout.
     @Environment(\.combinedHolds) private var cards
     @Environment(\.borrowedIndex) private var borrowedIndex
@@ -491,9 +493,32 @@ struct ItemRow: View {
                 status
             }
             Spacer(minLength: 0)
+            cardChips
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
+    }
+
+    /// In a window with several cards, the chip of the card whose row this is, or of each card
+    /// that holds or borrowed a catalog row's title (in the order of their tags), at the top right.
+    private var chipLogins: [Int] {
+        guard let cards else { return [] }
+        if let login { return [login] }
+        if case .catalog = entry.kind { return cards.statuses(for: bib.id).map(\.login) }
+        return []
+    }
+
+    @ViewBuilder
+    private var cardChips: some View {
+        if let cards, !chipLogins.isEmpty {
+            VStack(spacing: 4) {
+                ForEach(chipLogins, id: \.self) { login in
+                    CardChip(style: cards.style(login))
+                        .help(cards.name(login))
+                }
+            }
+            .padding(.top, 6)
+        }
     }
 
     /// Format, year and edition, e.g. "Book · 2019 · Second Ace hardcover edition".
@@ -512,12 +537,10 @@ struct ItemRow: View {
             if let cards {
                 let marks = cards.statuses(for: bib.id)
                 if !marks.isEmpty {
+                    // Each card's chip is at the row's top right (`cardChips`).
                     WrapLayout(spacing: 6, lineSpacing: 2) {
                         ForEach(marks, id: \.login) { mark in
-                            HStack(spacing: 4) {
-                                CardChip(style: cards.style(mark.login), size: 16)
-                                AccountStatusTag(status: mark.status, hold: cards.sessions[mark.login].hold(for: bib.id))
-                            }
+                            AccountStatusTag(status: mark.status, hold: cards.sessions[mark.login].hold(for: bib.id))
                         }
                     }
                 }
@@ -527,18 +550,8 @@ struct ItemRow: View {
         case .hold(let h):
             // As a catalog row: the title's availability, then the hold, as item detail shows them.
             AvailabilityBadge(bib: bib, borrowed: borrowed.map { BorrowedMark(match: $0, library: library) })
-            // Items wrap onto further lines on a narrow screen instead of squeezing each other.
-            WrapLayout(spacing: 6, lineSpacing: 2) {
-                AccountStatusTag(status: .onHold(ready: h.isReady, position: h.position), hold: h)
-                if let loc = h.pickupLocation {
-                    HStack(spacing: 2) {
-                        Image(systemName: "mappin").imageScale(.small)
-                        Text(loc).lineLimit(1)
-                    }
-                    .foregroundStyle(.secondary)
-                }
-            }
-            .font(.callout)
+            // The pickup location is in item detail.
+            AccountStatusTag(status: .onHold(ready: h.isReady, position: h.position), hold: h)
         case .checkout(let c):
             if let due = c.dueDate {
                 HStack(spacing: 4) {

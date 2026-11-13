@@ -43,7 +43,7 @@ One patron's visit, from first launch to picking up a film, in the Apple apps. T
 <img src="docs/screenshots/iphone-03-search.png" alt="Search results for Interstellar, with the format filter open: Blu-ray Disc, 4K Ultra HD Blu-ray, and DVD" width="220">
 </picture>
 </td>
-<td><img src="docs/screenshots/iphone-04-detail.png" alt="Interstellar on 4K Ultra HD Blu-ray, with its copies by branch and a pickup branch beside Hold" width="220"></td>
+<td><img src="docs/screenshots/iphone-04-detail.png" alt="Interstellar on 4K Ultra HD Blu-ray, with its copies by branch" width="220"></td>
 <td><img src="docs/screenshots/iphone-05-hold.png" alt="The hold placed, eleventh in line, with a Cancel Hold button" width="220"></td>
 </tr>
 <tr>
@@ -55,7 +55,7 @@ One patron's visit, from first launch to picking up a film, in the Apple apps. T
 
 <img src="docs/screenshots/ipad-03-new-titles.png" alt="New Titles on iPad, just arrived, with the format filter open: Book, Downloadable Audiobook, eBook, Graphic Novel, Music CD, Picture Book, and Audiobook CD, each with its count">
 
-<img src="docs/screenshots/ipad-04-detail.png" alt="Search results for Martha Wells on iPad, with the audiobook of Rogue Protocol in the inspector: borrowed before in June 2026, a pickup branch beside Hold, and its copies by branch">
+<img src="docs/screenshots/ipad-04-detail.png" alt="Search results for Martha Wells on iPad, with the audiobook of Rogue Protocol in the inspector: borrowed before in June 2026, and its copies by branch">
 
 ### Pick up
 

@@ -368,7 +368,6 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Biblio-Info.plist";
-				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/zig-out/lib/$(PLATFORM_NAME)";
 				INFOPLIST_KEY_CFBundleDisplayName = Biblio;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -378,6 +377,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/zig-out/lib/$(PLATFORM_NAME)";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				OTHER_LDFLAGS = "-lbiblio";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rbrian.Biblio;
@@ -408,7 +408,6 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Biblio-Info.plist";
-				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/zig-out/lib/$(PLATFORM_NAME)";
 				INFOPLIST_KEY_CFBundleDisplayName = Biblio;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -418,6 +417,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/zig-out/lib/$(PLATFORM_NAME)";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				OTHER_LDFLAGS = "-lbiblio";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rbrian.Biblio;
