@@ -3,6 +3,61 @@
 Notable changes to Biblio. Versions follow the Apple app's version number; the other apps share
 the core and are not yet released.
 
+## 1.10 — 2026-11-12
+
+### Fixed
+- 4K Ultra HD Blu-ray discs no longer read "Unknown" at libraries, such as WCCLS, that file them
+  as Blu-ray (since 1.9).
+- Android: item details and password changes work again, and Biblio uses the system's network
+  settings, including your certificate authorities, proxies, and VPNs.
+- Android: refined formats such as 4K Ultra HD Blu-ray are counted exactly, and Borrowing
+  History sorts by when you borrowed each item.
+- Android: the app no longer crashes loading its native library at launch.
+- Android: rotating the screen no longer signs in again, switching sections with an item open
+  shows the new section, and a saved password that can't be read asks for it again.
+- Windows: Cancel Hold confirms beside the button, notices close themselves, search shows
+  Cancel Hold for an item already on hold, and a failed library-directory load is retried.
+- GNOME: Cancel Hold asks first, a failed sign-in offers Try Again, the window fits 360 px,
+  and a library or user open in a window can't be removed.
+
+### Changed
+- Item details no longer offer a pickup location beside Hold, which read as changing a hold's
+  location; holds go to your preferred pickup location, set on your card's page.
+- A hold's pickup location moved from its row in Holds to its item details, below its status.
+- In a window with several cards, Search and New Titles show each card's chip at the right of
+  a row, as Holds does, instead of before its hold or checkout.
+
+### Added
+- Android: rows show the edition, copies on order, and a colored label for your hold,
+  checkout, or due date; the Format filter counts each format exactly.
+- Android: long-press to select several items, then place or cancel holds on all of them, with
+  the reason for any the library refuses.
+- Android: a guest who places a hold picks or adds a card, keeping the search and selection.
+- Android: New Titles filters by Just Arrived and On Order, and by audience, language, and
+  more; Advanced Search narrows by field, format, audience, language, and year.
+- Android: the account screen chooses Codabar or Code 128 per library, swipes between the
+  library's cards, and offers Use System Language.
+- Android: About says who made Biblio and has Copy Diagnostic Log, with the version at the foot
+  of the Libraries and Account screens.
+- Android: a new launcher icon, and a theme that follows light and dark mode.
+- Windows: rows show the edition, copies on order, and a colored label for your hold,
+  checkout, or due date, and the Format filter counts each format exactly.
+- Windows: select several items to place or cancel holds on all of them.
+- Windows: New Titles filters by Just Arrived and On Order, and by audience, language, and
+  more.
+- Windows: the account page chooses Codabar or Code 128 and offers Use System Language.
+- Windows: a guest who places a hold picks or adds a card; About says who made Biblio and has
+  Copy Diagnostic Log; a status bar shows the latest request.
+- GNOME: rows show the edition, copies on order, and a colored label for your hold,
+  checkout, or due date.
+- GNOME: select several items to place or cancel holds on all of them, from a bar at the
+  bottom.
+- GNOME: a guest who places a hold picks or adds a card, keeping the search and the item.
+- GNOME: Advanced Search, and filters by availability, audience, content, language, and
+  date; New Titles filters by Just Arrived and On Order.
+- GNOME: a main menu with About, Keyboard Shortcuts, and Copy Diagnostic Log; a Library Card
+  button; a status bar; and Ctrl+R, F5, Ctrl+F, Ctrl+W, and Ctrl+Q.
+
 ## 1.9 — 2026-11-12
 
 ### Added

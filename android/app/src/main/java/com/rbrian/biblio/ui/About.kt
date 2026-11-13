@@ -33,7 +33,7 @@ fun appVersion(): String {
     return remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
 }
 
-/** "Biblio 1.9", quiet, at the foot of a screen; opens About. */
+/** "Biblio 1.10", quiet, at the foot of a screen; opens About. */
 @Composable
 fun VersionFooter(onAbout: () -> Unit) {
     Text(
