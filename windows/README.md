@@ -65,6 +65,8 @@ Windows 11 ARM64 runs as a `terrarium` guest on Apple silicon. Guests are epheme
 
    `~/vms/win-dev.guest` (about 23 GB) holds Zig, the .NET SDK, and the NuGet cache.
 
+   If the guest can't download (`dot.net` closed the connection), fetch the toolchain on the Mac instead: the Zig 0.17.1 `aarch64-windows` zip from <https://ziglang.org/download/index.json> and the .NET 10 SDK `win-arm64` zip from <https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json>, checking each hash. `put` them in, expand them with `tar -xf` under `C:\tools\zig` and `C:\tools\dotnet`, and set the machine `Path` and `DOTNET_ROOT` as `guest-setup.ps1` does. NuGet restores from inside the guest.
+
 5. **Build.** Start the prepared guest and wait for `exec` as above. Send the source as a tarball through the same scratch directory and server (`COPYFILE_DISABLE=1` keeps macOS `._*` files, which MSBuild reads as extra projects, out of it; leave out `.git`, `apple`, `android`, `gnome`, and build outputs), then build in the guest:
 
    ```
@@ -76,7 +78,7 @@ Windows 11 ARM64 runs as a `terrarium` guest on Apple silicon. Guests are epheme
      "mkdir C:\src; iwr -UseBasicParsing http://192.168.64.1:8765/biblio.tgz -OutFile C:\b.tgz; tar -xzf C:\b.tgz -C C:\src; cd C:\src\windows\Biblio; dotnet build -p:Platform=ARM64"
    ```
 
-   Long builds outlast one `exec`: start them detached with a log file and poll it.
+   Long builds outlast one `exec`: start them detached with a log file and poll it, through a scheduled task as under Troubleshooting. The first build takes about 5 minutes; later ones, under 30 seconds. A tarball expanded over an earlier one keeps the Mac's file times, which the guest may read as older than its build output, so MSBuild skips the changed files: set each source file's `LastWriteTime` to now after expanding.
 
 ## Screenshots
 

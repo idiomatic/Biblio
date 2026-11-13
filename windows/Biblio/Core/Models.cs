@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Biblio.Core;
 
 // The data every Biblio app shows, as libbiblio returns it (core/src/models.zig), built from its
@@ -14,25 +12,17 @@ public sealed record Bib(
 {
     public string? PrimaryAuthor => Authors is { Count: > 0 } a ? a[0] : null;
 
-    /// <summary>"2026" from "2026", "20261006" or "03/23/2027".</summary>
-    public string? Year
-    {
-        get
-        {
-            var d = PublicationDate;
-            if (d is null) return null;
-            if (d.Length == 4) return d;
-            if (d.Length == 8 && d.All(char.IsDigit)) return d[..4];
-            var m = Regex.Match(d, @"\b(1[5-9]|20)\d\d\b");
-            return m.Success ? m.Value : d;
-        }
-    }
+    /// <summary>"2019" from "c2019.", "[2019?]", or "20190312"; else the date as given.</summary>
+    public string? Year => Core.Year(PublicationDate);
 }
 
 public sealed record Hold(string Id, string MetadataId, string Status, int? Position, string? PickupLocation,
     string? ExpiryDate, string? PickupByDate, string? SuspendEndDate, bool CanCancel)
 {
-    public bool IsReady => Status == "READY_FOR_PICKUP";
+    public HoldRank Rank => Core.HoldStatusRank(Status);
+    public bool IsReady => Rank == HoldRank.Ready;
+    /// <summary>"Ready for pickup", "In transit", "On hold", or "Paused".</summary>
+    public string StatusName => Core.HoldStatusName(Status);
 }
 
 public sealed record Checkout(string Id, string MetadataId, string? Status, string? DueDate, string? CheckoutDate, int? TimesRenewed);
@@ -53,11 +43,15 @@ public sealed record ListPage(List<ListEntry> Entries, int Page, int Pages, int 
 public sealed record CopyAvailability(string Id, string Branch, string Status, bool IsAvailable, string? Collection,
     string? CallNumber, string? DueDate, bool IsOnOrder, string Kind);
 
-public sealed record DetailField(string Label, List<string> Values);
+/// <summary>A record field; IsEdition marks the one that states the edition.</summary>
+public sealed record DetailField(string Label, List<string> Values, bool IsEdition = false);
 public sealed record Location(string Id, string Name);
 
 public sealed record Patron(long UserId, long AccountId, string Name, string? Email, string Language, string? Barcode,
-    string? PreferredPickup, bool? BorrowingHistoryEnabled);
+    string? PreferredPickup, bool? BorrowingHistoryEnabled, string? FirstName = null);
+
+/// <summary>The account's settings as the library has them now (biblio_account_settings).</summary>
+public sealed record AccountSettings(string? Email, string? Pickup, string? Language);
 
 public sealed record LibraryInfo(string Subdomain, string Name, string? ShortName, string? PrimaryColor, string? Website,
     Dictionary<string, string>? Labels, List<string>? Languages, List<string>? Users)

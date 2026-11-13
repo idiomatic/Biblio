@@ -10,22 +10,32 @@ public static class AddLibraryDialog
     private static readonly List<DirectoryEntry> Directory = [];
     private static Task? _loading;
 
-    /// <summary>Loads the partner directory once, page by page, in the background.</summary>
-    private static Task LoadDirectory() => _loading ??= Task.Run(async () =>
+    /// <summary>Loads the partner directory page by page in the background; a failed load is tried again next time.</summary>
+    private static Task LoadDirectory() => _loading ??= LoadPages();
+
+    private static async Task LoadPages()
     {
         string? next = null;
-        var seen = new HashSet<string>();
-        do
+        var failed = false;
+        await Task.Run(async () =>
         {
-            DirectoryPage page;
-            try { page = await Core.Core.DirectoryPageAsync(next); }
-            catch (CoreException) { break; }
-            var fresh = page.Entries.Where(e => seen.Add(e.Name)).ToList();
-            lock (Directory) Directory.AddRange(fresh);
-            if (fresh.Count == 0) break;
-            next = page.Next;
-        } while (next is not null);
-    });
+            do
+            {
+                DirectoryPage page;
+                try { page = await Core.Core.DirectoryPageAsync(next); }
+                catch (CoreException) { failed = true; break; }
+                lock (Directory)
+                {
+                    // A retry starts over from the first page, so pages already read aren't added twice.
+                    var fresh = page.Entries.Where(e => !Directory.Any(d => d.Name == e.Name)).ToList();
+                    Directory.AddRange(fresh);
+                    if (fresh.Count == 0) break;
+                }
+                next = page.Next;
+            } while (next is not null);
+        });
+        if (failed) _loading = null;
+    }
 
     /// <summary>True if a library was added.</summary>
     public static async Task<bool> Show(XamlRoot root)
@@ -164,5 +174,44 @@ public static class AddUserDialog
         };
         await dialog.ShowAsync();
         return added;
+    }
+}
+
+/// <summary>
+/// A guest's sign-in sheet: the library's saved users (one open in another window is disabled, with
+/// the reason) plus "Add User…"; the sign-in form straight away if it has none.
+/// </summary>
+public static class SignInDialog
+{
+    /// <summary>The username chosen or added, or null.</summary>
+    public static async Task<string?> Show(XamlRoot root, LibraryInfo library)
+    {
+        var users = library.Users ?? [];
+        if (users.Count == 0) return await AddUserDialog.Show(root, library);
+        string? chosen = null;
+        var addUser = false;
+        var list = new StackPanel { Spacing = 4, MinWidth = 360 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = root, Title = $"Sign In to {library.DisplayName}", Content = list,
+            CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close,
+        };
+        foreach (var user in users)
+        {
+            var open = AccountWindow.IsOpen(library.Subdomain, user);
+            var card = new CommunityToolkit.WinUI.Controls.SettingsCard
+            {
+                Header = user, HeaderIcon = new SymbolIcon(Symbol.Contact), IsClickEnabled = !open, IsEnabled = !open,
+            };
+            if (open) card.Description = "Open in another window";
+            card.Click += (_, _) => { chosen = user; dialog.Hide(); };
+            list.Children.Add(card);
+        }
+        var add = new CommunityToolkit.WinUI.Controls.SettingsCard { Header = "Add User…", HeaderIcon = new SymbolIcon(Symbol.AddFriend), IsClickEnabled = true };
+        add.Click += (_, _) => { addUser = true; dialog.Hide(); };
+        list.Children.Add(add);
+        await dialog.ShowAsync();
+        // One dialog at a time: the form opens once the sheet has closed.
+        return addUser ? await AddUserDialog.Show(root, library) : chosen;
     }
 }

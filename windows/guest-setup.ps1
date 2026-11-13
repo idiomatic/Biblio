@@ -2,7 +2,7 @@
 # Zig and the .NET SDK under C:\tools, on the machine PATH.
 # Run as the guest's administrator; see README.md.
 param(
-    [string]$Zig = '0.17.0',
+    [string]$Zig = '0.17.1',
     [string]$Dotnet = '10.0'
 )
 $ErrorActionPreference = 'Stop'

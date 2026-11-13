@@ -35,7 +35,6 @@ public sealed class BorrowedIndex : IDisposable
         public byte Complete, Syncing;
     }
 
-    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern unsafe void biblio_free(void* ptr);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr biblio_borrowed_index_new();
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void biblio_borrowed_index_free(IntPtr index);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern unsafe bool biblio_borrowed_index_import(IntPtr index, byte* bytes, nuint len);
@@ -222,7 +221,7 @@ public sealed class BorrowedIndex : IDisposable
             file.Write(new ReadOnlySpan<byte>(bytes, checked((int)len)));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        finally { biblio_free(bytes); }
+        finally { Interop.Free(bytes); }
     }
 
     /// <summary>

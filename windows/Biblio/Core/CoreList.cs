@@ -14,8 +14,12 @@ public sealed unsafe class CoreList : IDisposable
 
     public enum Kind { Search, Holds, Checkouts, History }
 
-    /// <summary>Server keeps the server's order; the others sort fetched items and need every page.</summary>
-    public enum Sort { Server, PeopleWaiting, Title }
+    /// <summary>
+    /// Server keeps the server's order; the others sort fetched items and need every page. DueDate is
+    /// soonest first (checkouts), Status is ready, in transit, not yet available, then paused (holds),
+    /// and ServerTitle and Author are server sorts that a merged list orders across logins.
+    /// </summary>
+    public enum Sort { Server, PeopleWaiting, Title, DueDate, Status, ServerTitle, Author }
 
     /// <summary>Holds shown by status; None shows all.</summary>
     public enum HoldFilter { None, Ready, NotReady, OnOrder }
@@ -57,6 +61,8 @@ public sealed unsafe class CoreList : IDisposable
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void biblio_list_clear(IntPtr list);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern bool biblio_list_request(IntPtr list, long page);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern bool biblio_list_apply(IntPtr list, ulong generation, long page, CItem* items, nuint count, long total, long pageSize, long nowMs);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern bool biblio_list_apply_formats(IntPtr list, ulong generation, long page, CItem* items, byte** libraryFormats, nuint count, long total, long pageSize, long nowMs);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void biblio_list_format_facet_counts(IntPtr list, byte** values, long* counts, nuint count);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern bool biblio_list_fail(IntPtr list, ulong generation, long page);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)] private static extern bool biblio_list_is_stale(IntPtr list, long nowMs);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern long biblio_list_item_appeared(IntPtr list, long position);
@@ -105,7 +111,8 @@ public sealed unsafe class CoreList : IDisposable
     {
         var entries = page.Entries;
         var items = new CItem[entries.Count];
-        var strings = new List<IntPtr>(entries.Count * 4);
+        var libraryFormats = new byte*[entries.Count];
+        var strings = new List<IntPtr>(entries.Count * 5);
         try
         {
             byte* Utf8(string s)
@@ -128,12 +135,14 @@ public sealed unsafe class CoreList : IDisposable
                     Ready = (byte)(e.Hold is { IsReady: true } ? 1 : 0),
                     OnOrder = (byte)(e.Bib.Status == "ON_ORDER" || e.Bib.OnOrderCopies > 0 ? 1 : 0),
                     DueDay = DayNumber(e.Checkout?.DueDate),
-                    StatusRank = e.Hold is { } h ? StatusRank(h) : (byte)0,
+                    StatusRank = e.Hold is { } h ? (byte)h.Rank : (byte)0,
                     Author = Utf8(e.Bib.PrimaryAuthor ?? ""),
                 };
+                libraryFormats[i] = Utf8(e.Bib.LibraryFormat);
             }
             fixed (CItem* p = items)
-                return biblio_list_apply(_handle, generation, page.Page, p, (nuint)items.Length, page.Count, page.PageSize, nowMs);
+            fixed (byte** f = libraryFormats)
+                return biblio_list_apply_formats(_handle, generation, page.Page, p, f, (nuint)items.Length, page.Count, page.PageSize, nowMs);
         }
         finally
         {
@@ -147,15 +156,6 @@ public sealed unsafe class CoreList : IDisposable
             System.Globalization.DateTimeStyles.None, out var d)
             ? d.DayNumber - DateOnly.FromDateTime(DateTime.UnixEpoch).DayNumber
             : 0;
-
-    /// <summary>A hold's place in the status sort: ready, in transit, not yet available (or anything else), paused.</summary>
-    private static byte StatusRank(Hold hold) => (byte)(hold.IsReady ? 0 : hold.Status switch
-    {
-        "READY_FOR_PICKUP" or "READY" => 0,
-        "IN_TRANSIT" or "SHIPPED" or "READY_SOON" => 1,
-        "SUSPENDED" or "INACTIVE" => 3,
-        _ => 2,
-    });
 
     public bool Fail(ulong generation, int page) => biblio_list_fail(_handle, generation, page);
     public bool IsStale(long nowMs) => biblio_list_is_stale(_handle, nowMs);
@@ -228,6 +228,28 @@ public sealed unsafe class CoreList : IDisposable
         for (nuint i = 0; i < n; i++)
             result.Add(new FacetValue(Marshal.PtrToStringUTF8((IntPtr)formats[i].Format) ?? "", (int)formats[i].Count));
         return result;
+    }
+
+    /// <summary>
+    /// A search's FORMAT facet counts, made exact for refined formats (count -1, unknown) once every item
+    /// is loaded; other values keep their counts.
+    /// </summary>
+    public List<FacetValue> ExactFormatCounts(IReadOnlyList<FacetValue> facets)
+    {
+        var values = new IntPtr[facets.Count];
+        var counts = facets.Select(f => (long)f.Count).ToArray();
+        try
+        {
+            for (var i = 0; i < values.Length; i++) values[i] = Marshal.StringToCoTaskMemUTF8(facets[i].Value);
+            fixed (IntPtr* v = values)
+            fixed (long* c = counts)
+                biblio_list_format_facet_counts(_handle, (byte**)v, c, (nuint)values.Length);
+        }
+        finally
+        {
+            foreach (var p in values) if (p != IntPtr.Zero) Marshal.FreeCoTaskMem(p);
+        }
+        return facets.Select((f, i) => f with { Count = (int)counts[i] }).ToList();
     }
 
     public void Dispose()

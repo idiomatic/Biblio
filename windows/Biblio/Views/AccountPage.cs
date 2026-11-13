@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Shapes;
 
 namespace Biblio.Views;
 
-/// <summary>Library card, email, password, pickup location, language and borrowing history, as Fluent settings cards.</summary>
+/// <summary>Library card, email, password, pickup location, language, and borrowing history, as Fluent settings cards.</summary>
 public sealed class AccountPage : UserControl
 {
     private readonly AccountWindow _window;
@@ -117,7 +117,20 @@ public sealed class AccountPage : UserControl
             if (await Save(c => c.SetLanguageAsync(code), "Language changed."))
                 foreach (var s in new[] { Section.Search, Section.NewTitles }) _window.ListFor(s).ReloadIfLoaded();
         };
-        stack.Children.Add(new SettingsCard { Header = "Language", HeaderIcon = new SymbolIcon(Symbol.Globe), Content = language });
+        // The account's language is its own preference, never set automatically; this offers the closest to Windows'.
+        var system = ClosestToSystem(_window.Library.Languages ?? []);
+        var useSystem = new Button { Content = "Use System Language" };
+        if (system is null || system == patron.Language) useSystem.Visibility = Visibility.Collapsed;
+        useSystem.Click += (_, _) =>
+        {
+            if (system is { } code && language.Items.OfType<ComboBoxItem>().FirstOrDefault(i => i.Tag as string == code) is { } item)
+                language.SelectedItem = item;
+        };
+        stack.Children.Add(new SettingsCard
+        {
+            Header = "Language", HeaderIcon = new SymbolIcon(Symbol.Globe),
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { language, useSystem } },
+        });
 
         if (patron.BorrowingHistoryEnabled is { } enabled)
         {
@@ -164,7 +177,7 @@ public sealed class AccountPage : UserControl
             _borrowedCard = new SettingsCard
             {
                 Header = "Borrowed before", Description = "Marks items you borrowed before. Refreshing reads your whole borrowing history again.",
-                HeaderIcon = new FontIcon { Glyph = ItemListView.BorrowedGlyph },
+                HeaderIcon = Icons.Make(ItemListView.BorrowedGlyph),
                 Content = new StackPanel
                 {
                     Spacing = 4, HorizontalAlignment = HorizontalAlignment.Right,
@@ -194,6 +207,17 @@ public sealed class AccountPage : UserControl
         _borrowedStatus.Text = borrowed.Total > 0 ? $"Updating · {borrowed.Fetched:N0} of {borrowed.Total:N0}" : "Updating…";
     }
 
+    /// <summary>The library language closest to Windows' display language (an exact match, else the same base language); null if none.</summary>
+    private static string? ClosestToSystem(IReadOnlyList<string> codes)
+    {
+        var system = System.Globalization.CultureInfo.CurrentUICulture;
+        var tag = system.Name.Replace('_', '-');
+        var baseLanguage = system.TwoLetterISOLanguageName;
+        string Base(string c) => c.Split('-', '_')[0].ToLowerInvariant();
+        return codes.FirstOrDefault(c => string.Equals(c.Replace('_', '-'), tag, StringComparison.OrdinalIgnoreCase))
+            ?? codes.FirstOrDefault(c => Base(c) == baseLanguage);
+    }
+
     private static Microsoft.UI.Xaml.Input.InputScope Scope(Microsoft.UI.Xaml.Input.InputScopeNameValue value) =>
         new() { Names = { new Microsoft.UI.Xaml.Input.InputScopeName(value) } };
 
@@ -216,10 +240,15 @@ public sealed class AccountPage : UserControl
         }
     }
 
-    /// <summary>The library card as a scannable Codabar barcode, black on white in either theme.</summary>
-    private static UIElement LibraryCard(string barcode)
+    /// <summary>
+    /// The library card as a scannable barcode, black on white in either theme: Codabar, or Code 128 for
+    /// scanners that skip it, a choice kept per library.
+    /// </summary>
+    private UIElement LibraryCard(string barcode)
     {
-        var elements = Core.Core.Barcode(barcode);
+        var subdomain = _window.Library.Subdomain;
+        var code128 = LibraryStore.Shared.UsesCode128(subdomain);
+        var elements = Core.Core.Barcode(barcode, code128);
         var canvas = new Canvas { Height = 64, Width = 360 };
         const double quiet = 10;
         var unit = canvas.Width / (elements.Sum() + 2 * quiet);
@@ -249,11 +278,26 @@ public sealed class AccountPage : UserControl
                 },
             },
         };
+        if (elements.Length == 0)
+            card.Children.Insert(0, new TextBlock
+            {
+                Text = $"This number can’t be shown as {(code128 ? "Code 128" : "Codabar")}.", Foreground = new SolidColorBrush(Microsoft.UI.Colors.Black),
+                TextWrapping = TextWrapping.Wrap, MaxWidth = 360,
+            });
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(card, $"Library card barcode {barcode}");
+        var type = new ComboBox { Header = "Barcode type", MinWidth = 160, Items = { new ComboBoxItem { Content = "Codabar" }, new ComboBoxItem { Content = "Code 128" } } };
+        type.SelectedIndex = code128 ? 1 : 0;
+        type.SelectionChanged += (_, _) =>
+        {
+            if (_filling) return;
+            LibraryStore.Shared.SetCode128(subdomain, type.SelectedIndex == 1);
+            Refresh();
+        };
         return new SettingsCard
         {
-            Header = "Library card", Description = "Show this at the library’s self-checkout or desk.",
-            HeaderIcon = new SymbolIcon(Symbol.ContactInfo), Content = card,
+            Header = "Library card", Description = "Show this at the library’s self-checkout or desk. Choose Code 128 if a scanner skips Codabar.",
+            HeaderIcon = new SymbolIcon(Symbol.ContactInfo),
+            Content = new StackPanel { Spacing = 8, Children = { card, type } },
         };
     }
 }

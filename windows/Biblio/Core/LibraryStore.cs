@@ -5,9 +5,10 @@ using Windows.Security.Credentials;
 namespace Biblio.Core;
 
 /// <summary>
-/// Added libraries and their usernames (JSON in local app data); passwords in the Windows
-/// Credential Locker (PasswordVault), one credential per library and username. Removing a user or
-/// library also deletes its saved borrowing-history index (<see cref="BorrowedIndex"/>).
+/// Added libraries and their usernames, and each library's barcode type (JSON in local app data);
+/// passwords in the Windows Credential Locker (PasswordVault), one credential per library and
+/// username. Removing a user or library also deletes its saved borrowing-history index
+/// (<see cref="BorrowedIndex"/>).
 /// </summary>
 public sealed class LibraryStore
 {
@@ -17,7 +18,11 @@ public sealed class LibraryStore
 
     private readonly string _path = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Biblio", "libraries.json");
+    private readonly string _barcodesPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Biblio", "barcodes.json");
     private readonly PasswordVault _vault = new();
+    /// <summary>The libraries whose cards show as Code 128 rather than Codabar.</summary>
+    private readonly HashSet<string> _code128 = [];
 
     private LibraryStore()
     {
@@ -25,8 +30,29 @@ public sealed class LibraryStore
         {
             if (File.Exists(_path) && JsonSerializer.Deserialize<List<LibraryInfo>>(File.ReadAllText(_path), CoreJson.Options) is { } list)
                 foreach (var lib in list) Libraries.Add(lib);
+            if (File.Exists(_barcodesPath) && JsonSerializer.Deserialize<List<string>>(File.ReadAllText(_barcodesPath)) is { } code128)
+                _code128.UnionWith(code128);
         }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>The library's barcode type, chosen on the account page: Code 128, or Codabar (the default).</summary>
+    public bool UsesCode128(string subdomain) => _code128.Contains(subdomain);
+
+    public void SetCode128(string subdomain, bool code128)
+    {
+        if (code128 ? !_code128.Add(subdomain) : !_code128.Remove(subdomain)) return;
+        SaveBarcodes();
+    }
+
+    private void SaveBarcodes()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_barcodesPath)!);
+            File.WriteAllText(_barcodesPath, JsonSerializer.Serialize(_code128.Order().ToList()));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     public LibraryInfo? Library(string subdomain) => Libraries.FirstOrDefault(l => l.Subdomain == subdomain);
@@ -49,6 +75,7 @@ public sealed class LibraryStore
         var i = IndexOf(subdomain);
         if (i >= 0) Libraries.RemoveAt(i);
         Save();
+        if (_code128.Remove(subdomain)) SaveBarcodes();
     }
 
     public void AddUser(string subdomain, string username, string password)

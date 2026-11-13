@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Biblio.Views;
 
-/// <summary>The selected item: jacket, title, holds, availability by location and the full record.</summary>
+/// <summary>The selected item: jacket, title, holds, availability by location, and the full record.</summary>
 public sealed class DetailPane : StackPanel
 {
     private readonly AccountWindow _window;
@@ -37,18 +37,27 @@ public sealed class DetailPane : StackPanel
         _borrowed.Visibility = match is null ? Visibility.Collapsed : Visibility.Visible;
         if (match is null) return;
         var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
-        _borrowed.Children.Add(new FontIcon
-        {
-            Glyph = ItemListView.BorrowedGlyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
-            Foreground = match.SameFormat ? secondary : (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
-        });
+        _borrowed.Children.Add(Icons.Make(ItemListView.BorrowedGlyph, 14,
+            match.SameFormat ? secondary : (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]));
         var sentence = new TextBlock { Text = BorrowedText.Sentence(match, _window.Library), Foreground = secondary, TextWrapping = TextWrapping.Wrap };
         Grid.SetColumn(sentence, 1);
         _borrowed.Children.Add(sentence);
     }
 
+    private ListEntry? _entry;
+
+    /// <summary>The item shown, if any.</summary>
+    public ListEntry? Entry => _entry;
+
+    /// <summary>Shows the same item again (a new theme, or a guest signed in).</summary>
+    public void Redraw()
+    {
+        if (_entry is { } entry) Show(entry);
+    }
+
     public void Show(ListEntry entry)
     {
+        _entry = entry;
         var generation = ++_generation;
         Children.Clear();
         var bib = entry.Bib;
@@ -61,12 +70,17 @@ public sealed class DetailPane : StackPanel
         var image = new Image { Width = 120, Height = 180, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top };
         if ((bib.JacketLarge ?? bib.JacketSmall) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri)) image.Source = new BitmapImage(uri);
         var heading = new StackPanel { Spacing = 4 };
-        heading.Children.Add(new TextBlock { Text = bib.Title, Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
+        var titleText = new TextBlock { Text = bib.Title, Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
+        // The cover and title drag onto Holds to place a hold, or onto Search to search for the title.
+        Draggable(image, bib.Title, bib);
+        Draggable(titleText, bib.Title, bib);
+        heading.Children.Add(titleText);
         if (bib.Subtitle is { } sub) heading.Children.Add(new TextBlock { Text = sub, TextWrapping = TextWrapping.Wrap });
         if (bib.PrimaryAuthor is { } author)
         {
             // Authors link to a search for their other works.
             var link = new HyperlinkButton { Content = author, Padding = new Thickness(0) };
+            Draggable(link, author, null);
             link.Click += (_, _) =>
             {
                 _window.ShowSection(Section.Search);
@@ -74,13 +88,12 @@ public sealed class DetailPane : StackPanel
             };
             heading.Children.Add(link);
         }
-        heading.Children.Add(new TextBlock
-        {
-            Text = string.Join(" · ", new[] { _window.Library.FormatName(bib.Format), bib.Year }.Where(s => s is not null)),
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-        });
-        var (status, brush) = ItemListView.StatusLine(entry);
-        if (status.Length > 0) heading.Children.Add(new TextBlock { Text = status, Foreground = brush, TextWrapping = TextWrapping.Wrap });
+        // Format, year, and edition a line each beside the cover, then the availability line and the account's capsule.
+        var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        foreach (var detail in ItemText.Details(bib, _window.Library))
+            heading.Children.Add(new TextBlock { Text = detail, Foreground = secondary, TextWrapping = TextWrapping.Wrap });
+        if (ItemText.Availability(entry, _window.IsDark) is { } availability) heading.Children.Add(availability);
+        if (ItemText.Relationship(entry, _window.IsDark) is { } relationship) heading.Children.Add(relationship);
         var top = new Grid { ColumnSpacing = 16, ColumnDefinitions = { new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition() } };
         top.Children.Add(image);
         Grid.SetColumn(heading, 1);
@@ -104,6 +117,19 @@ public sealed class DetailPane : StackPanel
         _ = LoadDetails(bib.Id, details, generation);
     }
 
+    /// <summary>Lets a part of the detail be dragged as text (a search) and, with an item, onto any window's Holds.</summary>
+    private static void Draggable(UIElement element, string text, Bib? bib)
+    {
+        element.CanDrag = true;
+        element.DragStarting += (_, e) =>
+        {
+            e.Data.SetText(text);
+            e.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+            ItemDrag.Current = bib;
+        };
+        element.DropCompleted += (_, _) => ItemDrag.Current = null;
+    }
+
     private async Task LoadCopies(string id, StackPanel panel, int generation)
     {
         try
@@ -114,13 +140,13 @@ public sealed class DetailPane : StackPanel
             if (copies.Count == 0) panel.Children.Add(new TextBlock { Text = "No copies listed." });
             foreach (var c in copies)
             {
-                var color = StatusBrushes.Copy(c.Kind);
+                var color = StatusBrushes.Copy(c.Kind, _window.IsDark);
                 var detail = string.Join(" · ", new[] { c.Collection, c.CallNumber, c.DueDate is { } d ? $"due {d}" : null }.Where(s => s is not null));
                 var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6) };
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.Children.Add(new FontIcon { Glyph = Glyph(c.Kind), Foreground = color, FontSize = 14 });
+                row.Children.Add(Icons.Make(Icons.ForCopy(c.Kind), 14, color));
                 var where = new StackPanel { Children = { new TextBlock { Text = c.Branch } } };
                 if (detail.Length > 0) where.Children.Add(new TextBlock { Text = detail, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] });
                 Grid.SetColumn(where, 1);
@@ -138,19 +164,6 @@ public sealed class DetailPane : StackPanel
             panel.Children.Add(new TextBlock { Text = e.Message, TextWrapping = TextWrapping.Wrap });
         }
     }
-
-    /// <summary>Segoe Fluent Icons glyphs for each copy status.</summary>
-    private static string Glyph(string kind) => kind switch
-    {
-        "available" => "", // CheckMark
-        "onOrder" => "",   // Package
-        "out" => "",       // Recent
-        "held" => "",      // Shop
-        "transit" => "",   // Switch
-        "repair" => "",    // Repair
-        "missing" or "claimsReturned" => "", // Unknown
-        _ => "",           // StatusCircle
-    };
 
     private async Task LoadDetails(string id, StackPanel panel, int generation)
     {
@@ -175,18 +188,26 @@ public sealed class DetailPane : StackPanel
     /// <summary>Place a hold at a chosen pickup location, or cancel this account's hold.</summary>
     private UIElement? Actions(ListEntry entry)
     {
-        if (entry.Hold is { } hold)
+        // A catalog row only says the account holds the item; the hold itself is in the Holds list.
+        var onHold = entry.Hold is not null || entry.AccountStatus?.Kind == "onHold";
+        if (onHold)
         {
-            if (!hold.CanCancel) return null;
-            var cancel = new Button { Content = "Cancel hold" };
-            cancel.Click += async (_, _) =>
+            if ((entry.Hold ?? _window.HoldFor(entry.Bib.Id)) is not { CanCancel: true } hold) return null;
+            // The confirmation is a flyout on the button that asked for it.
+            var cancel = new Button { Content = "Cancel Hold" };
+            var confirm = new Button { Content = "Cancel Hold", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            var flyout = new Flyout
             {
-                var confirm = new ContentDialog
+                Content = new StackPanel
                 {
-                    XamlRoot = XamlRoot, Title = $"Cancel your hold on “{entry.Bib.Title}”?",
-                    PrimaryButtonText = "Cancel hold", CloseButtonText = "Keep hold", DefaultButton = ContentDialogButton.Close,
-                };
-                if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+                    Spacing = 12, MaxWidth = 280,
+                    Children = { new TextBlock { Text = $"Cancel your hold on “{entry.Bib.Title}”?", TextWrapping = TextWrapping.Wrap }, confirm },
+                },
+            };
+            cancel.Flyout = flyout;
+            confirm.Click += async (_, _) =>
+            {
+                flyout.Hide();
                 cancel.IsEnabled = false;
                 try
                 {
@@ -205,8 +226,13 @@ public sealed class DetailPane : StackPanel
             return cancel;
         }
         if (entry.Checkout is not null) return null;
-        if (_window.IsGuest) return new TextBlock { Text = "Sign in to place holds." };
         if (!entry.Bib.Holdable) return null;
+        if (_window.IsGuest)
+        {
+            var signIn = new Button { Content = "Sign In to Place a Hold…" };
+            signIn.Click += async (_, _) => await _window.SignInAsync();
+            return signIn;
+        }
 
         var pickup = new ComboBox { Header = "Pick up at", MinWidth = 220 };
         foreach (var loc in _window.Locations)
@@ -219,17 +245,7 @@ public sealed class DetailPane : StackPanel
         place.Click += async (_, _) =>
         {
             place.IsEnabled = false;
-            try
-            {
-                await _window.Client.PlaceHoldAsync(entry.Bib.Id, entry.Bib.MaterialType, (pickup.SelectedItem as ComboBoxItem)?.Tag as string);
-                _window.ShowMessage($"Hold placed on “{entry.Bib.Title}”.");
-                _window.HoldsChanged();
-            }
-            catch (CoreException e)
-            {
-                _window.ShowMessage(e.Message, error: true);
-                place.IsEnabled = true;
-            }
+            if (!await _window.PlaceHoldAsync(entry.Bib, (pickup.SelectedItem as ComboBoxItem)?.Tag as string)) place.IsEnabled = true;
         };
         return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { pickup, place } };
     }

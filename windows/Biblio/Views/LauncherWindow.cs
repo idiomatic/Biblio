@@ -18,13 +18,25 @@ public sealed class LauncherWindow : Window
         Title = "Biblio";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(520, 640));
+        Resize(this, 520, 640);
         Content = new Grid
         {
             RowDefinitions = { new RowDefinition { Height = new GridLength(32) }, new RowDefinition() },
             Children = { TitleBarText("Biblio"), WithRow(_frame, 1) },
         };
         ShowLibraries();
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    /// <summary>Sizes a window in effective pixels (AppWindow.Resize takes physical ones), within the screen's work area.</summary>
+    internal static void Resize(Window window, int width, int height)
+    {
+        var dpi = GetDpiForWindow(Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id));
+        var scale = dpi > 0 ? dpi / 96.0 : 1;
+        var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(window.AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
+        window.AppWindow.Resize(new Windows.Graphics.SizeInt32(
+            Math.Min((int)Math.Round(width * scale), area.Width), Math.Min((int)Math.Round(height * scale), area.Height)));
     }
 
     internal static TextBlock TitleBarText(string text) => new()
@@ -54,7 +66,7 @@ public sealed class LauncherWindow : Window
         if (_store.Libraries.Count == 0)
             stack.Children.Add(new TextBlock
             {
-                Text = "Add your library to search its catalog, place holds and see what you have checked out.",
+                Text = "Add your library to search its catalog, place holds, and see what you have checked out.",
                 TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             });
         foreach (var lib in _store.Libraries)

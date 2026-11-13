@@ -11,10 +11,10 @@ using Microsoft.UI.Xaml.Media.Imaging;
 namespace Biblio.Views;
 
 /// <summary>
-/// A paged list of search results, new titles, holds, checkouts or history, with the selected
+/// A paged list of search results, new titles, holds, checkouts, or history, with the selected
 /// item's details beside it.
 ///
-/// Paging, sorting and filtering are libbiblio's item list (<see cref="CoreList"/>), shared with the
+/// Paging, sorting, and filtering are libbiblio's item list (<see cref="CoreList"/>), shared with the
 /// other apps: it says which pages to fetch and which rows to show, and this view fetches those pages
 /// and keeps their entries. Once the first page reports the total, every item not fetched yet is a
 /// placeholder row, so the scroll bar has its final length; a page is fetched when its placeholders
@@ -22,7 +22,8 @@ namespace Biblio.Views;
 /// </summary>
 public sealed class ItemListView : Grid, IDisposable
 {
-    private static readonly Dictionary<string, string> NewTitleFilters = new() { ["f_on_order"] = "false" };
+    /// <summary>The facets "Filter by" offers beyond format, as the server names them (<c>f_ID</c> filters).</summary>
+    private static readonly string[] FilterFacets = ["FICTION_TYPE", "AUDIENCE", "LANGUAGE"];
 
     /// <summary>The sort menu's client-side entries; the server's own are its sort ids.</summary>
     private const string SortPeopleWaiting = "~people";
@@ -41,11 +42,28 @@ public sealed class ItemListView : Grid, IDisposable
     private readonly Section _section;
     private readonly CoreList _core;
     private readonly ObservableCollection<RowModel> _rows = [];
-    private readonly ListView _list = new() { SelectionMode = ListViewSelectionMode.Single };
+    // Extended: click selects one (and shows its details); Ctrl and Shift select several. "Select" switches to checkboxes.
+    private readonly ListView _list = new() { SelectionMode = ListViewSelectionMode.Extended };
+    private readonly ToggleButton _select = new() { Content = Icons.Make(Icons.MultiSelect) };
+    private readonly CommandBar _selectionBar = new() { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, Visibility = Visibility.Collapsed };
+    private readonly TextBlock _selectionCount = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
     private readonly TextBlock _title = new() { Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"] };
     private readonly TextBlock _empty = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center };
     private readonly ComboBox _sort = new() { PlaceholderText = "Sort", MinWidth = 160, Visibility = Visibility.Collapsed };
     private readonly ComboBox _format = new() { PlaceholderText = "All formats", MinWidth = 180, Visibility = Visibility.Collapsed };
+    /// <summary>New Titles: what just arrived, or what the library has on order.</summary>
+    private readonly ComboBox _arrival = new()
+    {
+        Header = null, MinWidth = 160, Visibility = Visibility.Collapsed,
+        Items = { new ComboBoxItem { Content = "Just Arrived" }, new ComboBoxItem { Content = "On Order" } },
+        SelectedIndex = 0,
+    };
+    /// <summary>"Filter by": one menu per facet beyond format, rebuilt when the choices change.</summary>
+    private readonly StackPanel _facetBar = new() { Orientation = Orientation.Horizontal, Spacing = 8, Visibility = Visibility.Collapsed };
+    private readonly Dictionary<string, string> _facetFilters = [];
+    private List<Facet> _otherFacets = [];
+    private string _facetBarSignature = "";
+    private bool _onOrder;
     private readonly ToggleButton[] _holdFilters = [new(), new(), new()];
     private readonly ToggleButton _notBorrowed = new()
     {
@@ -53,7 +71,7 @@ public sealed class ItemListView : Grid, IDisposable
         Content = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 8,
-            Children = { new FontIcon { Glyph = BorrowedGlyph, FontSize = 14 }, new TextBlock { Text = "Not Borrowed" } },
+            Children = { Icons.Make(BorrowedGlyph), new TextBlock { Text = "Not Borrowed" } },
         },
     };
     private readonly ProgressBar _progress = new() { IsIndeterminate = true, Visibility = Visibility.Collapsed };
@@ -83,8 +101,8 @@ public sealed class ItemListView : Grid, IDisposable
     /// <summary>The generation "Not Borrowed" was last set with.</summary>
     private ulong _notBorrowedGeneration;
 
-    /// <summary>Segoe Fluent Icons' History, for "borrowed before".</summary>
-    public const string BorrowedGlyph = "";
+    /// <summary>History, for "borrowed before".</summary>
+    public const string BorrowedGlyph = Icons.History;
     private static long Now => Environment.TickCount64;
 
     public bool HasLoaded => !_disposed && _core.GetState().Loaded;
@@ -113,6 +131,22 @@ public sealed class ItemListView : Grid, IDisposable
                 HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 320,
             };
             _search.QuerySubmitted += (_, args) => SearchFor(args.QueryText);
+            // Dragging text from item detail (a title or an author) onto the field searches for it. The
+            // handler also sees drops its text box already handled; searching replaces what that inserted.
+            _search.AllowDrop = true;
+            _search.AddHandler(DragOverEvent, new DragEventHandler((_, e) =>
+            {
+                if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)) return;
+                e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+                e.DragUIOverride.IsCaptionVisible = false;
+                e.DragUIOverride.IsGlyphVisible = false;
+            }), true);
+            _search.AddHandler(DropEvent, new DragEventHandler(async (_, e) =>
+            {
+                if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)) return;
+                var text = (await e.DataView.GetTextAsync()).Trim();
+                if (text.Length > 0) SearchFor(text);
+            }), true);
             header.Children.Add(_search);
         }
         else
@@ -124,7 +158,32 @@ public sealed class ItemListView : Grid, IDisposable
         refresh.KeyboardAccelerators.Add(new KeyboardAccelerator { Key = Windows.System.VirtualKey.R, Modifiers = Windows.System.VirtualKeyModifiers.Control });
         refresh.Click += async (_, _) => await RefreshAsync();
         var controls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _format, _sort, refresh } };
-        header.Children.Add(controls);
+        // The controls scroll sideways when the details pane leaves the list narrow.
+        header.Children.Add(new ScrollViewer
+        {
+            Content = controls, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Auto,
+            VerticalScrollMode = ScrollMode.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        });
+        if (section == Section.NewTitles)
+        {
+            controls.Children.Insert(0, _arrival);
+            _arrival.Visibility = Visibility.Visible;
+            _arrival.SelectionChanged += (_, _) =>
+            {
+                if (_updatingControls || (_arrival.SelectedIndex == 1) == _onOrder) return;
+                _onOrder = _arrival.SelectedIndex == 1;
+                _formatCode = null;
+                _core.SetFormat(null);
+                _facetFilters.Clear();
+                DispatcherQueue.TryEnqueue(() => Reload(keepContent: false));
+            };
+        }
+        if (IsCatalog)
+            header.Children.Add(new ScrollViewer
+            {
+                Content = _facetBar, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Auto,
+                VerticalScrollMode = ScrollMode.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            });
         _notBorrowed.Click += (_, _) => SetNotBorrowed();
         ToolTipService.SetToolTip(_notBorrowed, "Hide what you borrowed before in the same format");
         if (section == Section.Holds)
@@ -137,7 +196,11 @@ public sealed class ItemListView : Grid, IDisposable
                 filters.Children.Add(button);
             }
             filters.Children.Add(_notBorrowed);
-            header.Children.Add(filters);
+            header.Children.Add(new ScrollViewer
+            {
+                Content = filters, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Auto,
+                VerticalScrollMode = ScrollMode.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            });
         }
         else if (IsCatalog)
         {
@@ -163,23 +226,97 @@ public sealed class ItemListView : Grid, IDisposable
         container.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
         _list.ItemContainerStyle = container;
         _list.ContainerContentChanging += OnContainerContentChanging;
-        _list.SelectionChanged += (_, _) =>
-        {
-            if (_list.SelectedItem is not RowModel { Entry: { } entry }) return;
-            _detail.Show(entry);
-            _detailColumn.Width = new GridLength(420);
-        };
+        _list.SelectionChanged += (_, _) => OnSelectionChanged();
 
-        var left = new Grid { RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
+        // Selecting several: a command bar under the list places or cancels holds on all of them.
+        if (_section is Section.Search or Section.NewTitles or Section.Holds)
+        {
+            ToolTipService.SetToolTip(_select, "Select several items");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_select, "Select");
+            _select.Click += (_, _) =>
+            {
+                _list.SelectedIndex = -1;
+                _list.SelectionMode = _select.IsChecked == true ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Extended;
+            };
+            controls.Children.Add(_select);
+            BuildSelectionBar();
+        }
+
+        var left = new Grid { RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition(), new RowDefinition { Height = GridLength.Auto } } };
         left.Children.Add(header);
         left.Children.Add(LauncherWindow.WithRow(_list, 1));
         left.Children.Add(LauncherWindow.WithRow(_empty, 1));
+        left.Children.Add(LauncherWindow.WithRow(_selectionBar, 2));
         Children.Add(left);
         var detail = new ScrollViewer { Content = _detail, Padding = new Thickness(16) };
         SetColumn(detail, 1);
         Children.Add(detail);
         _detail.Closed += () => { _detailColumn.Width = new GridLength(0); _list.SelectedIndex = -1; };
         Sync();
+    }
+
+    /// <summary>The account's hold on an item, as far as this list has fetched it (the Holds list).</summary>
+    public Hold? HoldFor(string metadataId) => _entries.Values.FirstOrDefault(e => e.Hold?.MetadataId == metadataId)?.Hold;
+
+    // MARK: Selection
+
+    private List<ListEntry> SelectedEntries() =>
+        _list.SelectedItems.OfType<RowModel>().Where(r => r.Entry is not null).Select(r => r.Entry!).ToList();
+
+    /// <summary>One selected item shows its details; several (or checkbox mode) close them and offer actions on all.</summary>
+    private void OnSelectionChanged()
+    {
+        if (_disposed) return;
+        var chosen = SelectedEntries();
+        var several = _list.SelectionMode == ListViewSelectionMode.Multiple || chosen.Count > 1;
+        if (chosen.Count == 1 && !several)
+        {
+            _detail.Show(chosen[0]);
+            _detailColumn.Width = new GridLength(420);
+        }
+        else if (several && _detailColumn.Width.Value > 0) _detailColumn.Width = new GridLength(0);
+        _selectionBar.Visibility = several && chosen.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _selectionCount.Text = chosen.Count == 1 ? "1 item selected" : $"{chosen.Count:N0} items selected";
+    }
+
+    private void BuildSelectionBar()
+    {
+        _selectionBar.Content = _selectionCount;
+        AppBarButton action;
+        if (_section == Section.Holds)
+        {
+            // Canceling asks first, in a flyout on the button.
+            action = new AppBarButton { Label = "Cancel Holds", Icon = new SymbolIcon(Symbol.Delete) };
+            var confirm = new Button { Content = "Cancel Holds", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            var prompt = new TextBlock { TextWrapping = TextWrapping.Wrap };
+            var flyout = new Flyout { Content = new StackPanel { Spacing = 12, MaxWidth = 280, Children = { prompt, confirm } } };
+            flyout.Opening += (_, _) =>
+            {
+                var holds = SelectedEntries().Count(e => e.Hold is { CanCancel: true });
+                prompt.Text = $"Cancel {AccountWindow.Plural(holds, "hold")}?";
+            };
+            action.Flyout = flyout;
+            confirm.Click += async (_, _) =>
+            {
+                flyout.Hide();
+                var holds = SelectedEntries().Where(e => e.Hold is { CanCancel: true }).Select(e => (e.Hold!, e.Bib.Title)).ToList();
+                if (holds.Count > 0 && await _window.CancelHoldsAsync(holds)) _list.SelectedIndex = -1;
+            };
+        }
+        else
+        {
+            action = new AppBarButton { Label = "Place Holds", Icon = new SymbolIcon(Symbol.Add) };
+            action.Click += async (_, _) =>
+            {
+                var bibs = SelectedEntries().Where(e => e.Bib.Holdable && e.Hold is null && e.Checkout is null).Select(e => e.Bib).ToList();
+                if (bibs.Count == 0) { _window.ShowMessage("None of the selected items can be placed on hold.", error: true); return; }
+                await _window.PlaceHoldsAsync(bibs);
+            };
+        }
+        var clear = new AppBarButton { Label = "Clear", Icon = new SymbolIcon(Symbol.ClearSelection) };
+        clear.Click += (_, _) => _list.SelectedIndex = -1;
+        _selectionBar.PrimaryCommands.Add(action);
+        _selectionBar.PrimaryCommands.Add(clear);
     }
 
     /// <summary>The list has no more use: its core list is freed, and pages still in flight are dropped.</summary>
@@ -200,6 +337,7 @@ public sealed class ItemListView : Grid, IDisposable
         _sortId = null;
         _appliedSort = null;
         _formatCode = null;
+        _facetFilters.Clear();
         _core.SetSort(CoreList.Sort.Server);
         _core.SetFormat(null);
         Reload(keepContent: false);
@@ -232,6 +370,7 @@ public sealed class ItemListView : Grid, IDisposable
             _core.Clear();
             _entries.Clear();
             _facets = [];
+            _otherFacets = [];
             Sync();
             return;
         }
@@ -262,10 +401,12 @@ public sealed class ItemListView : Grid, IDisposable
     {
         var client = _window.Client;
         var server = _sortId is { } s && !s.StartsWith('~') ? s : _section == Section.NewTitles ? "newly_acquired" : null;
+        var filters = _facetFilters.ToDictionary(f => $"f_{f.Key}", f => f.Value);
+        if (_section == Section.NewTitles) filters["f_on_order"] = _onOrder ? "true" : "false";
         return _section switch
         {
-            Section.Search => client.SearchAsync(_query, page: page, sort: server, format: _formatCode),
-            Section.NewTitles => client.SearchAsync("nw:[0 TO 180]", "bl", NewTitleFilters, page, server, _formatCode),
+            Section.Search => client.SearchAsync(_query, filters: filters, page: page, sort: server, format: _formatCode),
+            Section.NewTitles => client.SearchAsync("nw:[0 TO 180]", "bl", filters, page, server, _formatCode),
             Section.Holds => client.HoldsAsync(page, server),
             Section.Checkouts => client.CheckoutsAsync(page, server),
             _ => client.HistoryAsync(page, server),
@@ -305,10 +446,19 @@ public sealed class ItemListView : Grid, IDisposable
         // An item that moved between pages while fetching keeps its first position.
         foreach (var e in result.Entries) _entries.TryAdd(e.Id, e);
         _core.Apply(generation, result, Now);
-        if (page == 1 || result.Facets is { Count: > 0 }) _facets = result.Facets?.FirstOrDefault(f => f.Id == "FORMAT")?.Values ?? [];
+        if (page == 1 || result.Facets is { Count: > 0 })
+        {
+            _facets = result.Facets?.FirstOrDefault(f => f.Id == "FORMAT")?.Values ?? [];
+            _otherFacets = result.Facets?.Where(f => FilterFacets.Contains(f.Id) && f.Values.Count > 0).ToList() ?? [];
+        }
         if (result.SortOptions is { Count: > 0 }) _serverSorts = result.SortOptions;
         if (_sortId is null) _appliedSort = result.AppliedSort;
         Sync();
+        // The open item's hold or checkout changed (a hold placed or canceled from its details): show it as it is now.
+        if (_detail.Entry is { } shown && _entries.TryGetValue(shown.Id, out var fresh) && !ReferenceEquals(fresh, shown) &&
+            (fresh.Hold?.Id != shown.Hold?.Id || fresh.Hold?.Status != shown.Hold?.Status ||
+             fresh.AccountStatus?.Kind != shown.AccountStatus?.Kind || (fresh.Checkout is null) != (shown.Checkout is null)))
+            _detail.Show(fresh);
         if (page == 1 && _core.WantsAllPages) _ = StartBackground();
     }
 
@@ -544,7 +694,9 @@ public sealed class ItemListView : Grid, IDisposable
             Select(_sort, _sortId ?? _appliedSort);
             _sort.Visibility = _serverSorts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-            var formats = IsCatalog ? _facets : _core.Formats();
+            // A search's counts are the server's, made exact for refined formats once every item is loaded.
+            var formats = IsCatalog ? _core.ExactFormatCounts(_facets) : _core.Formats();
+            UpdateFacetBar();
             var formatSignature = string.Join('|', formats.Select(f => $"{f.Value}:{f.Count}"));
             if (formatSignature != _formatSignature)
             {
@@ -578,6 +730,51 @@ public sealed class ItemListView : Grid, IDisposable
         finally { _updatingControls = false; }
     }
 
+    /// <summary>"Filter by" menus for the facets beyond format; rebuilt only when their choices or the selection change.</summary>
+    private void UpdateFacetBar()
+    {
+        if (!IsCatalog) return;
+        var signature = string.Join('/', _otherFacets.Select(f =>
+            $"{f.Id}={_facetFilters.GetValueOrDefault(f.Id)}:{string.Join(',', f.Values.Select(v => v.Value))}"));
+        if (signature == _facetBarSignature) return;
+        _facetBarSignature = signature;
+        _facetBar.Children.Clear();
+        foreach (var facet in _otherFacets)
+        {
+            var id = facet.Id;
+            var name = ItemText.Prettified(id.Replace("FICTION_TYPE", "Fiction type"));
+            var menu = new ComboBox { MinWidth = 160 };
+            menu.Items.Add(new ComboBoxItem { Content = $"Any {name.ToLowerInvariant()}", Tag = null });
+            var chosen = _facetFilters.GetValueOrDefault(id);
+            var values = facet.Values.Select(v => v.Value).ToList();
+            // The chosen value stays on offer even if the filtered results no longer list it.
+            if (chosen is not null && !values.Contains(chosen)) values.Insert(0, chosen);
+            foreach (var value in values)
+            {
+                var label = _window.Library.Labels?.GetValueOrDefault($"{id}.{value}") ?? ItemText.Prettified(value);
+                var count = facet.Values.FirstOrDefault(v => v.Value == value)?.Count;
+                var item = new ComboBoxItem { Content = count is { } n && n >= 0 ? $"{label} ({n:N0})" : label, Tag = value };
+                menu.Items.Add(item);
+                if (value == chosen) menu.SelectedItem = item;
+            }
+            if (chosen is null) menu.SelectedIndex = 0;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(menu, name);
+            menu.SelectionChanged += (_, _) =>
+            {
+                if (_updatingControls || menu.SelectedItem is not ComboBoxItem item) return;
+                var value = item.Tag as string;
+                if (value == _facetFilters.GetValueOrDefault(id)) return;
+                if (value is null) _facetFilters.Remove(id); else _facetFilters[id] = value;
+                _formatCode = null;
+                _core.SetFormat(null);
+                // Rebuilding the menus from a menu's own SelectionChanged brings down the app: wait a turn.
+                DispatcherQueue.TryEnqueue(() => Reload(keepContent: false));
+            };
+            _facetBar.Children.Add(menu);
+        }
+        _facetBar.Visibility = _facetBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     /// <summary>Selects the menu entry tagged with this id, changing nothing if it's already chosen; none for null.</summary>
     private static void Select(ComboBox menu, string? id)
     {
@@ -599,42 +796,57 @@ public sealed class ItemListView : Grid, IDisposable
         text.Children.Add(new TextBlock { Text = bib.Title, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
         if (bib.PrimaryAuthor is { } author) text.Children.Add(new TextBlock { Text = author });
         var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        // Format, year, and edition in one line, as item detail says them a line each.
         var details = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        details.Children.Add(new TextBlock
-        {
-            Text = string.Join(" · ", new[] { _window.Library.FormatName(bib.Format), bib.Year }.Where(s => s is not null)),
-            Foreground = secondary,
-        });
+        details.Children.Add(new TextBlock { Text = string.Join(" · ", ItemText.Details(bib, _window.Library)), Foreground = secondary });
         if (ShowsBorrowed && _window.Borrowed?.Lookup(bib) is { } match) details.Children.Add(BorrowedMark(match, _window.Library));
         text.Children.Add(details);
-        var (status, brush) = StatusLine(entry);
-        if (status.Length > 0) text.Children.Add(new TextBlock { Text = status, Foreground = brush });
+        if (ItemText.Availability(entry, _window.IsDark) is { } availability) text.Children.Add(availability);
+        if (ItemText.Relationship(entry, _window.IsDark) is { } relationship) text.Children.Add(relationship);
         var image = new Image { Width = 48, Height = 72, Stretch = Stretch.Uniform };
         if (bib.JacketSmall is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri)) image.Source = new BitmapImage(uri);
-        return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Padding = new Thickness(0, 8, 0, 8), Children = { image, text } };
+        var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 8, 0, 8), ColumnDefinitions = { new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition() } };
+        row.Children.Add(image);
+        SetColumn(text, 1);
+        row.Children.Add(text);
+        return row;
     }
 
     /// <summary>A row's quiet "borrowed before" mark, fainter for the same work in another format.</summary>
     private static UIElement BorrowedMark(BorrowedIndex.Match match, LibraryInfo library)
     {
         var text = BorrowedText.Short(match, library);
-        var mark = new FontIcon
-        {
-            Glyph = BorrowedGlyph, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
-            Foreground = (Brush)Application.Current.Resources[match.SameFormat ? "TextFillColorSecondaryBrush" : "TextFillColorTertiaryBrush"],
-        };
+        var mark = Icons.Make(BorrowedGlyph, 12,
+            (Brush)Application.Current.Resources[match.SameFormat ? "TextFillColorSecondaryBrush" : "TextFillColorTertiaryBrush"]);
         ToolTipService.SetToolTip(mark, text);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(mark, text);
         return mark;
     }
 
-    public static (string, Brush) StatusLine(ListEntry entry)
+    /// <summary>Redraws the rows (and detail) in the new theme's status colors.</summary>
+    public void ThemeChanged()
+    {
+        if (_disposed) return;
+        _rows.Clear();
+        Sync();
+        _detail.Redraw();
+    }
+
+    /// <summary>A guest signed in: the detail offers holds now.</summary>
+    public void SignedIn()
+    {
+        if (_disposed) return;
+        _detail.Redraw();
+        Sync();
+    }
+
+    public static (string, Brush) StatusLine(ListEntry entry, bool dark)
     {
         var s = entry.AccountStatus;
-        if (s?.Kind == "checkedOut") return (s.Due is { } d ? $"Checked out · due {d}" : "Checked out", StatusBrushes.Copy("held"));
-        if (s is { Ready: true }) return ("Ready for pickup", StatusBrushes.Copy("available"));
-        if (s is not null) return (s.Position is { } p ? $"On hold · #{p}" : "On hold", StatusBrushes.Copy("transit"));
-        if (entry.History is { } h) return (h.ReturnedDate is { } r ? $"Returned {r}" : "", StatusBrushes.Copy("withdrawn"));
+        if (s?.Kind == "checkedOut") return (s.Due is { } d ? $"Checked out · due {d}" : "Checked out", StatusBrushes.Copy("held", dark));
+        if (s is { Ready: true }) return ("Ready for pickup", StatusBrushes.Copy("available", dark));
+        if (s is not null) return (s.Position is { } p ? $"On hold · #{p}" : "On hold", StatusBrushes.Copy("transit", dark));
+        if (entry.History is { } h) return (h.ReturnedDate is { } r ? $"Returned {r}" : "", StatusBrushes.Copy("withdrawn", dark));
         var b = entry.Bib;
         string? label = b.Status switch { "AVAILABLE" => "Available", "ON_ORDER" => "On order", "UNAVAILABLE" or "NOT_AVAILABLE" => "All copies in use", _ => null };
         string copies = b.TotalCopies == 1 ? "1 copy" : $"{b.TotalCopies} copies";
@@ -642,6 +854,6 @@ public sealed class ItemListView : Grid, IDisposable
         // Only what's there to say: no holds, just the copies; no copies yet, just the holds.
         string? counts = b.HeldCopies == 0 && b.TotalCopies == 0 ? null
             : b.HeldCopies == 0 ? copies : b.TotalCopies == 0 ? holds : $"{holds} on {copies}";
-        return (string.Join(" · ", new[] { label, counts }.Where(x => x is not null)), StatusBrushes.Availability(b.Status));
+        return (string.Join(" · ", new[] { label, counts }.Where(x => x is not null)), StatusBrushes.Availability(b.Status, dark));
     }
 }
