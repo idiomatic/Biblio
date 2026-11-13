@@ -11,10 +11,13 @@ plugins {
 val appVersion = "1.9"
 /// ELF thread-local storage in the Zig core needs API 29; the native build targets the same level.
 val minApi = 29
+/// The NDK whose bionic the native library links; CI and DEVELOPMENT.md name the same version.
+val ndkRelease = "29.0.14206865"
 
 android {
     namespace = "com.rbrian.biblio"
     compileSdk = 36
+    ndkVersion = ndkRelease
 
     defaultConfig {
         applicationId = "com.rbrian.biblio"
@@ -41,17 +44,22 @@ android {
 kotlin { compilerOptions { jvmTarget = JvmTarget.JVM_17 } }
 
 /// Builds libbiblio_jni.so (the Zig core plus its JNI glue) into src/main/jniLibs, with `zig` from
-/// PATH or the `zig` Gradle property (`-Pzig=/path/to/zig`).
+/// PATH or the `zig` Gradle property (`-Pzig=/path/to/zig`), linking the NDK's libc.
 val buildCore by tasks.registering(Exec::class) {
     val zig = providers.gradleProperty("zig").getOrElse("zig")
     inputs.property("zig", zig)
     inputs.property("api", minApi)
+    inputs.property("ndk", ndkRelease)
     inputs.files("../native/build.zig").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.dir("../native/src").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.dir("../../core/src").withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir("src/main/jniLibs")
     workingDir = file("../native")
-    commandLine(zig, "build", "-Drelease", "-Dapi=$minApi")
+    val ndk = android.sdkDirectory.resolve("ndk/$ndkRelease")
+    doFirst {
+        if (!ndk.isDirectory) throw GradleException("Android NDK $ndkRelease not found in $ndk: sdkmanager \"ndk;$ndkRelease\"")
+        commandLine(zig, "build", "-Drelease", "-Dapi=$minApi", "-Dndk=$ndk")
+    }
 }
 tasks.named("preBuild") { dependsOn(buildCore) }
 
@@ -72,5 +80,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

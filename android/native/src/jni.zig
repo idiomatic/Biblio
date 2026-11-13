@@ -6,6 +6,9 @@
 //! primary constructor; failures are thrown as `Core.Failure`. Strings cross as UTF-16 (JNI's
 //! "modified UTF-8" differs for characters outside the BMP). The JNIEnv functions are called by
 //! their fixed slot in the JNI function table rather than through jni.h.
+//!
+//! The core's HTTP goes through the app's own stack (`Core.send`, on OkHttp), so the system's
+//! and the user's certificate authorities, proxies, and VPNs apply.
 
 const std = @import("std");
 const biblio = @import("biblio");
@@ -26,12 +29,14 @@ const jvalue = extern union { z: jboolean, i: jint, j: jlong, d: f64, l: jobject
 // Slots in JNINativeInterface (stable since JNI 1.2).
 const FindClass = 6;
 const Throw = 13;
+const ExceptionClear = 17;
 const NewGlobalRef = 21;
 const DeleteLocalRef = 23;
 const NewObjectA = 30;
 const GetMethodID = 33;
 const CallObjectMethodA = 36;
 const CallBooleanMethodA = 39;
+const CallIntMethodA = 51;
 const GetStaticMethodID = 113;
 const CallStaticObjectMethodA = 116;
 const NewString = 163;
@@ -39,6 +44,7 @@ const GetStringLength = 164;
 const GetArrayLength = 171;
 const NewObjectArray = 172;
 const GetObjectArrayElement = 173;
+const SetObjectArrayElement = 174;
 const NewByteArray = 176;
 const NewIntArray = 179;
 const NewDoubleArray = 182;
@@ -48,6 +54,7 @@ const GetLongArrayRegion = 204;
 const SetByteArrayRegion = 208;
 const SetIntArrayRegion = 211;
 const SetDoubleArrayRegion = 214;
+const GetJavaVM = 219;
 const GetStringRegion = 220;
 const ExceptionCheck = 228;
 
@@ -56,6 +63,21 @@ fn slot(env: JNIEnv, comptime index: usize, comptime F: type) F {
 }
 
 const gpa = biblio.sync.allocator;
+
+/// A number for a Java int, saturating instead of overflowing.
+fn int(v: anytype) jint {
+    if (std.math.cast(jint, v)) |n| return n;
+    return if (@typeInfo(@TypeOf(v)).int.signedness == .signed and v < 0) std.math.minInt(jint) else std.math.maxInt(jint);
+}
+
+/// The native object behind a handle the Kotlin side keeps as a Long.
+fn ptr(comptime T: type, handle: jlong) *T {
+    return @ptrFromInt(@as(usize, @bitCast(handle)));
+}
+
+fn handleFor(p: anytype) jlong {
+    return @bitCast(@as(u64, @intFromPtr(p)));
+}
 
 // MARK: Clients
 
@@ -89,12 +111,13 @@ fn passwordFor(ctx: ?*anyopaque, _: [*:0]const u8, _: [*:0]const u8) callconv(.c
 }
 
 fn handleOf(client: jlong) ?*biblio.Handle {
-    return if (client == 0) null else @as(*Client, @ptrFromInt(@as(usize, @intCast(client)))).handle;
+    return if (client == 0) null else ptr(Client, client).handle;
 }
 
 fn bytesFromJava(env: JNIEnv, array: jarray, a: std.mem.Allocator) ?[:0]u8 {
+    if (array == null) return null;
     const len = slot(env, GetArrayLength, *const fn (JNIEnv, jarray) callconv(.c) jint)(env, array);
-    const out = a.allocSentinel(u8, @intCast(len), 0) catch return null;
+    const out = a.allocSentinel(u8, @intCast(@max(len, 0)), 0) catch return null;
     slot(env, GetByteArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]u8) callconv(.c) void)(env, array, 0, len, out.ptr);
     return out;
 }
@@ -115,13 +138,13 @@ export fn Java_com_rbrian_biblio_core_Core_nativeNewClient(env: JNIEnv, _: jclas
         }
     }
     c.handle = biblio.biblio_client_new(sd.ptr, un.ptr, passwordFor, c);
-    return @intCast(@intFromPtr(c));
+    return handleFor(c);
 }
 
 /// Core.nativeSetPassword(client: Long, password: ByteArray) — after the password changes.
 export fn Java_com_rbrian_biblio_core_Core_nativeSetPassword(env: JNIEnv, _: jclass, client: jlong, password: jarray) void {
     if (client == 0) return;
-    const c: *Client = @ptrFromInt(@as(usize, @intCast(client)));
+    const c = ptr(Client, client);
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
     const p = bytesFromJava(env, password, arena.allocator()) orelse return;
@@ -131,10 +154,113 @@ export fn Java_com_rbrian_biblio_core_Core_nativeSetPassword(env: JNIEnv, _: jcl
 
 export fn Java_com_rbrian_biblio_core_Core_nativeFreeClient(_: JNIEnv, _: jclass, client: jlong) void {
     if (client == 0) return;
-    const c: *Client = @ptrFromInt(@as(usize, @intCast(client)));
+    const c = ptr(Client, client);
     biblio.biblio_client_free(c.handle);
     c.setPassword(null);
     gpa.destroy(c);
+}
+
+// MARK: Transport
+
+/// Sends the core's requests through `Core.send` (OkHttp), so they use the system's and the
+/// user's certificate authorities, proxies, and VPNs. The core calls it on the thread that made
+/// the call, which is a Java thread; any other thread is attached for the request.
+const Transport = struct {
+    var vm: ?*const *const [8]?*const anyopaque = null;
+    /// Global references and ids, found on the Java thread that installed the transport, since
+    /// FindClass on an attached thread doesn't see the app's classes.
+    var core: jclass = null;
+    var send: jmethodID = null;
+    var status: jmethodID = null;
+    var headers: jmethodID = null;
+    var body: jmethodID = null;
+
+    // Slots in JNIInvokeInterface.
+    const AttachCurrentThread = 4;
+    const DetachCurrentThread = 5;
+    const GetEnv = 6;
+    const jni_version_1_6: jint = 0x00010006;
+
+    fn invoke(comptime index: usize, comptime F: type) F {
+        return @ptrCast(@alignCast(vm.?.*[index].?));
+    }
+
+    fn sendFn(_: ?*anyopaque, req: *const biblio.CRequest, res: *biblio.CResponse) callconv(.c) c_int {
+        var env_ptr: ?*anyopaque = null;
+        var attached = false;
+        if (invoke(GetEnv, *const fn (@TypeOf(vm), *?*anyopaque, jint) callconv(.c) jint)(vm, &env_ptr, jni_version_1_6) != 0) {
+            if (invoke(AttachCurrentThread, *const fn (@TypeOf(vm), *?*anyopaque, ?*anyopaque) callconv(.c) jint)(vm, &env_ptr, null) != 0) return 1;
+            attached = true;
+        }
+        defer if (attached) {
+            _ = invoke(DetachCurrentThread, *const fn (@TypeOf(vm)) callconv(.c) jint)(vm);
+        };
+        const env: JNIEnv = @ptrCast(@alignCast(env_ptr.?));
+        return if (exchange(env, req, res)) 0 else 1;
+    }
+
+    fn exchange(env: JNIEnv, req: *const biblio.CRequest, res: *biblio.CResponse) bool {
+        var call = Call.init(env);
+        defer call.deinit();
+        defer if (call.pending()) slot(env, ExceptionClear, *const fn (JNIEnv) callconv(.c) void)(env);
+        // A String[] of alternating header names and values.
+        const array = call.stringArrayOf(req.headers[0..req.header_count]) orelse return false;
+        defer call.deleteLocal(array);
+        const method_s = call.string(std.mem.span(req.method));
+        defer call.deleteLocal(method_s);
+        const url_s = call.string(std.mem.span(req.url));
+        defer call.deleteLocal(url_s);
+        const body_a = if (req.body) |b| call.bytes(b[0..req.body_len]) else null;
+        defer call.deleteLocal(body_a);
+        if (call.pending()) return false;
+        var args = [_]jvalue{ .{ .l = method_s }, .{ .l = url_s }, .{ .l = array }, .{ .l = body_a } };
+        const response = slot(env, CallStaticObjectMethodA, *const fn (JNIEnv, jclass, jmethodID, [*]const jvalue) callconv(.c) jobject)(env, core, send, &args);
+        if (call.pending() or response == null) return false;
+        defer call.deleteLocal(response);
+
+        const no_args = [_]jvalue{.{ .j = 0 }};
+        const code = slot(env, CallIntMethodA, *const fn (JNIEnv, jobject, jmethodID, [*]const jvalue) callconv(.c) jint)(env, response, status, &no_args);
+        const header_text = slot(env, CallObjectMethodA, *const fn (JNIEnv, jobject, jmethodID, [*]const jvalue) callconv(.c) jobject)(env, response, headers, &no_args);
+        defer call.deleteLocal(header_text);
+        const body_bytes = slot(env, CallObjectMethodA, *const fn (JNIEnv, jobject, jmethodID, [*]const jvalue) callconv(.c) jobject)(env, response, body, &no_args);
+        defer call.deleteLocal(body_bytes);
+        if (call.pending()) return false;
+
+        const h = call.optStr(header_text) orelse "";
+        const b = bytesFromJava(env, body_bytes, call.a()) orelse "";
+        if (call.rejected != null) return false;
+        const h_span = std.mem.span(h);
+        const h_out = biblio.biblio_alloc(@max(h_span.len, 1)) orelse return false;
+        @memcpy(h_out[0..h_span.len], h_span);
+        const b_out = biblio.biblio_alloc(@max(b.len, 1)) orelse {
+            biblio.biblio_free(h_out);
+            return false;
+        };
+        @memcpy(b_out[0..b.len], b);
+        res.* = .{ .status = code, .headers = h_out, .headers_len = h_span.len, .body = b_out, .body_len = b.len };
+        return true;
+    }
+};
+
+/// Core.nativeInstallTransport(): routes the core's HTTP through `Core.send`. Call once, before
+/// the first client, from a Java thread.
+export fn Java_com_rbrian_biblio_core_Core_nativeInstallTransport(env: JNIEnv, core: jclass) void {
+    var call = Call.init(env);
+    defer call.deinit();
+    var vm: ?*anyopaque = null;
+    if (slot(env, GetJavaVM, *const fn (JNIEnv, *?*anyopaque) callconv(.c) jint)(env, &vm) != 0 or vm == null) return;
+    const response = call.method("com/rbrian/biblio/core/HttpResponse", "getStatus", "()I", false);
+    const headers = call.method("com/rbrian/biblio/core/HttpResponse", "getHeaders", "()Ljava/lang/String;", false);
+    const body = call.method("com/rbrian/biblio/core/HttpResponse", "getBody", "()[B", false);
+    const send = call.method("com/rbrian/biblio/core/Core", "send", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[B)Lcom/rbrian/biblio/core/HttpResponse;", true);
+    if (response.id == null or headers.id == null or body.id == null or send.id == null) return;
+    Transport.vm = @ptrCast(@alignCast(vm));
+    Transport.core = slot(env, NewGlobalRef, *const fn (JNIEnv, jobject) callconv(.c) jobject)(env, core);
+    Transport.send = send.id;
+    Transport.status = response.id;
+    Transport.headers = headers.id;
+    Transport.body = body.id;
+    biblio.biblio_set_transport(Transport.sendFn, null);
 }
 
 // MARK: Calls
@@ -144,6 +270,9 @@ const Call = struct {
     env: JNIEnv,
     arena: std.heap.ArenaAllocator,
     err: capi.Error = .{},
+    /// Set when an argument couldn't be read (out of memory, or a string with an unpaired
+    /// surrogate): the call then throws instead of reaching the core with a wrong argument.
+    rejected: ?capi.Result = null,
 
     fn init(env: JNIEnv) Call {
         return .{ .env = env, .arena = .init(gpa) };
@@ -160,6 +289,19 @@ const Call = struct {
 
     // Arguments
 
+    fn reject(call: *Call, kind: capi.Result) void {
+        if (call.rejected == null) call.rejected = kind;
+    }
+
+    /// False, having thrown a `Core.Failure`, if an argument couldn't be read.
+    fn ready(call: *Call) bool {
+        const kind = call.rejected orelse return true;
+        call.throwFailure(kind, if (kind == .out_of_memory) "Out of memory." else "Biblio couldn’t read that text.", 0);
+        return false;
+    }
+
+    /// A Java string as UTF-8; "" for null (Kotlin passes null only where the core takes an
+    /// optional string, through `optStr`).
     fn str(call: *Call, s: jstring) [*:0]const u8 {
         return call.optStr(s) orelse "";
     }
@@ -168,9 +310,15 @@ const Call = struct {
         if (s == null) return null;
         const env = call.env;
         const len = slot(env, GetStringLength, *const fn (JNIEnv, jstring) callconv(.c) jint)(env, s);
-        const units = call.a().alloc(u16, @intCast(len)) catch return "";
+        const units = call.a().alloc(u16, @intCast(@max(len, 0))) catch {
+            call.reject(.out_of_memory);
+            return null;
+        };
         slot(env, GetStringRegion, *const fn (JNIEnv, jstring, jint, jint, [*]u16) callconv(.c) void)(env, s, 0, len, units.ptr);
-        const utf8 = std.unicode.utf16LeToUtf8AllocZ(call.a(), units) catch return "";
+        const utf8 = std.unicode.utf16LeToUtf8AllocZ(call.a(), units) catch |e| {
+            call.reject(if (e == error.OutOfMemory) .out_of_memory else .bad_request);
+            return null;
+        };
         return utf8.ptr;
     }
 
@@ -179,7 +327,10 @@ const Call = struct {
         if (array == null) return &.{};
         const env = call.env;
         const len = slot(env, GetArrayLength, *const fn (JNIEnv, jarray) callconv(.c) jint)(env, array);
-        const out = call.a().alloc([*:0]const u8, @intCast(len)) catch return &.{};
+        const out = call.a().alloc([*:0]const u8, @intCast(@max(len, 0))) catch {
+            call.reject(.out_of_memory);
+            return &.{};
+        };
         for (out, 0..) |*s, i| {
             const item = slot(env, GetObjectArrayElement, *const fn (JNIEnv, jarray, jint) callconv(.c) jobject)(env, array, @intCast(i));
             s.* = call.str(item);
@@ -191,7 +342,10 @@ const Call = struct {
     /// Pairs from a String[] of alternating keys and values.
     fn pairs(call: *Call, array: jarray) []const capi.Pair {
         const s = call.strings(array);
-        const out = call.a().alloc(capi.Pair, s.len / 2) catch return &.{};
+        const out = call.a().alloc(capi.Pair, s.len / 2) catch {
+            call.reject(.out_of_memory);
+            return &.{};
+        };
         for (out, 0..) |*p, i| p.* = .{ .key = s[2 * i], .value = s[2 * i + 1] };
         return out;
     }
@@ -201,7 +355,10 @@ const Call = struct {
         if (array == null) return null;
         const env = call.env;
         const len = slot(env, GetArrayLength, *const fn (JNIEnv, jarray) callconv(.c) jint)(env, array);
-        const out = call.a().alloc(i32, @intCast(len)) catch return null;
+        const out = call.a().alloc(i32, @intCast(@max(len, 0))) catch {
+            call.reject(.out_of_memory);
+            return null;
+        };
         slot(env, GetIntArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]i32) callconv(.c) void)(env, array, 0, len, out.ptr);
         return out;
     }
@@ -211,10 +368,16 @@ const Call = struct {
         if (array == null) return &.{};
         const env = call.env;
         const len = slot(env, GetArrayLength, *const fn (JNIEnv, jarray) callconv(.c) jint)(env, array);
-        const handles = call.a().alloc(i64, @intCast(len)) catch return &.{};
+        const handles = call.a().alloc(i64, @intCast(@max(len, 0))) catch {
+            call.reject(.out_of_memory);
+            return &.{};
+        };
         slot(env, GetLongArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]i64) callconv(.c) void)(env, array, 0, len, handles.ptr);
-        const out = call.a().alloc(*const biblio.borrowed.Index, handles.len) catch return &.{};
-        for (out, handles) |*o, h| o.* = @ptrFromInt(@as(usize, @intCast(h)));
+        const out = call.a().alloc(*const biblio.borrowed.Index, handles.len) catch {
+            call.reject(.out_of_memory);
+            return &.{};
+        };
+        for (out, handles) |*o, h| o.* = ptr(biblio.borrowed.Index, h);
         return out;
     }
 
@@ -223,22 +386,27 @@ const Call = struct {
     /// Throws the core's error as a `Core.Failure` unless the call succeeded.
     fn check(call: *Call, result: capi.Result) bool {
         if (result == .ok) return true;
+        call.throwFailure(result, if (call.err.message) |m| std.mem.span(m) else "Something went wrong.", call.err.status);
+        return false;
+    }
+
+    fn throwFailure(call: *Call, result: capi.Result, message: []const u8, http_status: c_int) void {
         const env = call.env;
-        const message = if (call.err.message) |m| std.mem.span(m) else "Something went wrong.";
         const kind = call.string(kindName(result));
         const text = call.string(message);
-        const status = if (call.err.status != 0) call.boxed("java/lang/Integer", "(I)Ljava/lang/Integer;", .{ .i = call.err.status }) else null;
+        const status = if (http_status != 0) call.boxed("java/lang/Integer", "(I)Ljava/lang/Integer;", .{ .i = http_status }) else null;
         var args = [_]jvalue{ .{ .l = kind }, .{ .l = text }, .{ .l = status } };
         const m = call.method("com/rbrian/biblio/core/Core$Failure", "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;)V", false);
         const failure = call.new(m, &args);
         for (args) |v| call.deleteLocal(v.l);
         if (failure != null) _ = slot(env, Throw, *const fn (JNIEnv, jobject) callconv(.c) jint)(env, failure);
-        return false;
     }
 
     /// Runs `f`, a libbiblio function, with `args` (every argument before its result and
-    /// error), and returns the result as its Kotlin model (a java.util.List for a list type).
+    /// error), and returns the result as its Kotlin model (a java.util.List for a plain list
+    /// type).
     fn fetch(call: *Call, comptime f: anytype, args: anytype) jobject {
+        if (!call.ready()) return null;
         const params = @typeInfo(@TypeOf(f)).@"fn".param_types;
         const T = @typeInfo(@typeInfo(@typeInfo(params[args.len].?).optional.child).pointer.child).optional.child;
         var out: ?T = null;
@@ -246,7 +414,21 @@ const Call = struct {
         defer capi.free(out);
         if (!call.check(result)) return null;
         const value = out orelse return null;
-        return if (@hasField(@TypeOf(value.*), "items")) call.list(value.items[0..value.items_count]) else call.object(value.*);
+        const V = @TypeOf(value.*);
+        return if (@hasField(V, "items") and !@hasField(V, "edition_index")) call.list(value.items[0..value.items_count]) else call.object(value.*);
+    }
+
+    /// Runs `f`, a libbiblio function that returns only a result, with `args` (every argument
+    /// before its error).
+    fn perform(call: *Call, comptime f: anytype, args: anytype) void {
+        if (!call.ready()) return;
+        _ = call.check(@call(.auto, f, args ++ .{&call.err}));
+    }
+
+    /// Runs `f`, a libbiblio function returning a string it allocated, as a Java string.
+    fn takenFrom(call: *Call, comptime f: anytype, args: anytype) jstring {
+        if (!call.ready()) return null;
+        return call.taken(@call(.auto, f, args));
     }
 
     /// Looks up a class's method once (on the calling Java thread, so FindClass sees the app's
@@ -287,7 +469,7 @@ const Call = struct {
     fn string(call: *Call, s: []const u8) jstring {
         if (call.pending()) return null;
         const units = std.unicode.utf8ToUtf16LeAlloc(call.a(), s) catch call.a().alloc(u16, 0) catch return null;
-        return slot(call.env, NewString, *const fn (JNIEnv, [*]const u16, jint) callconv(.c) jstring)(call.env, units.ptr, @intCast(units.len));
+        return slot(call.env, NewString, *const fn (JNIEnv, [*]const u16, jint) callconv(.c) jstring)(call.env, units.ptr, int(units.len));
     }
 
     /// A string the core allocated, as a Java string (null for NULL); frees it.
@@ -310,31 +492,53 @@ const Call = struct {
 
     fn doubles(call: *Call, values: []const f64) jarray {
         const env = call.env;
-        const array = slot(env, NewDoubleArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, @intCast(values.len));
+        const array = slot(env, NewDoubleArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, int(values.len));
         if (array == null) return null;
-        slot(env, SetDoubleArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const f64) callconv(.c) void)(env, array, 0, @intCast(values.len), values.ptr);
+        slot(env, SetDoubleArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const f64) callconv(.c) void)(env, array, 0, int(values.len), values.ptr);
         return array;
     }
 
     fn ints(call: *Call, values: []const i32) jarray {
         const env = call.env;
-        const array = slot(env, NewIntArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, @intCast(values.len));
+        const array = slot(env, NewIntArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, int(values.len));
         if (array == null) return null;
-        slot(env, SetIntArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const i32) callconv(.c) void)(env, array, 0, @intCast(values.len), values.ptr);
+        slot(env, SetIntArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const i32) callconv(.c) void)(env, array, 0, int(values.len), values.ptr);
         return array;
     }
 
     fn bytes(call: *Call, values: []const u8) jarray {
         const env = call.env;
-        const array = slot(env, NewByteArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, @intCast(values.len));
+        const array = slot(env, NewByteArray, *const fn (JNIEnv, jint) callconv(.c) jarray)(env, int(values.len));
         if (array == null) return null;
-        slot(env, SetByteArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const u8) callconv(.c) void)(env, array, 0, @intCast(values.len), values.ptr);
+        slot(env, SetByteArrayRegion, *const fn (JNIEnv, jarray, jint, jint, [*]const u8) callconv(.c) void)(env, array, 0, int(values.len), values.ptr);
+        return array;
+    }
+
+    /// A String[] of the headers' alternating names and values; null if it couldn't be made.
+    fn stringArrayOf(call: *Call, values: []const biblio.CHeader) jarray {
+        const env = call.env;
+        const string_class = slot(env, FindClass, *const fn (JNIEnv, [*:0]const u8) callconv(.c) jclass)(env, "java/lang/String");
+        if (string_class == null) return null;
+        defer call.deleteLocal(string_class);
+        const array = slot(env, NewObjectArray, *const fn (JNIEnv, jint, jclass, jobject) callconv(.c) jarray)(env, int(2 * values.len), string_class, null);
+        if (array == null) return null;
+        for (values, 0..) |v, i| {
+            for ([_][*:0]const u8{ v.name, v.value }, 0..) |text, k| {
+                const item = call.string(std.mem.span(text));
+                if (item == null) {
+                    call.deleteLocal(array);
+                    return null;
+                }
+                slot(env, SetObjectArrayElement, *const fn (JNIEnv, jarray, jint, jobject) callconv(.c) void)(env, array, int(2 * i + k), item);
+                call.deleteLocal(item);
+            }
+        }
         return array;
     }
 
     /// A java.util.ArrayList of converted items.
     fn list(call: *Call, values: anytype) jobject {
-        var size = [_]jvalue{.{ .i = @intCast(values.len) }};
+        var size = [_]jvalue{.{ .i = int(values.len) }};
         const out = call.new(call.method("java/util/ArrayList", "<init>", "(I)V", false), &size) orelse return null;
         const add = call.method("java/util/ArrayList", "add", "(Ljava/lang/Object;)Z", false);
         for (values) |v| {
@@ -348,7 +552,7 @@ const Call = struct {
 
     /// A java.util.HashMap of the library's labels.
     fn map(call: *Call, values: []const capi.Pair) jobject {
-        var size = [_]jvalue{.{ .i = @intCast(values.len) }};
+        var size = [_]jvalue{.{ .i = int(values.len) }};
         const out = call.new(call.method("java/util/HashMap", "<init>", "(I)V", false), &size) orelse return null;
         const put = call.method("java/util/HashMap", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
         for (values) |p| {
@@ -383,10 +587,10 @@ const Call = struct {
             } else if (F == bool) {
                 args[i] = .{ .z = @intFromBool(v) };
             } else if (F == i64 and @hasField(T, "has_" ++ name)) {
-                locals[i] = if (@field(value, "has_" ++ name)) call.boxed("java/lang/Integer", "(I)Ljava/lang/Integer;", .{ .i = @intCast(v) }) else null;
+                locals[i] = if (@field(value, "has_" ++ name)) call.boxed("java/lang/Integer", "(I)Ljava/lang/Integer;", .{ .i = int(v) }) else null;
                 args[i] = .{ .l = locals[i] };
             } else if (F == i64) {
-                args[i] = if (comptime isLong(name)) .{ .j = v } else .{ .i = @intCast(v) };
+                args[i] = if (comptime isLong(name)) .{ .j = v } else .{ .i = int(v) };
             } else if (F == [*]const capi.Pair) {
                 locals[i] = call.map(v[0..@field(value, name ++ "_count")]);
                 args[i] = .{ .l = locals[i] };
@@ -413,7 +617,7 @@ const Call = struct {
         var args = [_]jvalue{
             .{ .z = @intFromBool(b.match == .same) },
             .{ .l = call.string(if (b.format) |f| std.mem.span(f) else "") },
-            .{ .i = @intCast(b.count) },
+            .{ .i = int(b.count) },
             .{ .l = call.optString(b.last_checkout) },
             .{ .l = call.optString(b.last_returned) },
         };
@@ -433,7 +637,7 @@ fn className(comptime T: type) [:0]const u8 {
         .{ capi.FacetValue, "FacetValue" },       .{ capi.Facet, "Facet" },                 .{ capi.ListPage, "ListPage" },
         .{ capi.Copy, "CopyAvailability" },       .{ capi.DetailField, "DetailField" },     .{ capi.Location, "Location" },
         .{ capi.Patron, "Patron" },               .{ capi.LibraryInfo, "LibraryInfo" },     .{ capi.DirectoryEntry, "DirectoryEntry" },
-        .{ capi.DirectoryPage, "DirectoryPage" }, .{ capi.Refusal, "Refusal" },
+        .{ capi.DirectoryPage, "DirectoryPage" }, .{ capi.Refusal, "Refusal" },             .{ capi.DetailList, "DetailList" },
     };
     inline for (names) |n| if (n[0] == T) return "com/rbrian/biblio/core/" ++ n[1];
     @compileError("no Kotlin model for " ++ @typeName(T));
@@ -525,14 +729,14 @@ export fn Java_com_rbrian_biblio_core_Core_nativeDirectoryPage(env: JNIEnv, _: j
 export fn Java_com_rbrian_biblio_core_Core_nativeResolveSubdomain(env: JNIEnv, _: jclass, name: jstring, website: jstring) jstring {
     var call = Call.init(env);
     defer call.deinit();
-    return call.taken(capi.biblio_resolve_subdomain(call.str(name), call.optStr(website)));
+    return call.takenFrom(capi.biblio_resolve_subdomain, .{ call.str(name), call.optStr(website) });
 }
 
 /// Core.nativeSubdomainFrom(input: String): String?
 export fn Java_com_rbrian_biblio_core_Core_nativeSubdomainFrom(env: JNIEnv, _: jclass, input: jstring) jstring {
     var call = Call.init(env);
     defer call.deinit();
-    return call.taken(capi.biblio_subdomain_from(call.str(input)));
+    return call.takenFrom(capi.biblio_subdomain_from, .{call.str(input)});
 }
 
 /// Core.nativeFormatName(code: String, labels: Array<String>): String — labels alternate keys and values.
@@ -540,7 +744,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeFormatName(env: JNIEnv, _: jcla
     var call = Call.init(env);
     defer call.deinit();
     const pairs = call.pairs(labels);
-    return call.taken(capi.biblio_format_name(call.str(code), pairs.ptr, pairs.len));
+    return call.takenFrom(capi.biblio_format_name, .{ call.str(code), pairs.ptr, pairs.len });
 }
 
 /// Core.nativeSortName(id: String, labels: Array<String>): String
@@ -548,36 +752,91 @@ export fn Java_com_rbrian_biblio_core_Core_nativeSortName(env: JNIEnv, _: jclass
     var call = Call.init(env);
     defer call.deinit();
     const pairs = call.pairs(labels);
-    return call.taken(capi.biblio_sort_name(call.str(id), pairs.ptr, pairs.len));
+    return call.takenFrom(capi.biblio_sort_name, .{ call.str(id), pairs.ptr, pairs.len });
+}
+
+/// Core.nativeFormatCodes(): String — the formats with built-in names, for format pickers, one
+/// per line.
+export fn Java_com_rbrian_biblio_core_Core_nativeFormatCodes(env: JNIEnv, _: jclass) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    var count: usize = 0;
+    const codes = capi.biblio_format_codes(&count);
+    var text: std.ArrayList(u8) = .empty;
+    for (codes[0..count]) |c| {
+        text.appendSlice(call.a(), std.mem.span(c)) catch return null;
+        text.append(call.a(), '\n') catch return null;
+    }
+    return call.string(text.items);
 }
 
 /// Core.nativeFormatIsRefined(code: String): Boolean — a format searches filter on locally.
 export fn Java_com_rbrian_biblio_core_Core_nativeFormatIsRefined(env: JNIEnv, _: jclass, code: jstring) jboolean {
     var call = Call.init(env);
     defer call.deinit();
-    return @intFromBool(capi.biblio_format_is_refined(call.str(code)));
+    const c = call.str(code);
+    if (!call.ready()) return 0;
+    return @intFromBool(capi.biblio_format_is_refined(c));
+}
+
+/// Core.nativeReadableTint(hex: String, dark: Boolean): String? — the brand color at 4.5:1
+/// contrast with a light or dark bar.
+export fn Java_com_rbrian_biblio_core_Core_nativeReadableTint(env: JNIEnv, _: jclass, hex: jstring, dark: jboolean) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    return call.takenFrom(capi.biblio_readable_tint, .{ call.str(hex), dark != 0 });
+}
+
+/// Core.nativeYear(date: String): String? — the year a publication date names, else the date.
+export fn Java_com_rbrian_biblio_core_Core_nativeYear(env: JNIEnv, _: jclass, date: jstring) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    return call.takenFrom(capi.biblio_year, .{call.optStr(date)});
+}
+
+/// Core.nativeHoldStatusRank(status: String?): Int — 0 ready, 1 in transit, 2 waiting, 3 paused.
+export fn Java_com_rbrian_biblio_core_Core_nativeHoldStatusRank(env: JNIEnv, _: jclass, status: jstring) jint {
+    var call = Call.init(env);
+    defer call.deinit();
+    const s = call.optStr(status);
+    if (!call.ready()) return 2;
+    return @backingInt(capi.biblio_hold_status_rank(s));
+}
+
+/// Core.nativeHoldStatusName(status: String?): String — "Ready for pickup", "In transit", "On
+/// hold", or "Paused".
+export fn Java_com_rbrian_biblio_core_Core_nativeHoldStatusName(env: JNIEnv, _: jclass, status: jstring) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    const s = call.optStr(status);
+    if (!call.ready()) return null;
+    return call.string(std.mem.span(capi.biblio_hold_status_name(s)));
+}
+
+/// Core.nativeVersion(): String — the core's version.
+export fn Java_com_rbrian_biblio_core_Core_nativeVersion(env: JNIEnv, _: jclass) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    return call.string(std.mem.span(biblio.biblio_version()));
+}
+
+/// Core.nativeIncidents(): String? — server throttling and failures since launch, as JSON.
+export fn Java_com_rbrian_biblio_core_Core_nativeIncidents(env: JNIEnv, _: jclass) jstring {
+    var call = Call.init(env);
+    defer call.deinit();
+    return call.taken(capi.biblio_incidents());
 }
 
 /// Core.nativeBarcode(value: String, code128: Boolean): DoubleArray?
 export fn Java_com_rbrian_biblio_core_Core_nativeBarcode(env: JNIEnv, _: jclass, value: jstring, code128: jboolean) jarray {
     var call = Call.init(env);
     defer call.deinit();
+    const v = call.str(value);
+    if (!call.ready()) return null;
     var count: usize = 0;
-    const widths = capi.biblio_barcode(call.str(value), if (code128 != 0) .code128 else .codabar, &count) orelse return null;
+    const widths = capi.biblio_barcode(v, if (code128 != 0) .code128 else .codabar, &count) orelse return null;
     defer biblio.biblio_free(widths);
     return call.doubles(widths[0..count]);
-}
-
-/// Core.nativeFetchImage(url: String): ByteArray
-export fn Java_com_rbrian_biblio_core_Core_nativeFetchImage(env: JNIEnv, _: jclass, url: jstring) jarray {
-    var call = Call.init(env);
-    defer call.deinit();
-    var data: ?[*]u8 = null;
-    var len: usize = 0;
-    const result = capi.biblio_fetch_image(call.str(url), &data, &len, &call.err);
-    defer if (data) |d| biblio.biblio_free(d);
-    if (!call.check(result)) return null;
-    return call.bytes(if (data) |d| d[0..len] else &.{});
 }
 
 /// Core.nativeLibraryIcon(website: String?, subdomain: String?, logo: String?): ByteArray? —
@@ -587,7 +846,11 @@ export fn Java_com_rbrian_biblio_core_Core_nativeLibraryIcon(env: JNIEnv, _: jcl
     defer call.deinit();
     var data: ?[*]u8 = null;
     var len: usize = 0;
-    const kind = capi.biblio_library_icon(call.optStr(website), call.optStr(subdomain), call.optStr(logo), &data, &len);
+    const site = call.optStr(website);
+    const sub = call.optStr(subdomain);
+    const logo_url = call.optStr(logo);
+    if (!call.ready()) return null;
+    const kind = capi.biblio_library_icon(site, sub, logo_url, &data, &len);
     defer if (data) |d| biblio.biblio_free(d);
     const image = data orelse return null;
     const out = call.a().alloc(u8, len + 1) catch return null;
@@ -609,7 +872,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeLogoBounds(env: JNIEnv, _: jcla
     if (p.len < (h - 1) * st + w * ch) return null;
     var b: [4]usize = undefined;
     if (!capi.biblio_logo_bounds(p.ptr, w, h, st, ch, &b)) return null;
-    return call.ints(&.{ @intCast(b[0]), @intCast(b[1]), @intCast(b[2]), @intCast(b[3]) });
+    return call.ints(&.{ int(b[0]), int(b[1]), int(b[2]), int(b[3]) });
 }
 
 // MARK: Item lists
@@ -620,13 +883,13 @@ export fn Java_com_rbrian_biblio_core_Core_nativeLogoBounds(env: JNIEnv, _: jcla
 const List = biblio.item_list.List;
 
 fn listOf(handle: jlong) *List {
-    return @ptrFromInt(@as(usize, @intCast(handle)));
+    return ptr(List, handle);
 }
 
 /// Core.nativeListNew(kind: Int): Long — 0 search, 1 holds, 2 checkouts, 3 history.
 export fn Java_com_rbrian_biblio_core_Core_nativeListNew(_: JNIEnv, _: jclass, kind: jint) jlong {
     const list = capi.biblio_list_new(@fromBackingInt(@intCast(kind))) orelse return 0;
-    return @intCast(@intFromPtr(list));
+    return handleFor(list);
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeListFree(_: JNIEnv, _: jclass, list: jlong) void {
@@ -640,8 +903,8 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListState(env: JNIEnv, _: jclas
     defer call.deinit();
     const s = capi.biblio_list_state(listOf(list));
     return call.ints(&.{
-        @intCast(s.total),
-        @intCast(s.pages),
+        int(s.total),
+        int(s.pages),
         @intFromBool(s.loaded),
         @intFromBool(s.has_more),
         @intFromBool(s.loading),
@@ -667,11 +930,12 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListClear(_: JNIEnv, _: jclass,
     capi.biblio_list_clear(listOf(list));
 }
 
-/// Core.nativeListApply(list, generation, page, ids, titles, formats, authors, holdStatuses,
-/// dueDates, numbers, total, pageSize, nowMs): Boolean — `authors` holds each item's first
-/// author, `holdStatuses` its hold's status and `dueDates` its checkout's due date ("" for none);
-/// `numbers` holds three ints per item: held copies, server index, and flags (1 hold, 2 ready for
-/// pickup, 4 on order).
+/// Core.nativeListApply(list, generation, page, ids, titles, formats, libraryFormats, authors,
+/// holdStatuses, dates, numbers, total, pageSize, nowMs): Boolean — `libraryFormats` holds each
+/// item's library format code, `authors` its first author, `holdStatuses` its hold's status, and
+/// `dates` its checkout's due date or, in history, the day it was borrowed (else returned), as
+/// YYYY-MM-DD ("" for none); `numbers` holds three ints per item: held copies, server index, and
+/// flags (1 hold, 2 ready for pickup, 4 on order).
 export fn Java_com_rbrian_biblio_core_Core_nativeListApply(
     env: JNIEnv,
     _: jclass,
@@ -681,6 +945,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListApply(
     ids: jarray,
     titles: jarray,
     formats: jarray,
+    library_formats: jarray,
     authors: jarray,
     hold_statuses: jarray,
     due_dates: jarray,
@@ -694,13 +959,19 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListApply(
     const id_s = call.strings(ids);
     const title_s = call.strings(titles);
     const format_s = call.strings(formats);
+    const library_s = call.strings(library_formats);
     const author_s = call.strings(authors);
     const status_s = call.strings(hold_statuses);
     const due_s = call.strings(due_dates);
     const num = call.intsFrom(numbers) orelse return 0;
+    if (!call.ready()) return 0;
     const n = id_s.len;
-    if (title_s.len != n or format_s.len != n or author_s.len != n or status_s.len != n or due_s.len != n or num.len != 3 * n) return 0;
-    const items = call.a().alloc(capi.ListItem, n) catch return 0;
+    if (title_s.len != n or format_s.len != n or library_s.len != n or author_s.len != n or status_s.len != n or due_s.len != n or num.len != 3 * n) return 0;
+    const items = call.a().alloc(capi.ListItem, n) catch {
+        call.reject(.out_of_memory);
+        _ = call.ready();
+        return 0;
+    };
     for (items, 0..) |*it, i| {
         const is_hold = num[3 * i + 2] & 1 != 0;
         it.* = .{
@@ -713,11 +984,17 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListApply(
             .ready = num[3 * i + 2] & 2 != 0,
             .on_order = num[3 * i + 2] & 4 != 0,
             .due_day = biblio.item_list.dayNumber(std.mem.span(due_s[i])),
-            .status_rank = if (is_hold) biblio.item_list.Item.statusRank(std.mem.span(status_s[i])) else 0,
+            .status_rank = if (is_hold) @intCast(@backingInt(capi.biblio_hold_status_rank(status_s[i]))) else 0,
             .author = author_s[i],
         };
     }
-    return @intFromBool(capi.biblio_list_apply(listOf(list), @bitCast(generation), page, items.ptr, n, total, page_size, now_ms));
+    const libs = call.a().alloc(?[*:0]const u8, n) catch {
+        call.reject(.out_of_memory);
+        _ = call.ready();
+        return 0;
+    };
+    for (libs, library_s) |*l, f| l.* = if (f[0] == 0) null else f;
+    return @intFromBool(capi.biblio_list_apply_formats(listOf(list), @bitCast(generation), page, items.ptr, libs.ptr, n, total, page_size, now_ms));
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeListFail(_: JNIEnv, _: jclass, list: jlong, generation: jlong, page: jint) jboolean {
@@ -734,7 +1011,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListIsStale(_: JNIEnv, _: jclas
 
 /// Core.nativeListItemAppeared(list, position): Int — a page to prefetch, or 0.
 export fn Java_com_rbrian_biblio_core_Core_nativeListItemAppeared(_: JNIEnv, _: jclass, list: jlong, position: jint) jint {
-    return @intCast(capi.biblio_list_item_appeared(listOf(list), position));
+    return int(capi.biblio_list_item_appeared(listOf(list), position));
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeListPlaceholderAppeared(_: JNIEnv, _: jclass, list: jlong, position: jint) void {
@@ -752,7 +1029,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListTakeVisibleRequests(env: JN
     var pages: [64]i64 = undefined;
     const n = capi.biblio_list_take_visible_requests(listOf(list), &pages, pages.len);
     const out = call.a().alloc(i32, n) catch return null;
-    for (out, pages[0..n]) |*o, p| o.* = @intCast(p);
+    for (out, pages[0..n]) |*o, p| o.* = int(p);
     return call.ints(out);
 }
 
@@ -769,7 +1046,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListBeginBackground(_: JNIEnv, 
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeListNextBackgroundPage(_: JNIEnv, _: jclass, list: jlong) jint {
-    return @intCast(capi.biblio_list_next_background_page(listOf(list)));
+    return int(capi.biblio_list_next_background_page(listOf(list)));
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeListEndBackground(_: JNIEnv, _: jclass, list: jlong) void {
@@ -784,7 +1061,9 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListSetSort(_: JNIEnv, _: jclas
 export fn Java_com_rbrian_biblio_core_Core_nativeListSetFormat(env: JNIEnv, _: jclass, list: jlong, format: jstring) void {
     var call = Call.init(env);
     defer call.deinit();
-    capi.biblio_list_set_format(listOf(list), call.optStr(format));
+    const f = call.optStr(format);
+    if (!call.ready()) return;
+    capi.biblio_list_set_format(listOf(list), f);
 }
 
 /// Core.nativeListSetHoldFilter(list, filter): 0 none, 1 ready, 2 not ready, 3 on order.
@@ -796,12 +1075,12 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListRemove(env: JNIEnv, _: jcla
     var call = Call.init(env);
     defer call.deinit();
     const s = call.strings(ids);
-    if (s.len == 0) return 0;
-    return @intCast(capi.biblio_list_remove(listOf(list), s.ptr, s.len));
+    if (!call.ready() or s.len == 0) return 0;
+    return int(capi.biblio_list_remove(listOf(list), s.ptr, s.len));
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeListHoldCount(_: JNIEnv, _: jclass, list: jlong, filter: jint) jint {
-    return @intCast(capi.biblio_list_hold_count(listOf(list), @fromBackingInt(@intCast(filter))));
+    return int(capi.biblio_list_hold_count(listOf(list), @fromBackingInt(@intCast(filter))));
 }
 
 /// Core.nativeListRowPositions(list): IntArray — each row's server position.
@@ -811,7 +1090,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListRowPositions(env: JNIEnv, _
     var n: usize = 0;
     const rows = capi.biblio_list_rows(listOf(list), &n);
     const out = call.a().alloc(i32, n) catch return null;
-    for (out, rows[0..n]) |*o, r| o.* = @intCast(r.position);
+    for (out, rows[0..n]) |*o, r| o.* = int(r.position);
     return call.ints(out);
 }
 
@@ -844,11 +1123,28 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListFormats(env: JNIEnv, _: jcl
     return call.string(text.items);
 }
 
+/// Core.nativeListFormatFacetCounts(list, values: Array<String>, counts: IntArray): IntArray — a
+/// search's FORMAT facet counts, exact for refined formats (-1, unknown) once every item is loaded.
+export fn Java_com_rbrian_biblio_core_Core_nativeListFormatFacetCounts(env: JNIEnv, _: jclass, list: jlong, values: jarray, counts: jarray) jarray {
+    var call = Call.init(env);
+    defer call.deinit();
+    const v = call.strings(values);
+    const c = call.intsFrom(counts) orelse return null;
+    if (!call.ready() or c.len != v.len) return null;
+    const wide = call.a().alloc(i64, v.len) catch return null;
+    for (wide, c) |*w, n| w.* = n;
+    capi.biblio_list_format_facet_counts(listOf(list), v.ptr, wide.ptr, v.len);
+    const out = call.a().alloc(i32, v.len) catch return null;
+    for (out, wide) |*o, w| o.* = int(w);
+    return call.ints(out);
+}
+
 /// Core.nativeListSetNotBorrowed(list, indexes: LongArray): the "Not Borrowed" filter; empty turns it off.
 export fn Java_com_rbrian_biblio_core_Core_nativeListSetNotBorrowed(env: JNIEnv, _: jclass, list: jlong, indexes: jarray) void {
     var call = Call.init(env);
     defer call.deinit();
     const ix = call.indexes(indexes);
+    if (!call.ready()) return;
     capi.biblio_list_set_not_borrowed(listOf(list), ix.ptr, ix.len);
 }
 
@@ -860,12 +1156,12 @@ export fn Java_com_rbrian_biblio_core_Core_nativeListSetNotBorrowed(env: JNIEnv,
 const Index = biblio.borrowed.Index;
 
 fn indexOf(handle: jlong) *Index {
-    return @ptrFromInt(@as(usize, @intCast(handle)));
+    return ptr(Index, handle);
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedNew(_: JNIEnv, _: jclass) jlong {
     const ix = capi.biblio_borrowed_index_new() orelse return 0;
-    return @intCast(@intFromPtr(ix));
+    return handleFor(ix);
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedFree(_: JNIEnv, _: jclass, index: jlong) void {
@@ -896,12 +1192,12 @@ export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedClear(_: JNIEnv, _: jcl
 
 /// Core.nativeBorrowedBeginSync(index): Int — the first page to fetch, or 0 if a sync is running.
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedBeginSync(_: JNIEnv, _: jclass, index: jlong) jint {
-    return @intCast(capi.biblio_borrowed_index_begin_sync(indexOf(index)));
+    return int(capi.biblio_borrowed_index_begin_sync(indexOf(index)));
 }
 
 /// Core.nativeBorrowedRebuild(index): Int — page 1, or 0 when a running sync starts over instead.
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedRebuild(_: JNIEnv, _: jclass, index: jlong) jint {
-    return @intCast(capi.biblio_borrowed_index_rebuild(indexOf(index)));
+    return int(capi.biblio_borrowed_index_rebuild(indexOf(index)));
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedFail(_: JNIEnv, _: jclass, index: jlong) void {
@@ -911,9 +1207,9 @@ export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedFail(_: JNIEnv, _: jcla
 /// Core.nativeBorrowedApplyPage(index, page, result): Int — hands the index a page from
 /// `nativeHistoryPage`, which it frees; the next page to fetch, or 0 when done.
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedApplyPage(_: JNIEnv, _: jclass, index: jlong, page: jint, result: jlong) jint {
-    const p: *capi.ListPage = @ptrFromInt(@as(usize, @intCast(result)));
+    const p = ptr(capi.ListPage, result);
     defer capi.free(@as(?*capi.ListPage, p));
-    return @intCast(capi.biblio_borrowed_index_apply_page(indexOf(index), page, p));
+    return int(capi.biblio_borrowed_index_apply_page(indexOf(index), page, p));
 }
 
 /// Core.nativeBorrowedProgress(index): IntArray — fetched, total, complete, syncing (the last two 0 or 1).
@@ -921,7 +1217,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedProgress(env: JNIEnv, _
     var call = Call.init(env);
     defer call.deinit();
     const p = capi.biblio_borrowed_index_progress(indexOf(index));
-    return call.ints(&.{ @intCast(p.fetched), @intCast(p.total), @intFromBool(p.complete), @intFromBool(p.syncing) });
+    return call.ints(&.{ int(p.fetched), int(p.total), @intFromBool(p.complete), @intFromBool(p.syncing) });
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedGeneration(_: JNIEnv, _: jclass, index: jlong) jlong {
@@ -933,7 +1229,12 @@ export fn Java_com_rbrian_biblio_core_Core_nativeBorrowedGeneration(_: JNIEnv, _
 export fn Java_com_rbrian_biblio_core_Core_nativeBorrowed(env: JNIEnv, _: jclass, index: jlong, metadata_id: jstring, format: jstring, title: jstring, author: jstring) jobject {
     var call = Call.init(env);
     defer call.deinit();
-    const b = capi.biblio_borrowed(indexOf(index), call.str(metadata_id), call.str(format), call.str(title), call.optStr(author));
+    const id = call.str(metadata_id);
+    const f = call.str(format);
+    const t = call.str(title);
+    const au = call.optStr(author);
+    if (!call.ready()) return null;
+    const b = capi.biblio_borrowed(indexOf(index), id, f, t, au);
     if (b.match == .none) return null;
     return call.borrowed(b);
 }
@@ -948,11 +1249,11 @@ export fn Java_com_rbrian_biblio_core_Core_nativeHistoryPage(env: JNIEnv, _: jcl
         capi.free(out);
         return 0;
     }
-    return @intCast(@intFromPtr(out orelse return 0));
+    return handleFor(out orelse return 0);
 }
 
 export fn Java_com_rbrian_biblio_core_Core_nativeFreePage(_: JNIEnv, _: jclass, result: jlong) void {
-    if (result != 0) capi.free(@as(?*capi.ListPage, @ptrFromInt(@as(usize, @intCast(result)))));
+    if (result != 0) capi.free(@as(?*capi.ListPage, ptr(capi.ListPage, result)));
 }
 
 // MARK: Client operations
@@ -969,6 +1270,24 @@ export fn Java_com_rbrian_biblio_core_Core_nativePatron(env: JNIEnv, _: jclass, 
     var call = Call.init(env);
     defer call.deinit();
     return call.fetch(capi.biblio_patron, .{handleOf(client)});
+}
+
+/// Core.nativeStatus(client: Long): FetchStatus? — the client's latest request, for the status bar.
+export fn Java_com_rbrian_biblio_core_Core_nativeStatus(env: JNIEnv, _: jclass, client: jlong) jobject {
+    var call = Call.init(env);
+    defer call.deinit();
+    var out: ?*capi.FetchStatus = null;
+    if (!call.check(capi.biblio_status(handleOf(client), &out, &call.err))) return null;
+    defer capi.free(out);
+    const s = out orelse return null;
+    var args = [_]jvalue{
+        .{ .i = int(s.active) },
+        .{ .l = call.optString(s.title) },
+        .{ .l = call.optString(s.url) },
+        .{ .j = std.math.cast(jlong, s.bytes) orelse std.math.maxInt(jlong) },
+    };
+    defer for ([_]usize{ 1, 2 }) |i| call.deleteLocal(args[i].l);
+    return call.new(call.method("com/rbrian/biblio/core/FetchStatus", "<init>", "(ILjava/lang/String;Ljava/lang/String;J)V", false), &args);
 }
 
 /// Core.nativeSearch(client: Long, query: String, searchType: String?, filters: Array<String>,
@@ -1017,7 +1336,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeAvailability(env: JNIEnv, _: jc
     return call.fetch(capi.biblio_availability, .{ handleOf(client), call.str(metadata_id) });
 }
 
-/// Core.nativeDetails(client: Long, metadataId: String): List<DetailField>
+/// Core.nativeDetails(client: Long, metadataId: String): DetailList
 export fn Java_com_rbrian_biblio_core_Core_nativeDetails(env: JNIEnv, _: jclass, client: jlong, metadata_id: jstring) jobject {
     var call = Call.init(env);
     defer call.deinit();
@@ -1035,7 +1354,7 @@ export fn Java_com_rbrian_biblio_core_Core_nativeLocations(env: JNIEnv, _: jclas
 export fn Java_com_rbrian_biblio_core_Core_nativePlaceHold(env: JNIEnv, _: jclass, client: jlong, metadata_id: jstring, material_type: jstring, pickup_branch: jstring) void {
     var call = Call.init(env);
     defer call.deinit();
-    _ = call.check(capi.biblio_place_hold(handleOf(client), call.str(metadata_id), call.optStr(material_type), call.optStr(pickup_branch), &call.err));
+    call.perform(capi.biblio_place_hold, .{ handleOf(client), call.str(metadata_id), call.optStr(material_type), call.optStr(pickup_branch) });
 }
 
 /// Core.nativeCancelHolds(client: Long, holds: Array<String>): List<Refusal> — holds alternate
@@ -1053,41 +1372,42 @@ export fn Java_com_rbrian_biblio_core_Core_nativeCancelHolds(env: JNIEnv, _: jcl
 export fn Java_com_rbrian_biblio_core_Core_nativeSetPickup(env: JNIEnv, _: jclass, client: jlong, branch_id: jstring) void {
     var call = Call.init(env);
     defer call.deinit();
-    _ = call.check(capi.biblio_set_pickup(handleOf(client), call.str(branch_id), &call.err));
+    call.perform(capi.biblio_set_pickup, .{ handleOf(client), call.str(branch_id) });
 }
 
 /// Core.nativeSetLanguage(client: Long, code: String)
 export fn Java_com_rbrian_biblio_core_Core_nativeSetLanguage(env: JNIEnv, _: jclass, client: jlong, code: jstring) void {
     var call = Call.init(env);
     defer call.deinit();
-    _ = call.check(capi.biblio_set_language(handleOf(client), call.str(code), &call.err));
+    call.perform(capi.biblio_set_language, .{ handleOf(client), call.str(code) });
 }
 
 /// Core.nativeSetBorrowingHistory(client: Long, enabled: Boolean)
 export fn Java_com_rbrian_biblio_core_Core_nativeSetBorrowingHistory(env: JNIEnv, _: jclass, client: jlong, enabled: jboolean) void {
     var call = Call.init(env);
     defer call.deinit();
-    _ = call.check(capi.biblio_set_borrowing_history(handleOf(client), enabled != 0, &call.err));
+    call.perform(capi.biblio_set_borrowing_history, .{ handleOf(client), enabled != 0 });
 }
 
 /// Core.nativeChangeEmail(client: Long, email: String)
 export fn Java_com_rbrian_biblio_core_Core_nativeChangeEmail(env: JNIEnv, _: jclass, client: jlong, email: jstring) void {
     var call = Call.init(env);
     defer call.deinit();
-    _ = call.check(capi.biblio_change_email(handleOf(client), call.str(email), &call.err));
+    call.perform(capi.biblio_change_email, .{ handleOf(client), call.str(email) });
 }
 
-/// Core.nativeChangePassword(client: Long, current: String, new: String)
-export fn Java_com_rbrian_biblio_core_Core_nativeChangePassword(env: JNIEnv, _: jclass, client: jlong, current: jstring, new: jstring) void {
+/// Core.nativeChangePassword(client: Long, current: ByteArray, new: ByteArray) — UTF-8, which
+/// the caller wipes afterward, as this wipes its copies.
+export fn Java_com_rbrian_biblio_core_Core_nativeChangePassword(env: JNIEnv, _: jclass, client: jlong, current: jarray, new: jarray) void {
     var call = Call.init(env);
     defer call.deinit();
-    const c = call.str(current);
-    const n = call.str(new);
-    defer {
-        std.crypto.secureZero(u8, @constCast(std.mem.span(c)));
-        std.crypto.secureZero(u8, @constCast(std.mem.span(n)));
-    }
-    _ = call.check(capi.biblio_change_password(handleOf(client), c, n, &call.err));
+    const c = bytesFromJava(env, current, call.a());
+    defer if (c) |p| std.crypto.secureZero(u8, p);
+    const n = bytesFromJava(env, new, call.a());
+    defer if (n) |p| std.crypto.secureZero(u8, p);
+    if (c == null or n == null) call.reject(.out_of_memory);
+    const empty: [:0]const u8 = "";
+    call.perform(capi.biblio_change_password, .{ handleOf(client), (c orelse empty).ptr, (n orelse empty).ptr });
 }
 
 test "constructor signatures match the Kotlin models" {
@@ -1109,6 +1429,7 @@ test "constructor signatures match the Kotlin models" {
     try expect("(" ++ S ++ "I)V", comptime constructor(capi.FacetValue));
     try expect("(" ++ S ++ L ++ ")V", comptime constructor(capi.Facet));
     try expect("(" ++ S ++ S ++ ")V", comptime constructor(capi.Refusal));
+    try expect("(" ++ L ++ "I)V", comptime constructor(capi.DetailList));
 }
 
 /// A stand-in for the JVM that renders each object the shim builds as text, reading

@@ -17,15 +17,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
+import com.rbrian.biblio.R
 import com.rbrian.biblio.core.Bib
 import com.rbrian.biblio.core.Borrowed
 import com.rbrian.biblio.core.Core
-import com.rbrian.biblio.core.LibraryInfo
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -107,7 +108,8 @@ class BorrowedHistory(private val session: Session) {
                 page = try {
                     val fetched = page
                     session.client.historyPage(fetched).use { index.apply(fetched, it) }.also { save() }
-                } catch (e: Core.Failure) {
+                } catch (e: Exception) {
+                    Core.messageOf(e, "")
                     index.fail()
                     0
                 }
@@ -177,42 +179,42 @@ object BorrowedText {
     }
 
     /** "the audiobook", "on Blu-ray", "the book", or "as Kit". */
-    fun borrowedFormat(code: String, library: LibraryInfo): String {
-        val name = library.formatName(code)
+    fun borrowedFormat(code: String, session: Session): String {
+        val name = session.formatName(code)
         return when (code) {
-            "AB", "BOOK_CD", "PLAYAWAY_AUDIOBOOK" -> "the audiobook"
-            "DVD", "BLURAY", "UK", "DVD_PBLURAY", "VIDEO_ONLINE" -> "on $name"
-            "BK", "LPRINT", "EBOOK" -> "the ${name.lowercase()}"
-            else -> "as $name"
+            "AB", "BOOK_CD", "PLAYAWAY_AUDIOBOOK" -> session.str(R.string.borrowed_the_audiobook)
+            "DVD", "BLURAY", "UK", "DVD_PBLURAY", "VIDEO_ONLINE" -> session.str(R.string.borrowed_on, name)
+            "BK", "LPRINT", "EBOOK" -> session.str(R.string.borrowed_the, name.lowercase())
+            else -> session.str(R.string.borrowed_as, name)
         }
     }
 
     /** For a row's mark: "Borrowed before · returned Mar 2024", or "Borrowed the audiobook · Mar 2024". */
-    fun short(m: Borrowed, library: LibraryInfo): String {
+    fun short(m: Borrowed, session: Session): String {
         val whenText = formatted(m.lastReturned ?: m.lastCheckout, "LLL yyyy")
         if (m.sameFormat) {
-            val returned = if (m.lastReturned != null) "returned" else "borrowed"
-            return listOfNotNull("Borrowed before", whenText?.let { "$returned $it" }).joinToString(" · ")
+            val verb = session.str(if (m.lastReturned != null) R.string.borrowed_returned_when else R.string.borrowed_borrowed_when, whenText ?: "")
+            return listOfNotNull(session.str(R.string.borrowed_before), whenText?.let { verb }).joinToString(" · ")
         }
-        return listOfNotNull("Borrowed ${borrowedFormat(m.format, library)}", whenText).joinToString(" · ")
+        return listOfNotNull(session.str(R.string.borrowed_what, borrowedFormat(m.format, session)), whenText).joinToString(" · ")
     }
 
     /** For item detail: "You borrowed this in March 2024 · 3 times", or "You borrowed on DVD in March 2024". */
-    fun sentence(m: Borrowed, library: LibraryInfo): String {
-        val what = if (m.sameFormat) "this" else borrowedFormat(m.format, library)
-        var text = "You borrowed $what"
-        formatted(m.lastCheckout ?: m.lastReturned, "LLLL yyyy")?.let { text += " in $it" }
-        if (m.count > 1) text += " · ${m.count} times"
+    fun sentence(m: Borrowed, session: Session): String {
+        val what = if (m.sameFormat) session.str(R.string.borrowed_this) else borrowedFormat(m.format, session)
+        var text = session.str(R.string.you_borrowed, what)
+        formatted(m.lastCheckout ?: m.lastReturned, "LLLL yyyy")?.let { text += session.str(R.string.borrowed_in, it) }
+        if (m.count > 1) text += " · " + session.plural(R.plurals.times_borrowed, m.count)
         return text
     }
 }
 
 /** A row's quiet "borrowed before" mark, fainter for the same work in another format. */
 @Composable
-fun BorrowedMark(match: Borrowed, library: LibraryInfo) {
+fun BorrowedMark(match: Borrowed, session: Session) {
     Icon(
         Icons.Filled.History,
-        contentDescription = BorrowedText.short(match, library),
+        contentDescription = BorrowedText.short(match, session),
         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (match.sameFormat) 1f else 0.5f),
         modifier = Modifier.size(14.dp),
     )
@@ -220,8 +222,8 @@ fun BorrowedMark(match: Borrowed, library: LibraryInfo) {
 
 /** Item detail's "You borrowed this…" line. */
 @Composable
-fun BorrowedLine(match: Borrowed, library: LibraryInfo) {
-    val text = BorrowedText.sentence(match, library)
+fun BorrowedLine(match: Borrowed, session: Session) {
+    val text = BorrowedText.sentence(match, session)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -240,7 +242,7 @@ fun BorrowedLine(match: Borrowed, library: LibraryInfo) {
 fun BorrowedRefresh(borrowed: BorrowedHistory, enabled: Boolean) {
     val state = borrowed.state
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { borrowed.rebuild() }, enabled = enabled && !state.syncing) { Text("Refresh Borrowing History") }
+        OutlinedButton(onClick = { borrowed.rebuild() }, enabled = enabled && !state.syncing) { Text(stringResource(R.string.refresh_borrowing_history)) }
         if (state.syncing) {
             val numbers = NumberFormat.getIntegerInstance()
             if (state.total > 0) {
@@ -248,11 +250,11 @@ fun BorrowedRefresh(borrowed: BorrowedHistory, enabled: Boolean) {
                     progress = { minOf(state.fetched, state.total).toFloat() / state.total },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("Updating · ${numbers.format(state.fetched)} of ${numbers.format(state.total)}",
+                Text(stringResource(R.string.updating_progress, numbers.format(state.fetched), numbers.format(state.total)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Text("Updating…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.updating), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -40,7 +40,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,7 +50,12 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.imePadding
+import com.rbrian.biblio.R
 import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.DirectoryEntry
 import com.rbrian.biblio.core.LibraryInfo
@@ -62,15 +66,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun LibrariesScreen(store: LibraryStore, onOpen: (String) -> Unit) {
     var adding by remember { mutableStateOf(false) }
+    var about by remember { mutableStateOf(false) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        topBar = { LargeTopAppBar(title = { Text("Libraries") }, scrollBehavior = scroll) },
+        topBar = { LargeTopAppBar(title = { Text(stringResource(R.string.libraries)) }, scrollBehavior = scroll) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { adding = true },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Add library") },
+                text = { Text(stringResource(R.string.add_library)) },
             )
         },
     ) { padding ->
@@ -81,9 +86,9 @@ fun LibrariesScreen(store: LibraryStore, onOpen: (String) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Icon(Icons.Filled.LocalLibrary, contentDescription = null, modifier = Modifier.padding(bottom = 16.dp))
-                Text("Add your library", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.add_your_library), style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Search its catalog, place holds and see what you have checked out.",
+                    stringResource(R.string.add_your_library_text),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -91,24 +96,27 @@ fun LibrariesScreen(store: LibraryStore, onOpen: (String) -> Unit) {
         } else {
             LazyColumn(contentPadding = padding) {
                 items(store.libraries, key = { it.subdomain }) { lib ->
+                    val tint = brandTint(lib.primaryColor) ?: MaterialTheme.colorScheme.primary
                     ListItem(
                         headlineContent = { Text(lib.name) },
                         supportingContent = {
-                            Text(when (lib.users.size) { 0 -> "No users"; 1 -> "1 user"; else -> "${lib.users.size} users" })
+                            Text(pluralStringResource(R.plurals.users, lib.users.size, lib.users.size))
                         },
                         leadingContent = {
                             LibraryIcon(
                                 LibraryIcons.key(lib.website, lib.subdomain), lib.website, subdomain = lib.subdomain,
-                                tint = brandColor(lib.primaryColor) ?: MaterialTheme.colorScheme.primary,
+                                tint = tint,
                             )
                         },
                         modifier = Modifier.clickable { onOpen(lib.subdomain) },
                     )
                 }
+                item { VersionFooter { about = true } }
             }
         }
     }
     if (adding) AddLibrarySheet(store, onDismiss = { adding = false })
+    if (about) AboutDialog(onDismiss = { about = false })
 }
 
 /** Finds a library by catalog subdomain or address, or by name from BiblioCommons' partner list. */
@@ -116,26 +124,16 @@ fun LibrariesScreen(store: LibraryStore, onOpen: (String) -> Unit) {
 @Composable
 fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var text by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val directory = remember { mutableStateListOf<DirectoryEntry>() }
-
-    LaunchedEffect(Unit) {
-        var next: String? = null
-        val seen = mutableSetOf<String>()
-        do {
-            val url = next
-            val page = runCatching { Core.directoryPage(url) }.getOrNull() ?: break
-            val fresh = page.entries.filter { seen.add(it.name) }
-            directory += fresh
-            next = page.next
-        } while (next != null && fresh.isNotEmpty())
-    }
+    val directory = DirectoryCache.entries
+    LaunchedEffect(Unit) { DirectoryCache.load() }
 
     fun add(subdomain: String?) {
         if (subdomain == null) {
-            error = "Enter a library name or catalog address."
+            error = context.getString(R.string.enter_library)
             return
         }
         working = true
@@ -144,8 +142,8 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
             try {
                 store.upsert(Core.libraryInfo(subdomain))
                 onDismiss()
-            } catch (e: Core.Failure) {
-                error = e.message
+            } catch (e: Exception) {
+                error = Core.messageOf(e, context.getString(R.string.add_library_failed))
             } finally {
                 working = false
             }
@@ -153,14 +151,14 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Add library", style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.imePadding().padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.add_library), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Library") },
-                placeholder = { Text("wccls or https://wccls.bibliocommons.com") },
-                supportingText = { Text(error ?: "The name before “.bibliocommons.com”, or search by library name.") },
+                label = { Text(stringResource(R.string.library)) },
+                placeholder = { Text(stringResource(R.string.library_placeholder)) },
+                supportingText = { Text(error ?: stringResource(R.string.library_hint)) },
                 isError = error != null,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -186,7 +184,7 @@ fun AddLibrarySheet(store: LibraryStore, onDismiss: () -> Unit) {
                             scope.launch {
                                 val sub = runCatching { Core.resolveSubdomain(entry.name, entry.website) }.getOrNull()
                                 working = false
-                                if (sub == null) error = "Couldn’t find the catalog for ${entry.name}. Enter its subdomain instead."
+                                if (sub == null) error = context.getString(R.string.catalog_not_found, entry.name)
                                 else add(sub)
                             }
                         },
@@ -206,12 +204,12 @@ fun LibraryScreen(store: LibraryStore, library: LibraryInfo, onBack: () -> Unit,
         topBar = {
             LargeTopAppBar(
                 title = { Text(library.displayName) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
                 actions = {
                     IconButton(onClick = {
                         // Removing a library without users loses nothing, so it doesn't ask.
                         if (library.users.isEmpty()) { store.remove(library.subdomain); onBack() } else confirmRemove = true
-                    }) { Icon(Icons.Filled.Delete, "Remove library") }
+                    }) { Icon(Icons.Filled.Delete, stringResource(R.string.remove_library)) }
                 },
             )
         },
@@ -222,21 +220,21 @@ fun LibraryScreen(store: LibraryStore, library: LibraryInfo, onBack: () -> Unit,
                     headlineContent = { Text(user) },
                     leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                     trailingContent = {
-                        IconButton(onClick = { store.removeUser(library.subdomain, user) }) { Icon(Icons.Filled.Delete, "Remove $user") }
+                        IconButton(onClick = { store.removeUser(library.subdomain, user) }) { Icon(Icons.Filled.Delete, stringResource(R.string.remove_user, user)) }
                     },
                     modifier = Modifier.clickable { onOpen(user) },
                 )
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Add user") },
+                    headlineContent = { Text(stringResource(R.string.add_user)) },
                     leadingContent = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
                     modifier = Modifier.clickable { addingUser = true },
                 )
                 HorizontalDivider()
                 ListItem(
-                    headlineContent = { Text("Browse as guest") },
-                    supportingContent = { Text("Guests can search and browse the catalog but can’t place holds or see an account.") },
+                    headlineContent = { Text(stringResource(R.string.browse_as_guest)) },
+                    supportingContent = { Text(stringResource(R.string.browse_as_guest_text)) },
                     leadingContent = { Icon(Icons.Outlined.PersonOutline, contentDescription = null) },
                     modifier = Modifier.clickable { onOpen("") },
                 )
@@ -246,14 +244,14 @@ fun LibraryScreen(store: LibraryStore, library: LibraryInfo, onBack: () -> Unit,
     if (addingUser) AddUserDialog(store, library, onDismiss = { addingUser = false }, onAdded = { addingUser = false; onOpen(it) })
     if (confirmRemove) AlertDialog(
         onDismissRequest = { confirmRemove = false },
-        title = { Text("Remove ${library.name}?") },
-        text = { Text("Its saved users and passwords will also be removed from this device.") },
+        title = { Text(stringResource(R.string.remove_library_title, library.name)) },
+        text = { Text(stringResource(R.string.remove_library_text)) },
         confirmButton = {
             TextButton(onClick = { store.remove(library.subdomain); confirmRemove = false; onBack() }) {
-                Text("Remove", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.remove), color = MaterialTheme.colorScheme.error)
             }
         },
-        dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -261,6 +259,7 @@ fun LibraryScreen(store: LibraryStore, library: LibraryInfo, onBack: () -> Unit,
 @Composable
 fun AddUserDialog(store: LibraryStore, library: LibraryInfo, onDismiss: () -> Unit, onAdded: (String) -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
@@ -277,8 +276,8 @@ fun AddUserDialog(store: LibraryStore, library: LibraryInfo, onDismiss: () -> Un
                     client.login(force = true)
                     store.addUser(library.subdomain, user, password)
                     onAdded(user)
-                } catch (e: Core.Failure) {
-                    error = e.message
+                } catch (e: Exception) {
+                    error = Core.messageOf(e, context.getString(R.string.sign_in_failed))
                 } finally {
                     working = false
                 }
@@ -288,23 +287,23 @@ fun AddUserDialog(store: LibraryStore, library: LibraryInfo, onDismiss: () -> Un
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sign in to ${library.displayName}") },
+        title = { Text(stringResource(R.string.sign_in_to, library.displayName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    value = username, onValueChange = { username = it }, label = { Text("Username or card number") },
+                    value = username, onValueChange = { username = it }, label = { Text(stringResource(R.string.username_or_card)) },
                     singleLine = true, enabled = !working,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 )
                 OutlinedTextField(
-                    value = password, onValueChange = { password = it }, label = { Text("PIN or password") },
+                    value = password, onValueChange = { password = it }, label = { Text(stringResource(R.string.pin_or_password)) },
                     singleLine = true, enabled = !working,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { signIn() }),
                 )
                 Text(
-                    error ?: "Your password is encrypted on this device and used to sign in again when the library ends your session.",
+                    error ?: stringResource(R.string.password_stored_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -313,10 +312,10 @@ fun AddUserDialog(store: LibraryStore, library: LibraryInfo, onDismiss: () -> Un
         confirmButton = {
             Button(onClick = { signIn() }, enabled = !working && username.isNotBlank() && password.isNotEmpty()) {
                 if (working) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
-                Text("Sign in")
+                Text(stringResource(R.string.sign_in))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

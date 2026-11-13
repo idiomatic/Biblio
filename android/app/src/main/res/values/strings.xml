@@ -1,4 +1,241 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Biblio</string>
+    <string name="app_version">%1$s %2$s</string>
+
+    <!-- Sections and navigation -->
+    <string name="section_search">Search</string>
+    <string name="section_new_titles">New Titles</string>
+    <string name="section_holds">Holds</string>
+    <string name="section_checkouts">Checked Out</string>
+    <string name="section_history">Borrowing History</string>
+    <string name="section_account">Account</string>
+    <plurals name="badge_holds">
+        <item quantity="one">%d hold</item>
+        <item quantity="other">%d holds</item>
+    </plurals>
+    <plurals name="badge_checkouts">
+        <item quantity="one">%d item checked out</item>
+        <item quantity="other">%d items checked out</item>
+    </plurals>
+    <string name="more">More</string>
+    <string name="back">Back</string>
+    <string name="switch_user_or_library">Switch user or library</string>
+    <string name="about_biblio">About Biblio</string>
+    <string name="select_an_item">Select an item</string>
+    <string name="loading">Loading…</string>
+    <string name="load_failed">Couldn’t load the list.</string>
+    <string name="done">Done</string>
+    <string name="cancel">Cancel</string>
+    <string name="remove">Remove</string>
+
+    <!-- Lists -->
+    <string name="search_library">Search %s</string>
+    <string name="empty_search_prompt">Find books, movies, music, and more.</string>
+    <string name="empty_search_none">No results.</string>
+    <string name="empty_holds">Items you place on hold appear here.</string>
+    <string name="empty_checkouts">Nothing checked out.</string>
+    <string name="empty_history">If borrowing history is on in Account, items you return appear here.</string>
+    <string name="empty_new_titles">No new titles.</string>
+    <string name="sort">Sort</string>
+    <string name="sort_people_waiting">People waiting</string>
+    <string name="sort_title">Title</string>
+    <string name="just_arrived">Just Arrived</string>
+    <string name="on_order">On Order</string>
+    <string name="filter_ready">Ready</string>
+    <string name="filter_not_ready">Not Ready</string>
+    <string name="filter_on_order">On Order</string>
+    <string name="filter_with_count">%1$s (%2$d)</string>
+    <string name="not_borrowed">Not Borrowed</string>
+
+    <!-- Rows and status -->
+    <string name="status_available">Available</string>
+    <string name="status_on_order">On order</string>
+    <string name="status_all_in_use">All copies in use</string>
+    <plurals name="people_waiting">
+        <item quantity="one">%d person waiting</item>
+        <item quantity="other">%d people waiting</item>
+    </plurals>
+    <plurals name="copies">
+        <item quantity="one">%d copy</item>
+        <item quantity="other">%d copies</item>
+    </plurals>
+    <plurals name="copies_on_order">
+        <item quantity="one">%d copy on order</item>
+        <item quantity="other">%d copies on order</item>
+    </plurals>
+    <string name="checked_out">Checked out</string>
+    <string name="checked_out_due">Checked out · due %s</string>
+    <string name="hold_ready">Ready for pickup</string>
+    <string name="hold_waiting">On hold</string>
+    <string name="place_in_line">#%d</string>
+    <string name="pickup_by">by %s</string>
+    <string name="returned_on">Returned %s</string>
+    <string name="due_on">due %s</string>
+    <string name="selected_row">Selected</string>
+
+    <!-- Multiple selection and holds -->
+    <plurals name="selected">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="clear_selection">Clear selection</string>
+    <string name="place_holds">Place holds</string>
+    <plurals name="place_holds_title">
+        <item quantity="one">Place a hold on %d item?</item>
+        <item quantity="other">Place holds on %d items?</item>
+    </plurals>
+    <plurals name="place_holds_skipped">
+        <item quantity="one">%d selected item can’t be held and is skipped.</item>
+        <item quantity="other">%d selected items can’t be held and are skipped.</item>
+    </plurals>
+    <string name="cancel_holds">Cancel holds</string>
+    <string name="keep_holds">Keep holds</string>
+    <plurals name="cancel_holds_title">
+        <item quantity="one">Cancel %d hold?</item>
+        <item quantity="other">Cancel %d holds?</item>
+    </plurals>
+    <string name="cancel_holds_text">The library may refuse some; Biblio says which and why.</string>
+    <string name="hold_placed">Hold placed on “%s”.</string>
+    <string name="hold_failed">Couldn’t place the hold.</string>
+    <string name="cancel_failed">Couldn’t cancel the hold.</string>
+    <plurals name="holds_placed">
+        <item quantity="one">Placed %d hold.</item>
+        <item quantity="other">Placed %d holds.</item>
+    </plurals>
+    <string name="holds_stopped">Stopped at “%1$s”: %2$s</string>
+    <plurals name="holds_canceled">
+        <item quantity="one">Hold canceled.</item>
+        <item quantity="other">%d holds canceled.</item>
+    </plurals>
+    <string name="holds_not_canceled">%1$d couldn’t be canceled: %2$s</string>
+
+    <!-- Item detail -->
+    <string name="availability_by_location">Availability by location</string>
+    <string name="no_copies">No copies listed.</string>
+    <string name="details">Details</string>
+    <string name="place_hold">Place hold</string>
+    <string name="cancel_hold">Cancel hold</string>
+    <string name="pick_up_at">Pick up at</string>
+    <string name="pickup_location">Pickup location</string>
+
+    <!-- Borrowed before -->
+    <string name="borrowed_before">Borrowed before</string>
+    <string name="borrowed_returned_when">returned %s</string>
+    <string name="borrowed_borrowed_when">borrowed %s</string>
+    <string name="borrowed_what">Borrowed %s</string>
+    <string name="borrowed_the_audiobook">the audiobook</string>
+    <string name="borrowed_on">on %s</string>
+    <string name="borrowed_the">the %s</string>
+    <string name="borrowed_as">as %s</string>
+    <string name="borrowed_this">this</string>
+    <string name="you_borrowed">You borrowed %s</string>
+    <string name="borrowed_in"> in %s</string>
+    <plurals name="times_borrowed">
+        <item quantity="one">%d time</item>
+        <item quantity="other">%d times</item>
+    </plurals>
+    <string name="refresh_borrowing_history">Refresh Borrowing History</string>
+    <string name="updating">Updating…</string>
+    <string name="updating_progress">Updating · %1$s of %2$s</string>
+
+    <!-- Account -->
+    <string name="signing_in">Signing in…</string>
+    <string name="email">Email</string>
+    <string name="update">Update</string>
+    <string name="email_updated">Email address updated.</string>
+    <string name="password">Password</string>
+    <string name="current_password">Current password</string>
+    <string name="new_password">New password</string>
+    <string name="confirm_new_password">Confirm new password</string>
+    <string name="change_password">Change password</string>
+    <string name="password_changed">Password changed.</string>
+    <string name="pickup_footer">Used for new holds unless you choose another location when placing one.</string>
+    <string name="pickup_saved">Default pickup location saved.</string>
+    <string name="language">Language</string>
+    <string name="language_changed">Language changed.</string>
+    <string name="use_system_language">Use System Language</string>
+    <string name="not_set">Not set</string>
+    <string name="save_failed">Couldn’t save the change.</string>
+    <string name="keep_borrowing_history">Keep borrowing history</string>
+    <string name="keep_borrowing_history_footer">When on, the library keeps a list of the items you check out.</string>
+    <string name="history_on">Borrowing history turned on.</string>
+    <string name="history_off">Borrowing history turned off.</string>
+    <string name="turn_off_history_title">Turn off borrowing history?</string>
+    <string name="turn_off_history_text">The library may permanently delete your existing borrowing history.</string>
+    <string name="turn_off">Turn off</string>
+    <string name="keep_history">Keep history</string>
+    <string name="codabar">Codabar</string>
+    <string name="code_128">Code 128</string>
+    <string name="card_description">Library card barcode for %1$s, %2$s</string>
+
+    <!-- Sign-in -->
+    <string name="sign_in">Sign in</string>
+    <string name="sign_in_to">Sign in to %s</string>
+    <string name="sign_in_failed">Couldn’t sign in.</string>
+    <string name="add_user">Add user</string>
+    <string name="add_user_ellipsis">Add User…</string>
+    <string name="username_or_card">Username or card number</string>
+    <string name="pin_or_password">PIN or password</string>
+    <string name="password_stored_note">Your password is encrypted on this device and used to sign in again when the library ends your session.</string>
+    <string name="enter_password_again">Enter your password again</string>
+    <string name="password_unreadable">The saved password can’t be read on this device. Enter it again.</string>
+    <string name="password_unreadable_for">The saved password for %s can’t be read on this device. Enter it again to keep using this account.</string>
+
+    <!-- Libraries -->
+    <string name="libraries">Libraries</string>
+    <string name="add_library">Add library</string>
+    <string name="add_library_failed">Couldn’t add the library.</string>
+    <string name="add_your_library">Add your library</string>
+    <string name="add_your_library_text">Search its catalog, place holds and see what you have checked out.</string>
+    <string name="library">Library</string>
+    <string name="library_placeholder">wccls or https://wccls.bibliocommons.com</string>
+    <string name="library_hint">The name before “.bibliocommons.com”, or search by library name.</string>
+    <string name="enter_library">Enter a library name or catalog address.</string>
+    <string name="catalog_not_found">Couldn’t find the catalog for %s. Enter its subdomain instead.</string>
+    <plurals name="users">
+        <item quantity="one">%d user</item>
+        <item quantity="other">%d users</item>
+    </plurals>
+    <string name="remove_library">Remove library</string>
+    <string name="remove_user">Remove %s</string>
+    <string name="remove_library_title">Remove %s?</string>
+    <string name="remove_library_text">Its saved users and passwords will also be removed from this device.</string>
+    <string name="browse_as_guest">Browse as guest</string>
+    <string name="browse_as_guest_text">Guests can search and browse the catalog but can’t place holds or see an account.</string>
+
+    <!-- About -->
+    <string name="about_text">People made Biblio with the help of AI assistants. BiblioCommons and your library didn’t make it, and don’t support it.</string>
+    <string name="about_core_version">Core %s</string>
+    <string name="copy_diagnostic_log">Copy Diagnostic Log</string>
+    <string name="diagnostic_log">Biblio diagnostic log</string>
+    <string name="log_copied">Copied. It lists server throttling and failures: times, statuses, and your library’s address.</string>
+    <string name="log_empty">Nothing to copy: the library hasn’t throttled or failed any request since Biblio started.</string>
+    <!-- Advanced search and filters -->
+    <string name="advanced_search">Advanced search</string>
+    <string name="search_for">Search for</string>
+    <string name="field_keyword">Keyword</string>
+    <string name="field_title">Title</string>
+    <string name="field_author">Author</string>
+    <string name="field_subject">Subject</string>
+    <string name="field_series">Series</string>
+    <string name="field_genre">Genre</string>
+    <string name="field_publisher">Publisher</string>
+    <string name="field_isbn">ISBN</string>
+    <string name="field_call_number">Call number</string>
+    <string name="op_and">and</string>
+    <string name="op_or">or</string>
+    <string name="op_not">not</string>
+    <string name="terms">Terms</string>
+    <string name="add_term">Add term</string>
+    <string name="limit_to">Limit to</string>
+    <string name="any">Any</string>
+    <string name="format_value">Format: %s</string>
+    <string name="audience_value">Audience: %s</string>
+    <string name="language_value">Language: %s</string>
+    <string name="published_from">Published from</string>
+    <string name="published_to">to</string>
+    <string name="enter_a_term">Enter at least one term.</string>
+    <string name="search">Search</string>
+    <string name="filter_by">Filter by</string>
 </resources>

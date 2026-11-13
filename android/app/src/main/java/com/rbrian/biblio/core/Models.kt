@@ -30,14 +30,8 @@ data class Bib(
     /** The library's own format code; [format] may refine it (4K Ultra HD Blu-ray filed as Blu-ray). */
     val libraryFormat: String = format,
 ) {
-    /** "2026" from "2026", "20261006" or "03/23/2027". */
-    val year: String?
-        get() {
-            val d = publicationDate ?: return null
-            if (d.length == 4) return d
-            if (d.length == 8 && d.all(Char::isDigit)) return d.take(4)
-            return Regex("""\b(1[5-9]|20)\d\d\b""").find(d)?.value ?: d
-        }
+    /** "2019" from "c2019.", from the core. */
+    val year: String? by lazy { Core.year(publicationDate) }
 }
 
 data class Hold(
@@ -113,6 +107,15 @@ data class CopyAvailability(
 )
 
 data class DetailField(val label: String, val values: List<String>)
+
+/** A record's fields; [editionIndex] is the Edition field's index in [items], or -1. */
+data class DetailList(val items: List<DetailField>, val editionIndex: Int)
+
+/** A client's latest request, for the status bar: requests in flight, and the last one's title, URL, and size. */
+data class FetchStatus(val active: Int, val title: String?, val url: String?, val bytes: Long)
+
+/** A response from [Core.send]: headers as "Name: value\r\n" lines. */
+class HttpResponse(val status: Int, val headers: String, val body: ByteArray)
 data class Location(val id: String, val name: String)
 
 data class Patron(

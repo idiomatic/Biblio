@@ -16,7 +16,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.isSystemInDarkTheme
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.rbrian.biblio.core.DirectoryEntry
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,6 +112,41 @@ fun LibraryIcon(
     }
 }
 
-/** "#RRGGBB" as a color, or null. */
-fun brandColor(hex: String?): Color? =
-    hex?.removePrefix("#")?.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color(0xFF000000 or it) }
+/** The library's brand color at 4.5:1 contrast with the current theme's bars, from the core; null if it has none. */
+@Composable
+fun brandTint(hex: String?): Color? {
+    val dark = isSystemInDarkTheme()
+    return remember(hex, dark) {
+        hex?.let { Core.readableTint(it, dark) }?.removePrefix("#")?.takeIf { it.length == 6 }?.toLongOrNull(16)
+            ?.let { Color(0xFF000000 or it) }
+    }
+}
+
+/** Library names and logos from BiblioCommons' partner directory, fetched once for the app's life. */
+object DirectoryCache {
+    val entries = mutableStateListOf<DirectoryEntry>()
+    private val lock = Mutex()
+    private var complete = false
+
+    /** Pages through the directory unless an earlier call did; a failed fetch is tried again by the next call. */
+    suspend fun load() {
+        lock.withLock {
+            if (complete) return@withLock
+            var next: String? = null
+            val seen = entries.mapTo(mutableSetOf()) { it.name }
+            do {
+                val url = next
+                val page = try {
+                    Core.directoryPage(url)
+                } catch (e: Exception) {
+                    Core.messageOf(e, "")
+                    return@withLock
+                }
+                val fresh = page.entries.filter { seen.add(it.name) }
+                entries += fresh
+                next = page.next
+            } while (next != null && fresh.isNotEmpty())
+            complete = true
+        }
+    }
+}

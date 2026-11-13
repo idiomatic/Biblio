@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import android.util.Base64
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.LibraryInfo
 import java.io.File
@@ -42,8 +43,10 @@ class LibraryStore(context: Context) {
     }
 
     fun remove(subdomain: String) {
-        library(subdomain)?.users?.forEach { deletePassword(subdomain, it); deleteBorrowed(subdomain, it) }
+        library(subdomain)?.users?.forEach { deletePassword(subdomain, it); deleteBorrowed(subdomain, it); deleteBarcode(subdomain, it) }
         libraries.removeAll { it.subdomain == subdomain }
+        code128.remove(subdomain)
+        cards.edit().remove(CODE128_PREFIX + subdomain).apply()
         save()
     }
 
@@ -58,6 +61,7 @@ class LibraryStore(context: Context) {
         val i = libraries.indexOfFirst { it.subdomain == subdomain }.takeIf { it >= 0 } ?: return
         deletePassword(subdomain, username)
         deleteBorrowed(subdomain, username)
+        deleteBarcode(subdomain, username)
         libraries[i] = libraries[i].copy(users = libraries[i].users - username)
         save()
     }
@@ -68,6 +72,8 @@ class LibraryStore(context: Context) {
 
     // Passwords: AES-GCM with a Keystore key; stored as base64(iv || ciphertext).
 
+    /** Synchronized so two first uses don't each generate the key. */
+    @Synchronized
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
@@ -83,14 +89,20 @@ class LibraryStore(context: Context) {
 
     private fun account(subdomain: String, username: String) = "$subdomain|$username"
 
+    /** The saved password was there but couldn't be decrypted (the Keystore key was lost, as after a restore). */
+    class PasswordUnreadable(cause: Throwable) : Exception(cause)
+
+    /** Null if none is saved; throws [PasswordUnreadable] if one is but can't be read, so the user can enter it again. */
     fun password(subdomain: String, username: String): String? {
         val stored = secrets.getString(account(subdomain, username), null) ?: return null
-        return runCatching {
+        try {
             val bytes = Base64.decode(stored, Base64.NO_WRAP)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes, 0, 12))
-            cipher.doFinal(bytes, 12, bytes.size - 12).decodeToString()
-        }.getOrNull()
+            return cipher.doFinal(bytes, 12, bytes.size - 12).decodeToString()
+        } catch (e: Exception) {
+            throw PasswordUnreadable(e)
+        }
     }
 
     fun setPassword(subdomain: String, username: String, password: String) {
@@ -102,6 +114,31 @@ class LibraryStore(context: Context) {
 
     fun deletePassword(subdomain: String, username: String) {
         secrets.edit().remove(account(subdomain, username)).apply()
+    }
+
+    // Cards: each user's library card number (so the account screen can rotate between a library's
+    // cards) and the barcode type, a sticky choice per library.
+
+    private val cards = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
+    private val code128 = mutableStateMapOf<String, Boolean>().apply {
+        for ((k, v) in cards.all) if (k.startsWith(CODE128_PREFIX) && v is Boolean) put(k.removePrefix(CODE128_PREFIX), v)
+    }
+
+    fun barcode(subdomain: String, username: String): String? = cards.getString(BARCODE_PREFIX + account(subdomain, username), null)
+
+    fun setBarcode(subdomain: String, username: String, barcode: String) {
+        if (barcode(subdomain, username) != barcode) cards.edit().putString(BARCODE_PREFIX + account(subdomain, username), barcode).apply()
+    }
+
+    fun usesCode128(subdomain: String): Boolean = code128[subdomain] == true
+
+    fun setCode128(subdomain: String, on: Boolean) {
+        code128[subdomain] = on
+        cards.edit().putBoolean(CODE128_PREFIX + subdomain, on).apply()
+    }
+
+    private fun deleteBarcode(subdomain: String, username: String) {
+        cards.edit().remove(BARCODE_PREFIX + account(subdomain, username)).apply()
     }
 
     // Borrowed-before indexes (Core.BorrowedIndex's bytes), one file per user, named by a hash so
@@ -134,5 +171,7 @@ class LibraryStore(context: Context) {
     private companion object {
         const val KEY_ALIAS = "biblio-passwords"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
+        const val BARCODE_PREFIX = "barcode."
+        const val CODE128_PREFIX = "code128."
     }
 }

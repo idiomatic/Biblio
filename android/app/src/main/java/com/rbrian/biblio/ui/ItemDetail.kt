@@ -13,7 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -42,16 +42,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.rbrian.biblio.R
+import com.rbrian.biblio.core.Core
 import com.rbrian.biblio.core.CopyAvailability
 import com.rbrian.biblio.core.DetailField
 import com.rbrian.biblio.core.ListEntry
 
 /** Jacket, title, holds, borrowed before, availability by location (color-coded, always worded) and the full record. */
 @Composable
-fun ItemDetail(session: Session, entry: ListEntry) {
+fun ItemDetail(session: Session, entry: ListEntry, needSignIn: () -> Unit) {
     val bib = entry.bib
+    val details = remember(session, entry) { itemDetails(session, bib) }
     var copies by remember(bib.id) { mutableStateOf<List<CopyAvailability>?>(null) }
     var fields by remember(bib.id) { mutableStateOf<List<DetailField>>(emptyList()) }
     var copiesError by remember(bib.id) { mutableStateOf<String?>(null) }
@@ -59,9 +63,14 @@ fun ItemDetail(session: Session, entry: ListEntry) {
         try {
             copies = session.client.availability(bib.id)
         } catch (e: Exception) {
-            copiesError = e.message
+            copiesError = Core.messageOf(e, session.str(R.string.load_failed))
         }
-        fields = runCatching { session.client.details(bib.id) }.getOrDefault(emptyList())
+        fields = try {
+            session.client.details(bib.id).items
+        } catch (e: Exception) {
+            Core.messageOf(e, "")
+            emptyList()
+        }
     }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -76,25 +85,25 @@ fun ItemDetail(session: Session, entry: ListEntry) {
                 bib.authors.firstOrNull()?.let { author ->
                     Text(author, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 2.dp))
                 }
-                Text(listOfNotNull(session.library.formatName(bib.format), bib.year).joinToString(" · "),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                StatusLine(entry)
+                Text(details, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AvailabilityLine(bib)
+                AccountCapsule(entry)
             }
         }
-        HoldActions(session, entry)
-        session.borrowed?.match(bib)?.let { BorrowedLine(it, session.library) }
+        HoldActions(session, entry, needSignIn)
+        session.borrowed?.match(bib)?.let { BorrowedLine(it, session) }
         bib.summary?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
 
-        Text("Availability by location", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.availability_by_location), style = MaterialTheme.typography.titleMedium)
         when {
             copiesError != null -> Text(copiesError!!, color = MaterialTheme.colorScheme.error)
-            copies == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            copies!!.isEmpty() -> Text("No copies listed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            copies == null -> Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            copies!!.isEmpty() -> Text(stringResource(R.string.no_copies), color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> Column { copies!!.forEach { CopyRow(it) } }
         }
 
         if (fields.isNotEmpty()) {
-            Text("Details", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.details), style = MaterialTheme.typography.titleMedium)
             Column {
                 fields.forEach { f ->
                     ListItem(overlineContent = { Text(f.label) }, headlineContent = { Text(f.values.joinToString("\n")) })
@@ -111,7 +120,7 @@ private fun CopyRow(copy: CopyAvailability) {
         leadingContent = { Icon(copy.kind.icon, contentDescription = null, tint = color) },
         headlineContent = { Text(copy.branch) },
         supportingContent = {
-            val detail = listOfNotNull(copy.collection, copy.callNumber, copy.dueDate?.let { "due $it" }).joinToString(" · ")
+            val detail = listOfNotNull(copy.collection, copy.callNumber, copy.dueDate?.let { stringResource(R.string.due_on, shortDate(it) ?: it) }).joinToString(" · ")
             if (detail.isNotEmpty()) Text(detail)
         },
         trailingContent = { Text(copy.status, color = color, modifier = Modifier.width(120.dp)) },
@@ -127,42 +136,51 @@ private val String.icon: ImageVector
         "held" -> Icons.Filled.ShoppingBag
         "transit" -> Icons.AutoMirrored.Filled.CompareArrows
         "repair" -> Icons.Filled.Build
-        "missing", "claimsReturned" -> Icons.Filled.Help
+        "missing", "claimsReturned" -> Icons.AutoMirrored.Filled.Help
         else -> Icons.Filled.Circle
     }
 
 /** Place a hold at a chosen pickup location, or cancel this account's hold. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HoldActions(session: Session, entry: ListEntry) {
+private fun HoldActions(session: Session, entry: ListEntry, needSignIn: () -> Unit) {
     val hold = entry.hold
     when {
         hold != null -> if (hold.canCancel) {
             OutlinedButton(
                 onClick = { session.cancel(hold) },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) { Text("Cancel hold") }
+            ) { Text(stringResource(R.string.cancel_hold)) }
         }
-        entry.checkout != null -> {}
-        session.isGuest -> Text("Sign in to place holds.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        entry.checkout != null || entry.history != null -> {}
+        // Guests choose a card first: the sign-in sheet, then the hold.
+        session.isGuest -> if (entry.bib.holdable) Button(onClick = needSignIn) { Text(stringResource(R.string.place_hold)) }
+        entry.accountStatus != null -> {}
         entry.bib.holdable -> {
-            var pickup by remember { mutableStateOf(session.patron?.preferredPickup) }
-            var open by remember { mutableStateOf(false) }
+            var pickup by remember(entry.id, session.patron?.preferredPickup) { mutableStateOf(session.patron?.preferredPickup) }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (session.locations.isNotEmpty()) ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = Modifier.weight(1f)) {
-                    OutlinedTextField(
-                        value = session.locations.firstOrNull { it.id == pickup }?.name ?: "Pickup location",
-                        onValueChange = {}, readOnly = true, label = { Text("Pick up at") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                    )
-                    ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        session.locations.forEach { loc ->
-                            DropdownMenuItem(text = { Text(loc.name) }, onClick = { pickup = loc.id; open = false })
-                        }
-                    }
-                }
-                Button(onClick = { session.placeHold(entry, pickup) }) { Text("Place hold") }
+                PickupField(session, pickup, Modifier.weight(1f)) { pickup = it }
+                Button(onClick = { session.placeHold(entry, pickup) }) { Text(stringResource(R.string.place_hold)) }
+            }
+        }
+    }
+}
+
+/** The pickup location menu; nothing until the account's locations arrive. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PickupField(session: Session, pickup: String?, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
+    if (session.locations.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = session.locations.firstOrNull { it.id == pickup }?.name ?: stringResource(R.string.pickup_location),
+            onValueChange = {}, readOnly = true, label = { Text(stringResource(R.string.pick_up_at)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            session.locations.forEach { loc ->
+                DropdownMenuItem(text = { Text(loc.name) }, onClick = { onPick(loc.id); open = false })
             }
         }
     }

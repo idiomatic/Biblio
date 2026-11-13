@@ -4,6 +4,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.Headers
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /**
  * The bridge to libbiblio, the Zig core shared with the Apple, GNOME and Windows apps.
@@ -11,12 +16,52 @@ import kotlinx.serialization.json.Json
  * Each operation is a native method (android/native/src/jni.zig) over the core's typed
  * interface (core/include/biblio.h): it takes strings and numbers, returns this package's
  * model objects, and throws [Failure]. Calls block, so they run on [Dispatchers.IO]. The core
- * paces requests app-wide to stay gentle with library sites.
+ * paces requests app-wide to stay gentle with library sites. Its HTTP goes through [send], on
+ * OkHttp, so the system's and the user's certificate authorities, proxies, and VPNs apply.
  */
 object Core {
     init {
         System.loadLibrary("biblio_jni")
+        nativeInstallTransport()
     }
+
+    /** One request at a time per call: the core follows redirects and keeps cookies itself. */
+    private val http = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * The core's transport (android/native/src/jni.zig): sends one request, [headers] alternating
+     * names and values; null if it couldn't be sent.
+     */
+    @JvmStatic
+    fun send(method: String, url: String, headers: Array<String>, body: ByteArray?): HttpResponse? = try {
+        val names = Headers.Builder()
+        for (i in 0 until headers.size / 2) names.add(headers[2 * i], headers[2 * i + 1])
+        // The Content-Type header, if any, stays as the core set it.
+        val requestBody = body?.toRequestBody(null) ?: if (method == "POST" || method == "PUT" || method == "PATCH") ByteArray(0).toRequestBody(null) else null
+        val request = Request.Builder().url(url).headers(names.build()).method(method, requestBody).build()
+        http.newCall(request).execute().use { response ->
+            val text = StringBuilder()
+            for ((name, value) in response.headers) text.append(name).append(": ").append(value).append("\r\n")
+            HttpResponse(response.code, text.toString(), response.body?.bytes() ?: ByteArray(0))
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    @JvmStatic private external fun nativeInstallTransport()
+    @JvmStatic private external fun nativeVersion(): String
+    @JvmStatic private external fun nativeIncidents(): String?
+    @JvmStatic private external fun nativeStatus(client: Long): FetchStatus?
+    @JvmStatic private external fun nativeYear(date: String?): String?
+    @JvmStatic private external fun nativeHoldStatusRank(status: String?): Int
+    @JvmStatic private external fun nativeHoldStatusName(status: String?): String
+    @JvmStatic private external fun nativeReadableTint(hex: String, dark: Boolean): String?
+    @JvmStatic private external fun nativeFormatCodes(): String
 
     /** For saving [LibraryInfo] (see LibraryStore). */
     val json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
@@ -47,7 +92,7 @@ object Core {
     @JvmStatic private external fun nativeHistoryPage(client: Long, page: Int): Long
     @JvmStatic private external fun nativeFreePage(page: Long)
     @JvmStatic private external fun nativeAvailability(client: Long, metadataId: String): List<CopyAvailability>
-    @JvmStatic private external fun nativeDetails(client: Long, metadataId: String): List<DetailField>
+    @JvmStatic private external fun nativeDetails(client: Long, metadataId: String): DetailList
     @JvmStatic private external fun nativeLocations(client: Long): List<Location>
     @JvmStatic private external fun nativePlaceHold(client: Long, metadataId: String, materialType: String?, pickupBranch: String?)
     @JvmStatic private external fun nativeCancelHolds(client: Long, holds: Array<String>): List<Refusal>
@@ -55,7 +100,7 @@ object Core {
     @JvmStatic private external fun nativeSetLanguage(client: Long, code: String)
     @JvmStatic private external fun nativeSetBorrowingHistory(client: Long, enabled: Boolean)
     @JvmStatic private external fun nativeChangeEmail(client: Long, email: String)
-    @JvmStatic private external fun nativeChangePassword(client: Long, current: String, new: String)
+    @JvmStatic private external fun nativeChangePassword(client: Long, current: ByteArray, new: ByteArray)
 
     @JvmStatic private external fun nativeListNew(kind: Int): Long
     @JvmStatic private external fun nativeListFree(list: Long)
@@ -66,7 +111,7 @@ object Core {
     @JvmStatic private external fun nativeListClear(list: Long)
     @JvmStatic private external fun nativeListApply(
         list: Long, generation: Long, page: Int, ids: Array<String>, titles: Array<String>, formats: Array<String>,
-        authors: Array<String>, holdStatuses: Array<String>, dueDates: Array<String>,
+        libraryFormats: Array<String>, authors: Array<String>, holdStatuses: Array<String>, dates: Array<String>,
         numbers: IntArray, total: Int, pageSize: Int, nowMs: Long,
     ): Boolean
     @JvmStatic private external fun nativeListFail(list: Long, generation: Long, page: Int): Boolean
@@ -89,6 +134,7 @@ object Core {
     @JvmStatic private external fun nativeListRowPositions(list: Long): IntArray
     @JvmStatic private external fun nativeListRowIds(list: Long): String
     @JvmStatic private external fun nativeListFormats(list: Long): String
+    @JvmStatic private external fun nativeListFormatFacetCounts(list: Long, values: Array<String>, counts: IntArray): IntArray?
     @JvmStatic private external fun nativeListSetNotBorrowed(list: Long, indexes: LongArray)
 
     @JvmStatic private external fun nativeBorrowedNew(): Long
@@ -106,6 +152,15 @@ object Core {
 
     /** A library error, with a message ready to show. Thrown by the native methods. */
     class Failure(val kind: String, message: String, val status: Int? = null) : Exception(message)
+
+    /**
+     * The message to show for anything a call threw, [Failure] or not (a closed client, an
+     * out-of-memory report), so no failure crashes the app. Cancellation is rethrown: it isn't one.
+     */
+    fun messageOf(e: Throwable, fallback: String): String {
+        if (e is CancellationException) throw e
+        return e.message?.takeIf { it.isNotBlank() } ?: fallback
+    }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
@@ -150,8 +205,11 @@ object Core {
 
         suspend fun availability(metadataId: String): List<CopyAvailability> = io { h -> nativeAvailability(h, metadataId) }
 
-        /** Full record fields ("Details", "About", …). */
-        suspend fun details(metadataId: String): List<DetailField> = io { h -> nativeDetails(h, metadataId) }
+        /** Full record fields ("Details", "About", …), and which is the edition. */
+        suspend fun details(metadataId: String): DetailList = io { h -> nativeDetails(h, metadataId) }
+
+        /** The client's latest request, for the status bar (no network request). */
+        fun status(): FetchStatus? = runCatching { call { h -> nativeStatus(h) } }.getOrNull()
 
         suspend fun locations(): List<Location> = io { h -> nativeLocations(h) }
 
@@ -169,10 +227,26 @@ object Core {
         suspend fun changeEmail(email: String) = io { h -> nativeChangeEmail(h, email) }
 
         /** The app must then save the new password (and call [setPassword]). */
-        suspend fun changePassword(current: String, new: String) = io { h -> nativeChangePassword(h, current, new) }
+        suspend fun changePassword(current: String, new: String) {
+            val c = current.encodeToByteArray()
+            val n = new.encodeToByteArray()
+            try {
+                io { h -> nativeChangePassword(h, c, n) }
+            } finally {
+                c.fill(0)
+                n.fill(0)
+            }
+        }
 
         /** After a password change, so automatic sign-in keeps working. */
-        fun setPassword(password: String) = call { h -> nativeSetPassword(h, password.encodeToByteArray()) }
+        fun setPassword(password: String) {
+            val bytes = password.encodeToByteArray()
+            try {
+                call { h -> nativeSetPassword(h, bytes) }
+            } finally {
+                bytes.fill(0)
+            }
+        }
 
         /** Runs a blocking native call on the client's handle, which stays valid until the call returns. */
         private fun <T> call(block: (Long) -> T): T {
@@ -244,6 +318,11 @@ object Core {
         fun apply(generation: Long, page: ListPage, nowMs: Long): Boolean {
             val entries = page.entries
             val numbers = IntArray(3 * entries.size)
+            // History sorts by the day each item was borrowed, else returned.
+            val dates = Array(entries.size) {
+                val e = entries[it]
+                e.checkout?.dueDate ?: e.history?.let { h -> h.checkoutDate ?: h.returnedDate } ?: ""
+            }
             entries.forEachIndexed { i, e ->
                 val onOrder = e.bib.status == "ON_ORDER" || e.bib.onOrderCopies > 0
                 numbers[3 * i] = e.bib.heldCopies
@@ -252,8 +331,9 @@ object Core {
             }
             return nativeListApply(
                 handle, generation, page.page, Array(entries.size) { entries[it].id }, Array(entries.size) { entries[it].bib.title },
-                Array(entries.size) { entries[it].bib.format }, Array(entries.size) { entries[it].bib.authors.firstOrNull() ?: "" },
-                Array(entries.size) { entries[it].hold?.status ?: "" }, Array(entries.size) { entries[it].checkout?.dueDate ?: "" },
+                Array(entries.size) { entries[it].bib.format }, Array(entries.size) { entries[it].bib.libraryFormat },
+                Array(entries.size) { entries[it].bib.authors.firstOrNull() ?: "" },
+                Array(entries.size) { entries[it].hold?.status ?: "" }, dates,
                 numbers, page.count, page.pageSize, nowMs,
             )
         }
@@ -294,6 +374,14 @@ object Core {
             val positions = nativeListRowPositions(handle)
             val ids = nativeListRowIds(handle).split('\n')
             return List(positions.size) { Row(positions[it], ids[it].ifEmpty { null }) }
+        }
+
+        /** A search's FORMAT facet, with exact counts for refined formats once every item is loaded. */
+        fun formatFacet(values: List<FacetValue>): List<FacetValue> {
+            if (values.none { it.count < 0 }) return values
+            val counts = nativeListFormatFacetCounts(handle, Array(values.size) { values[it].value }, IntArray(values.size) { values[it].count })
+                ?: return values
+            return values.mapIndexed { i, v -> FacetValue(v.value, counts[i]) }
         }
 
         /** The loaded items' formats with counts, most common first. */
@@ -387,6 +475,27 @@ object Core {
     }
 
     // Display helpers (no network)
+
+    /** The core's version. */
+    val version: String by lazy { nativeVersion() }
+
+    /** Server throttling and failures since launch, as JSON, for Copy Diagnostic Log. */
+    fun incidents(): String? = nativeIncidents()
+
+    /** "2019" from "c2019.", else the date as given. */
+    fun year(date: String?): String? = date?.let { nativeYear(it) }
+
+    /** 0 ready, 1 in transit, 2 waiting, 3 paused. */
+    fun holdStatusRank(status: String?): Int = nativeHoldStatusRank(status)
+
+    /** "Ready for pickup", "In transit", "On hold", or "Paused". */
+    fun holdStatusName(status: String?): String = nativeHoldStatusName(status)
+
+    /** The brand color ("#RRGGBB") at 4.5:1 contrast with a light or dark bar; null if not a color. */
+    fun readableTint(hex: String, dark: Boolean): String? = nativeReadableTint(hex, dark)
+
+    /** The format codes with built-in names, for format pickers. */
+    val formatCodes: List<String> by lazy { nativeFormatCodes().lines().filter { it.isNotEmpty() } }
 
     /** The part of a decoded logo that isn't white margin, as x, y, width, height; null if blank. */
     fun logoBounds(pixels: ByteArray, width: Int, height: Int, stride: Int, channels: Int): IntArray? =

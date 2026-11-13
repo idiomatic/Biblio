@@ -1,11 +1,16 @@
 package com.rbrian.biblio.ui
 
+import android.content.Context
 import android.os.SystemClock
+import androidx.annotation.StringRes
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.rbrian.biblio.core.AccountStatus
+import com.rbrian.biblio.R
 import com.rbrian.biblio.core.Core
+import com.rbrian.biblio.core.Facet
 import com.rbrian.biblio.core.FacetValue
 import com.rbrian.biblio.core.Hold
 import com.rbrian.biblio.core.LibraryInfo
@@ -21,20 +26,29 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-enum class Section(val title: String) {
-    Search("Search"), NewTitles("New Titles"), Holds("Holds"), Checkouts("Checked Out"), History("Borrowing History"), Account("Account")
+enum class Section(@StringRes val title: Int) {
+    Search(R.string.section_search), NewTitles(R.string.section_new_titles), Holds(R.string.section_holds),
+    Checkouts(R.string.section_checkouts), History(R.string.section_history), Account(R.string.section_account)
 }
 
-/** One signed-in account (or a guest): its core client, patron and lists. */
-class Session(val library: LibraryInfo, val username: String, val store: LibraryStore) {
+/**
+ * One signed-in account (or a guest): its core client, patron and lists. It lives in [AppModel], so
+ * rotating the screen neither signs in again nor leaks a client.
+ */
+@Stable
+class Session(val library: LibraryInfo, val username: String, val store: LibraryStore, context: Context) {
+    private val app = context.applicationContext
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    val client = Core.Client(library.subdomain, username, if (username.isEmpty()) null else store.password(library.subdomain, username))
     val isGuest get() = username.isEmpty()
 
     var patron by mutableStateOf<Patron?>(null)
     var locations by mutableStateOf<List<Location>>(emptyList())
     var message by mutableStateOf<String?>(null)
     var signInError by mutableStateOf<String?>(null)
+
+    /** The saved password is missing or can't be decrypted: the user enters it again. */
+    var passwordLost by mutableStateOf(false)
+        private set
 
     val search = ItemList(this, Section.Search)
     val newTitles = ItemList(this, Section.NewTitles, defaultSort = "newly_acquired")
@@ -45,30 +59,70 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
     /** What this account borrowed before, from its borrowing history; null for guests. */
     val borrowed = if (isGuest) null else BorrowedHistory(this)
 
-    fun list(section: Section) = when (section) {
-        Section.Search -> search
-        Section.NewTitles -> newTitles
-        Section.Holds -> holds
-        Section.Checkouts -> checkouts
-        Section.History -> history
-        Section.Account -> null
-    }
+    val client: Core.Client
 
     init {
-        scope.launch {
-            locations = runCatching { client.locations() }.getOrDefault(emptyList())
-        }
-        if (!isGuest) scope.launch {
+        var password: String? = null
+        if (!isGuest) {
             try {
-                patron = client.login()
-                // Fill the hold and checkout counts without waiting for those lists to be opened.
-                holds.loadIfNeeded()
-                checkouts.loadIfNeeded()
-                borrowed?.start(patron?.borrowingHistoryEnabled)
-            } catch (e: Core.Failure) {
-                signInError = e.message
+                password = store.password(library.subdomain, username)
+                if (password == null) passwordLost = true
+            } catch (e: LibraryStore.PasswordUnreadable) {
+                passwordLost = true
             }
         }
+        client = Core.Client(library.subdomain, username, password)
+        if (passwordLost) signInError = str(R.string.password_unreadable)
+        else if (!isGuest) scope.launch {
+            try {
+                patron = client.login()
+                signedIn()
+            } catch (e: Exception) {
+                signInError = Core.messageOf(e, str(R.string.sign_in_failed))
+            }
+        }
+    }
+
+    fun str(@StringRes id: Int, vararg args: Any): String = app.getString(id, *args)
+
+    fun plural(id: Int, count: Int): String = app.resources.getQuantityString(id, count, count)
+
+    private val formatNames = HashMap<String, String>()
+
+    /** A format code's name, asked of the core once per code rather than once per row per recomposition. */
+    fun formatName(code: String): String = formatNames.getOrPut(code) { library.formatName(code) }
+
+    /** After signing in: the account's locations and counts, without waiting for those lists to be opened. */
+    private suspend fun signedIn() {
+        patron?.barcode?.let { store.setBarcode(library.subdomain, username, it) }
+        holds.loadIfNeeded()
+        checkouts.loadIfNeeded()
+        borrowed?.start(patron?.borrowingHistoryEnabled)
+        // Guests have no locations to choose from: the library refuses the request.
+        try {
+            locations = client.locations()
+        } catch (e: Exception) {
+            Core.messageOf(e, "")
+        }
+    }
+
+    /** Signs in with a password the user typed again after the saved one was lost; the error to show, or null. */
+    suspend fun reenterPassword(password: String): String? = try {
+        client.setPassword(password)
+        patron = client.login(force = true)
+        store.setPassword(library.subdomain, username, password)
+        passwordLost = false
+        signInError = null
+        signedIn()
+        null
+    } catch (e: Exception) {
+        Core.messageOf(e, str(R.string.sign_in_failed))
+    }
+
+    /** A guest becoming [guest]'s successor: the search, New Titles filter, and selection carry over. */
+    fun inherit(guest: Session) {
+        search.adopt(guest.search)
+        newTitles.adopt(guest.newTitles)
     }
 
     fun close() {
@@ -83,6 +137,15 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
         if (patron?.borrowingHistoryEnabled == false) borrowed?.clear()
     }
 
+    fun list(section: Section) = when (section) {
+        Section.Search -> search
+        Section.NewTitles -> newTitles
+        Section.Holds -> holds
+        Section.Checkouts -> checkouts
+        Section.History -> history
+        Section.Account -> null
+    }
+
     /** The borrowed-before matches changed: lists filtering on them filter again. */
     fun borrowedChanged() {
         for (l in listOf(search, newTitles, holds)) l.borrowedChanged()
@@ -91,28 +154,60 @@ class Session(val library: LibraryInfo, val username: String, val store: Library
     fun placeHold(entry: ListEntry, pickup: String?) = scope.launch {
         try {
             client.placeHold(entry.bib.id, entry.bib.materialType, pickup)
-            message = "Hold placed on “${entry.bib.title}”."
+            message = str(R.string.hold_placed, entry.bib.title)
             holds.reload()
             search.markHeld(entry.bib.id)
             newTitles.markHeld(entry.bib.id)
-        } catch (e: Core.Failure) {
-            message = e.message
+        } catch (e: Exception) {
+            message = Core.messageOf(e, str(R.string.hold_failed))
         }
     }
 
-    fun cancel(hold: Hold) = scope.launch {
+    /** Places holds on each item in turn, stopping at the first the library refuses, and says how far it got. */
+    fun placeHolds(entries: List<ListEntry>, pickup: String?) = scope.launch {
+        var placed = 0
+        var stopped: String? = null
+        for (entry in entries) {
+            try {
+                client.placeHold(entry.bib.id, entry.bib.materialType, pickup)
+                placed++
+                search.markHeld(entry.bib.id)
+                newTitles.markHeld(entry.bib.id)
+            } catch (e: Exception) {
+                stopped = str(R.string.holds_stopped, entry.bib.title, Core.messageOf(e, str(R.string.hold_failed)))
+                break
+            }
+        }
+        message = when {
+            stopped == null -> plural(R.plurals.holds_placed, placed)
+            placed == 0 -> stopped
+            else -> plural(R.plurals.holds_placed, placed) + " " + stopped
+        }
+        if (placed > 0) holds.reload()
+    }
+
+    /** Cancels holds; partial refusals say how many were canceled and why the library declined the rest. */
+    fun cancelHolds(toCancel: List<Hold>) = scope.launch {
         try {
-            val refused = client.cancelHolds(listOf(hold))
-            message = refused.firstOrNull()?.reason ?: "Hold canceled."
-            if (refused.isEmpty()) {
+            val refused = client.cancelHolds(toCancel)
+            val canceled = toCancel.size - refused.size
+            message = when {
+                refused.isEmpty() -> plural(R.plurals.holds_canceled, canceled)
+                canceled <= 0 -> refused.map { it.reason }.distinct().joinToString(" ")
+                else -> plural(R.plurals.holds_canceled, canceled) + " " +
+                    str(R.string.holds_not_canceled, refused.size, refused.map { it.reason }.distinct().joinToString(" "))
+            }
+            if (canceled > 0) {
                 holds.reload()
                 search.reloadIfLoaded()
                 newTitles.reloadIfLoaded()
             }
-        } catch (e: Core.Failure) {
-            message = e.message
+        } catch (e: Exception) {
+            message = Core.messageOf(e, str(R.string.cancel_failed))
         }
     }
+
+    fun cancel(hold: Hold) = cancelHolds(listOf(hold))
 }
 
 /** The sort menu's client-side entries; the server's own are its sort ids. */
@@ -187,9 +282,19 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
     var appliedSort by mutableStateOf<String?>(null)
         private set
 
-    /** The server's FORMAT facet, for catalog lists. */
+    /** The FORMAT facet for catalog lists, with the core's exact counts for refined formats once every item is loaded. */
     var facets by mutableStateOf<List<FacetValue>>(emptyList())
         private set
+    private var serverFacets = emptyList<FacetValue>()
+
+    /** The server's other facets (audience, language, …), for "Filter by". */
+    var otherFacets by mutableStateOf<List<Facet>>(emptyList())
+        private set
+
+    /** Facet filters chosen, by their search filter name (`f_AUDIENCE`), and the advanced search's query type. */
+    var filters by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+    private var searchType: String? = null
 
     /** The loaded items' formats, for account lists. */
     var localFormats by mutableStateOf<List<FacetValue>>(emptyList())
@@ -207,10 +312,53 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
     var notBorrowed by mutableStateOf(false)
         private set
 
+    /** New Titles: false "Just Arrived", true "On Order", null both. */
+    var onOrder by mutableStateOf<Boolean?>(false)
+        private set
+
+    /** Ids of the selected rows (multiple selection); they outlive switching sections. */
+    var selection by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Entries a guest's list had when a sign-in replaced it, so an open item detail still finds its item. */
+    private var carried = emptyMap<String, ListEntry>()
+
     private val isCatalog get() = section == Section.Search || section == Section.NewTitles
 
     /** This list's entry with `id`, if it has been fetched. */
-    fun entry(id: String): ListEntry? = entriesById[id]
+    fun entry(id: String): ListEntry? = entriesById[id] ?: carried[id]
+
+    fun toggleSelected(id: String) {
+        selection = if (id in selection) selection - id else selection + id
+    }
+
+    fun clearSelection() {
+        if (selection.isNotEmpty()) selection = emptySet()
+    }
+
+    /** The selected rows' entries, in list order. */
+    fun selectedEntries(): List<ListEntry> =
+        rows.mapNotNull { (it as? Row.Item)?.entry }.filter { it.id in selection }
+
+    /** Takes over a guest list's search, filters, selection, and entries after the guest signs in. */
+    fun adopt(guest: ItemList) {
+        carried = guest.entriesById + guest.carried
+        selection = guest.selection
+        query = guest.query
+        sort = guest.sort
+        appliedSort = guest.appliedSort
+        format = guest.format
+        filters = guest.filters
+        searchType = guest.searchType
+        onOrder = guest.onOrder
+        when (sort) {
+            SORT_PEOPLE_WAITING -> list.setSort(Core.CoreList.Sort.PeopleWaiting)
+            SORT_TITLE -> list.setSort(Core.CoreList.Sort.Title)
+            else -> {}
+        }
+        list.setFormat(format)
+        if (guest.loaded) reload(keepContent = false)
+    }
 
     private val now get() = SystemClock.elapsedRealtime()
 
@@ -235,7 +383,7 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         }
         positions = newPositions
         if (newRows != rows) rows = newRows
-        if (!isCatalog) localFormats = list.formats()
+        if (isCatalog) facets = list.formatFacet(serverFacets) else localFormats = list.formats()
         if (section == Section.Holds) holdCounts = IntArray(holdCounts.size) { list.holdCount(Core.CoreList.HoldFilter.entries[it]) }
     }
 
@@ -262,7 +410,8 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         if (section == Section.Search && query.isBlank()) {
             list.clear()
             entriesById.clear()
-            facets = emptyList()
+            serverFacets = emptyList()
+            otherFacets = emptyList()
             sync()
             return
         }
@@ -275,11 +424,34 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
     /** A new search: the default sort, no format filter. */
     fun search(text: String) {
         query = text
+        searchType = null
+        filters = emptyMap()
+        clearSelection()
         sort = null
         appliedSort = null
         format = null
         list.setSort(Core.CoreList.Sort.Server)
         list.setFormat(null)
+        reload(keepContent = false)
+    }
+
+    /** An advanced search: a field-qualified query, with a format and other facet filters. */
+    fun advancedSearch(text: String, facetFilters: Map<String, String>, formatCode: String?) {
+        query = text
+        searchType = "bl"
+        filters = facetFilters
+        clearSelection()
+        sort = null
+        appliedSort = null
+        format = formatCode
+        list.setSort(Core.CoreList.Sort.Server)
+        list.setFormat(formatCode)
+        reload(keepContent = false)
+    }
+
+    /** Chooses or clears ([value] null) one facet's value, as "Filter by" does. */
+    fun selectFilter(name: String, value: String?) {
+        filters = if (value == null) filters - name else filters + (name to value)
         reload(keepContent = false)
     }
 
@@ -295,8 +467,9 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
             try {
                 session.client.login(force = true)
                 session.refreshPatron()
-            } catch (e: Core.Failure) {
+            } catch (e: Exception) {
                 // The reload below reports whatever is still wrong.
+                Core.messageOf(e, "")
             }
             reload(keepContent = true)
             // Bring what was borrowed before up to date too.
@@ -308,9 +481,9 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         val server = sort?.takeUnless { it.startsWith("~") } ?: defaultSort
         val client = session.client
         return when (section) {
-            Section.Search -> client.search(query, page = page, sort = server, format = format)
+            Section.Search -> client.search(query, searchType = searchType, filters = filters, page = page, sort = server, format = format)
             Section.NewTitles -> client.search(
-                "nw:[0 TO 180]", searchType = "bl", filters = mapOf("f_on_order" to "false"),
+                "nw:[0 TO 180]", searchType = "bl", filters = filters + (onOrder?.let { mapOf("f_on_order" to it.toString()) } ?: emptyMap()),
                 page = page, sort = server, format = format,
             )
             Section.Holds -> client.holds(page, server)
@@ -323,9 +496,10 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
     private suspend fun fetchNow(page: Int, generation: Long): Boolean = try {
         apply(fetch(page), page, generation)
         true
-    } catch (e: Core.Failure) {
+    } catch (e: Exception) {
+        val text = Core.messageOf(e, session.str(R.string.load_failed))
         if (list.fail(generation, page)) {
-            error = e.message
+            error = text
             sync()
         }
         false
@@ -338,7 +512,10 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         // An item that moved between pages while fetching keeps its first position.
         for (e in result.entries) entriesById.putIfAbsent(e.id, e)
         list.apply(generation, result, now)
-        if (page == 1 || result.facets.isNotEmpty()) facets = result.facets.firstOrNull { it.id == "FORMAT" }?.values.orEmpty()
+        if (page == 1 || result.facets.isNotEmpty()) {
+            serverFacets = result.facets.firstOrNull { it.id == "FORMAT" }?.values.orEmpty()
+            otherFacets = result.facets.filter { it.id != "FORMAT" && it.values.isNotEmpty() }
+        }
         if (result.sortOptions.isNotEmpty()) serverSorts = result.sortOptions
         if (sort == null) appliedSort = result.appliedSort
         sync()
@@ -403,7 +580,7 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
 
     // Filtering and sorting
 
-    fun setSort(id: String) {
+    fun selectSort(id: String) {
         sort = id
         when (id) {
             SORT_PEOPLE_WAITING, SORT_TITLE -> {
@@ -418,7 +595,7 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         }
     }
 
-    fun setFormat(value: String?) {
+    fun selectFormat(value: String?) {
         format = value
         // Searches filter on the server, except for refined formats, which the core list filters.
         list.setFormat(value)
@@ -427,14 +604,20 @@ class ItemList(val session: Session, val section: Section, private val defaultSo
         if (list.needsAllPages()) startBackground()
     }
 
-    fun setHoldFilter(filter: Core.CoreList.HoldFilter) {
+    /** New Titles' "Just Arrived" and "On Order"; choosing the one chosen shows both. */
+    fun selectOnOrder(value: Boolean) {
+        onOrder = if (onOrder == value) null else value
+        reload(keepContent = false)
+    }
+
+    fun selectHoldFilter(filter: Core.CoreList.HoldFilter) {
         holdFilter = filter
         list.setHoldFilter(filter)
         sync()
         if (list.needsAllPages()) startBackground()
     }
 
-    fun setNotBorrowed(on: Boolean) {
+    fun selectNotBorrowed(on: Boolean) {
         notBorrowed = on
         applyNotBorrowed()
     }
