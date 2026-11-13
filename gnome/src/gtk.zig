@@ -48,6 +48,27 @@ pub fn margins(w: *c.GtkWidget, m: c_int) void {
     c.gtk_widget_set_margin_end(w, m);
 }
 
+/// A cover picture held to `width` by `height`, whatever the image's own size, so rows and
+/// panes line up before and after covers load.
+pub fn jacket(width: c_int, height: c_int) *c.GtkPicture {
+    const picture: *c.GtkPicture = @ptrCast(@alignCast(c.gtk_picture_new()));
+    c.gtk_picture_set_content_fit(picture, c.GTK_CONTENT_FIT_CONTAIN);
+    c.gtk_widget_set_size_request(widget(picture), width, height);
+    c.gtk_widget_set_valign(widget(picture), c.GTK_ALIGN_START);
+    c.gtk_widget_add_css_class(widget(picture), "jacket");
+    return picture;
+}
+
+/// `picture` limited to `width` wide (a picture asks for its image's size, which varies).
+pub fn clampWidth(picture: *c.GtkPicture, width: c_int) *c.GtkWidget {
+    const clamp = c.adw_clamp_new();
+    c.adw_clamp_set_maximum_size(@ptrCast(@alignCast(clamp)), width);
+    c.adw_clamp_set_tightening_threshold(@ptrCast(@alignCast(clamp)), width);
+    c.adw_clamp_set_child(@ptrCast(@alignCast(clamp)), widget(picture));
+    c.gtk_widget_set_valign(clamp, c.GTK_ALIGN_START);
+    return clamp;
+}
+
 /// Removes every child of a GtkBox.
 pub fn clearBox(container: *c.GtkWidget) void {
     while (c.gtk_widget_get_first_child(container)) |child| c.gtk_box_remove(as(c.GtkBox, container), child);

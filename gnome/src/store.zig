@@ -241,8 +241,8 @@ fn secretSchema() *const c.SecretSchema {
 /// Attributes identifying one saved password. Free with g_hash_table_unref.
 fn attributes(sub: [:0]const u8, username: [:0]const u8) *c.GHashTable {
     const table = c.g_hash_table_new(c.g_str_hash, c.g_str_equal).?;
-    _ = c.g_hash_table_insert(table, @constCast(@ptrCast(@alignCast("subdomain"))), @constCast(@ptrCast(@alignCast(sub.ptr))));
-    _ = c.g_hash_table_insert(table, @constCast(@ptrCast(@alignCast("username"))), @constCast(@ptrCast(@alignCast(username.ptr))));
+    _ = c.g_hash_table_insert(table, @ptrCast(@alignCast(@constCast("subdomain"))), @ptrCast(@alignCast(@constCast(sub.ptr))));
+    _ = c.g_hash_table_insert(table, @ptrCast(@alignCast(@constCast("username"))), @ptrCast(@alignCast(@constCast(username.ptr))));
     return table;
 }
 

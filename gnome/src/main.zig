@@ -10,6 +10,8 @@ const c = gtk.c;
 const core = @import("core.zig");
 const store = @import("store.zig");
 const icons = @import("icons.zig");
+const log = @import("log.zig");
+const about = @import("about.zig");
 const Window = @import("window.zig").Window;
 
 pub const app_id = "com.rbrian.Biblio";
@@ -28,11 +30,125 @@ fn onStartup(_: *c.GApplication, _: ?*anyopaque) callconv(.c) void {
     store.load();
     installStyles();
     // Ctrl+N opens another launcher, for signing in to a second account side by side.
-    const new_window = c.g_simple_action_new("new-window", null);
-    gtk.connect(new_window, "activate", &onNewWindow, null);
-    c.g_action_map_add_action(@ptrCast(@alignCast(app)), @ptrCast(@alignCast(new_window)));
-    const accels = [_:null]?[*:0]const u8{"<Control>n"};
-    c.gtk_application_set_accels_for_action(@ptrCast(@alignCast(app)), "app.new-window", &accels);
+    const actions = [_]struct { name: [*:0]const u8, handler: *const fn (*c.GSimpleAction, ?*c.GVariant, ?*anyopaque) callconv(.c) void }{
+        .{ .name = "new-window", .handler = &onNewWindow },
+        .{ .name = "about", .handler = &onAbout },
+        .{ .name = "copy-log", .handler = &onCopyLog },
+        .{ .name = "quit", .handler = &onQuit },
+    };
+    for (actions) |action| {
+        const simple = c.g_simple_action_new(action.name, null);
+        gtk.connect(simple, "activate", action.handler, null);
+        c.g_action_map_add_action(@ptrCast(@alignCast(app)), @ptrCast(@alignCast(simple)));
+        c.g_object_unref(simple);
+    }
+    accelerate("app.new-window", &.{"<Control>n"});
+    accelerate("app.quit", &.{"<Control>q"});
+    accelerate("win.refresh", &.{ "<Control>r", "F5" });
+    accelerate("win.search", &.{"<Control>f"});
+    accelerate("win.advanced-search", &.{"<Control><Shift>f"});
+    accelerate("win.show-help-overlay", &.{ "<Control>question", "<Control>F1" });
+    accelerate("window.close", &.{"<Control>w"});
+}
+
+fn accelerate(action: [*:0]const u8, comptime keys: []const [*:0]const u8) void {
+    var list: [keys.len + 1]?[*:0]const u8 = undefined;
+    inline for (keys, 0..) |k, i| list[i] = k;
+    list[keys.len] = null;
+    c.gtk_application_set_accels_for_action(@ptrCast(@alignCast(app)), action, @ptrCast(&list));
+}
+
+fn onAbout(_: *c.GSimpleAction, _: ?*c.GVariant, _: ?*anyopaque) callconv(.c) void {
+    const active = c.gtk_application_get_active_window(@ptrCast(@alignCast(app)));
+    about.present(if (active) |w| gtk.widget(w) else null);
+}
+
+fn onCopyLog(_: *c.GSimpleAction, _: ?*c.GVariant, _: ?*anyopaque) callconv(.c) void {
+    log.copyReport();
+    const active = c.gtk_application_get_active_window(@ptrCast(@alignCast(app)));
+    const w = active orelse return;
+    // Said in the window's toasts, if it is one of ours.
+    if (c.g_type_check_instance_is_a(@ptrCast(@alignCast(w)), c.adw_application_window_get_type()) == 0) return;
+    const content = c.adw_application_window_get_content(@ptrCast(@alignCast(w))) orelse return;
+    if (c.g_type_check_instance_is_a(@ptrCast(@alignCast(content)), c.adw_toast_overlay_get_type()) == 0) return;
+    c.adw_toast_overlay_add_toast(@ptrCast(@alignCast(content)), c.adw_toast_new("The diagnostic log is on your clipboard."));
+}
+
+fn onQuit(_: *c.GSimpleAction, _: ?*c.GVariant, _: ?*anyopaque) callconv(.c) void {
+    log.sync();
+    c.g_application_quit(@ptrCast(@alignCast(app)));
+}
+
+/// The header bar's main menu: new window, refresh, shortcuts, About, and the diagnostic log.
+/// Launchers have no refresh.
+pub fn primaryMenu(with_window_actions: bool) *c.GtkWidget {
+    const menu = c.g_menu_new();
+    const first = c.g_menu_new();
+    c.g_menu_append(first, "_New Window", "app.new-window");
+    if (with_window_actions) {
+        c.g_menu_append(first, "_Refresh", "win.refresh");
+        c.g_menu_append(first, "_Advanced Search…", "win.advanced-search");
+    }
+    c.g_menu_append_section(menu, null, @ptrCast(@alignCast(first)));
+    const second = c.g_menu_new();
+    if (with_window_actions) c.g_menu_append(second, "_Keyboard Shortcuts", "win.show-help-overlay");
+    c.g_menu_append(second, "_About Biblio", "app.about");
+    c.g_menu_append(second, "Copy _Diagnostic Log", "app.copy-log");
+    c.g_menu_append(second, "_Quit", "app.quit");
+    c.g_menu_append_section(menu, null, @ptrCast(@alignCast(second)));
+    const button = c.gtk_menu_button_new();
+    c.gtk_menu_button_set_icon_name(@ptrCast(@alignCast(button)), "open-menu-symbolic");
+    c.gtk_menu_button_set_menu_model(@ptrCast(@alignCast(button)), @ptrCast(@alignCast(menu)));
+    c.gtk_menu_button_set_primary(@ptrCast(@alignCast(button)), 1);
+    c.gtk_widget_set_tooltip_text(button, "Main Menu");
+    c.g_object_unref(first);
+    c.g_object_unref(second);
+    c.g_object_unref(menu);
+    return button;
+}
+
+/// A new Keyboard Shortcuts window for a window's help overlay (each window takes its own).
+pub fn shortcutsWindow() *c.GtkShortcutsWindow {
+    const xml =
+        \\<?xml version="1.0" encoding="UTF-8"?>
+        \\<interface>
+        \\  <object class="GtkShortcutsWindow" id="shortcuts">
+        \\    <property name="modal">true</property>
+        \\    <child>
+        \\      <object class="GtkShortcutsSection">
+        \\        <property name="section-name">shortcuts</property>
+        \\        <property name="max-height">12</property>
+        \\        <child>
+        \\          <object class="GtkShortcutsGroup">
+        \\            <property name="title">Biblio</property>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Search the Catalog</property><property name="accelerator">&lt;Control&gt;f</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Advanced Search</property><property name="accelerator">&lt;Control&gt;&lt;Shift&gt;f</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Refresh</property><property name="accelerator">&lt;Control&gt;r F5</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">New Window</property><property name="accelerator">&lt;Control&gt;n</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Close Window</property><property name="accelerator">&lt;Control&gt;w</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Keyboard Shortcuts</property><property name="accelerator">&lt;Control&gt;question</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Quit</property><property name="accelerator">&lt;Control&gt;q</property></object></child>
+        \\          </object>
+        \\        </child>
+        \\        <child>
+        \\          <object class="GtkShortcutsGroup">
+        \\            <property name="title">Lists</property>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Select Several Items</property><property name="accelerator">&lt;Control&gt;space</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Select a Range</property><property name="accelerator">&lt;Shift&gt;Down</property></object></child>
+        \\            <child><object class="GtkShortcutsShortcut"><property name="title">Select All</property><property name="accelerator">&lt;Control&gt;a</property></object></child>
+        \\          </object>
+        \\        </child>
+        \\      </object>
+        \\    </child>
+        \\  </object>
+        \\</interface>
+    ;
+    const builder = c.gtk_builder_new_from_string(xml, -1);
+    defer c.g_object_unref(builder);
+    const obj = c.gtk_builder_get_object(builder, "shortcuts");
+    // The builder's reference goes with it; the window needs its own.
+    _ = c.g_object_ref(obj);
+    return @ptrCast(@alignCast(obj));
 }
 
 fn onActivate(_: *c.GApplication, _: ?*anyopaque) callconv(.c) void {
@@ -50,6 +166,10 @@ fn installStyles() void {
         \\.copy-onOrder { color: @accent_color; }
         \\.copy-out, .copy-other { color: @warning_color; }
         \\.copy-held { color: @purple_3; }
+        \\.copy-ready { color: @success_color; }
+        \\.copy-paused { color: @warning_color; }
+        \\.capsule { background: alpha(currentColor, 0.12); border-radius: 999px; padding: 1px 10px; }
+        \\.status-bar { padding: 2px 12px; }
         \\.copy-transit { color: @blue_3; }
         \\.copy-repair { color: @brown_3; }
         \\.copy-missing, .copy-claimsReturned { color: @error_color; }
@@ -76,6 +196,18 @@ pub const Launcher = struct {
     libraries_list: ?*c.GtkListBox = null,
     root_page: *c.GtkWidget,
     arena: std.heap.ArenaAllocator,
+    /// The library pages pushed, which follow windows opening and closing.
+    pages: std.ArrayList(*LibraryPage) = .empty,
+
+    var launchers: std.ArrayList(*Launcher) = .empty;
+
+    /// Windows opened or closed: users and libraries in use can't be removed.
+    pub fn windowsChanged() void {
+        for (launchers.items) |l| for (l.pages.items) |lp| {
+            fillUsers(lp);
+            lp.updateRemove();
+        };
+    }
 
     pub fn open() void {
         const l = core.gpa.create(Launcher) catch return;
@@ -90,11 +222,17 @@ pub const Launcher = struct {
         l.root_page = l.librariesPage();
         c.adw_navigation_view_add(nav, @ptrCast(@alignCast(l.root_page)));
         gtk.connect(window, "destroy", &onDestroy, l);
+        launchers.append(core.gpa, l) catch {};
         c.gtk_window_present(@ptrCast(@alignCast(window)));
     }
 
     fn onDestroy(_: *c.GtkWidget, data: ?*anyopaque) callconv(.c) void {
         const l: *Launcher = @ptrCast(@alignCast(data.?));
+        for (launchers.items, 0..) |other, i| if (other == l) {
+            _ = launchers.swapRemove(i);
+            break;
+        };
+        l.pages.deinit(core.gpa);
         l.arena.deinit();
         core.gpa.destroy(l);
     }
@@ -128,7 +266,7 @@ pub const Launcher = struct {
         gtk.connect(add, "activated", &onAddLibrary, l);
         c.adw_preferences_group_add(@ptrCast(@alignCast(add_group)), add);
         c.adw_preferences_page_add(@ptrCast(@alignCast(prefs)), @ptrCast(@alignCast(add_group)));
-        return page("Biblio", prefs, null);
+        return page("Biblio", prefs, primaryMenu(false));
     }
 
     fn fillLibraries(l: *Launcher) void {
@@ -170,6 +308,14 @@ pub const Launcher = struct {
         launcher: *Launcher,
         subdomain: []const u8,
         users: *c.GtkListBox,
+        remove: *c.GtkWidget,
+
+        /// A library with a window open can't be removed.
+        fn updateRemove(lp: *LibraryPage) void {
+            const open_now = Window.libraryIsOpen(lp.subdomain);
+            c.gtk_widget_set_sensitive(lp.remove, @intFromBool(!open_now));
+            c.gtk_widget_set_tooltip_text(lp.remove, if (open_now) "Close the library’s windows to remove it." else "Remove Library");
+        }
     };
 
     fn libraryPage(l: *Launcher, lib: std.json.Value) *c.GtkWidget {
@@ -178,7 +324,9 @@ pub const Launcher = struct {
         const users: *c.AdwPreferencesGroup = @ptrCast(@alignCast(c.adw_preferences_group_new()));
         c.adw_preferences_group_set_title(users, "Users");
         c.adw_preferences_page_add(@ptrCast(@alignCast(prefs)), users);
-        lp.* = .{ .launcher = l, .subdomain = l.a().dupe(u8, store.subdomain(lib)) catch "", .users = gtk.boxedList(users) };
+        const remove = c.gtk_button_new_from_icon_name("user-trash-symbolic");
+        lp.* = .{ .launcher = l, .subdomain = l.a().dupe(u8, store.subdomain(lib)) catch "", .users = gtk.boxedList(users), .remove = remove };
+        l.pages.append(core.gpa, lp) catch {};
         fillUsers(lp);
 
         const guest_group: *c.AdwPreferencesGroup = @ptrCast(@alignCast(c.adw_preferences_group_new()));
@@ -190,9 +338,8 @@ pub const Launcher = struct {
         c.adw_preferences_group_add(guest_group, guest);
         c.adw_preferences_page_add(@ptrCast(@alignCast(prefs)), guest_group);
 
-        const remove = c.gtk_button_new_from_icon_name("user-trash-symbolic");
-        c.gtk_widget_set_tooltip_text(remove, "Remove Library");
         gtk.connect(remove, "clicked", &onRemoveLibrary, lp);
+        lp.updateRemove();
         return page(gtk.z(l.a(), store.shortName(lib)), prefs, remove);
     }
 
@@ -207,13 +354,17 @@ pub const Launcher = struct {
             c.adw_preferences_row_set_title(@ptrCast(@alignCast(row)), gtk.z(l.a(), u.string));
             c.adw_action_row_add_prefix(@ptrCast(@alignCast(row)), c.gtk_image_new_from_icon_name("avatar-default-symbolic"));
             c.gtk_list_box_row_set_activatable(@ptrCast(@alignCast(row)), 1);
-            c.g_object_set_data(@ptrCast(@alignCast(row)), "username", @constCast(@ptrCast(@alignCast(gtk.z(l.a(), u.string)))));
+            c.g_object_set_data(@ptrCast(@alignCast(row)), "username", @ptrCast(@alignCast(@constCast(gtk.z(l.a(), u.string)))));
             gtk.connect(row, "activated", &onUser, lp);
             const forget = c.gtk_button_new_from_icon_name("edit-delete-symbolic");
             c.gtk_widget_set_valign(forget, c.GTK_ALIGN_CENTER);
             c.gtk_widget_add_css_class(forget, "flat");
-            c.gtk_widget_set_tooltip_text(forget, "Remove User");
-            c.g_object_set_data(@ptrCast(@alignCast(forget)), "username", @constCast(@ptrCast(@alignCast(gtk.z(l.a(), u.string)))));
+            // A login with a window open can't be removed: its session is in use.
+            const in_use = Window.isOpen(lp.subdomain, u.string);
+            c.gtk_widget_set_sensitive(forget, @intFromBool(!in_use));
+            c.gtk_widget_set_tooltip_text(forget, if (in_use) "Close its window to remove this user." else "Remove User");
+            if (in_use) c.adw_action_row_set_subtitle(@ptrCast(@alignCast(row)), "Open in a window");
+            c.g_object_set_data(@ptrCast(@alignCast(forget)), "username", @ptrCast(@alignCast(@constCast(gtk.z(l.a(), u.string)))));
             gtk.connect(forget, "clicked", &onRemoveUser, lp);
             c.adw_action_row_add_suffix(@ptrCast(@alignCast(row)), forget);
             c.gtk_list_box_append(rows, row);
@@ -228,13 +379,13 @@ pub const Launcher = struct {
     fn onUser(row: *c.AdwActionRow, data: ?*anyopaque) callconv(.c) void {
         const lp: *LibraryPage = @ptrCast(@alignCast(data.?));
         const name: [*:0]const u8 = @ptrCast(@alignCast(c.g_object_get_data(@ptrCast(row), "username") orelse return));
-        Window.open(lp.subdomain, std.mem.span(name));
+        if (Window.open(lp.subdomain, std.mem.span(name)) == null) return lp.launcher.toast("Biblio couldn’t open that account.");
         c.gtk_window_close(@ptrCast(@alignCast(lp.launcher.window)));
     }
 
     fn onGuest(_: *c.AdwButtonRow, data: ?*anyopaque) callconv(.c) void {
         const lp: *LibraryPage = @ptrCast(@alignCast(data.?));
-        Window.open(lp.subdomain, "");
+        if (Window.open(lp.subdomain, "") == null) return lp.launcher.toast("Biblio couldn’t open that library.");
         c.gtk_window_close(@ptrCast(@alignCast(lp.launcher.window)));
     }
 
@@ -278,7 +429,7 @@ pub const Launcher = struct {
 
     fn onAddUser(_: *c.AdwButtonRow, data: ?*anyopaque) callconv(.c) void {
         const lp: *LibraryPage = @ptrCast(@alignCast(data.?));
-        @import("add.zig").AddUser.present(lp.launcher, lp.subdomain, lp);
+        @import("add.zig").AddUser.present(gtk.widget(lp.launcher.window), lp.subdomain, lp, &userAddedFromDialog, null);
     }
 
     /// Called by the Add Library dialog once the library is saved.
@@ -287,11 +438,12 @@ pub const Launcher = struct {
     }
 
     /// Called by the Add User dialog after a successful sign-in.
-    pub fn userAdded(l: *Launcher, lp_opaque: *anyopaque, subdomain: []const u8, username: []const u8) void {
-        const lp: *LibraryPage = @ptrCast(@alignCast(lp_opaque));
+    fn userAddedFromDialog(ctx: ?*anyopaque, subdomain: []const u8, username: []const u8) void {
+        const lp: *LibraryPage = @ptrCast(@alignCast(ctx.?));
+        const l = lp.launcher;
         fillUsers(lp);
         l.fillLibraries();
-        Window.open(subdomain, username);
+        if (Window.open(subdomain, username) == null) return l.toast("Biblio couldn’t open that account.");
         c.gtk_window_close(@ptrCast(@alignCast(l.window)));
     }
 

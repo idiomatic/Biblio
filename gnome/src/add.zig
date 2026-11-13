@@ -231,8 +231,11 @@ pub const AddLibrary = struct {
 
 /// Signs in once to check the username and password, then saves them (password in the keyring).
 pub const AddUser = struct {
-    launcher: *Launcher,
-    library_page: *anyopaque,
+    /// Called once the user is saved and signed in; the dialog closes after it returns.
+    done: *const fn (ctx: ?*anyopaque, subdomain: []const u8, username: []const u8) void,
+    ctx: ?*anyopaque,
+    /// Called when the dialog has closed, however it did.
+    closed_callback: ?*const fn (ctx: ?*anyopaque) void,
     subdomain: []const u8,
     dialog: *c.AdwDialog,
     username: *c.AdwEntryRow,
@@ -247,7 +250,15 @@ pub const AddUser = struct {
     closed: bool = false,
     busy: bool = false,
 
-    pub fn present(l: *Launcher, subdomain: []const u8, library_page: *anyopaque) void {
+    /// Asks for a user of `subdomain`, in a dialog over `parent`'s window. `subdomain` must
+    /// stay valid until the dialog closes.
+    pub fn present(
+        parent: *c.GtkWidget,
+        subdomain: []const u8,
+        ctx: ?*anyopaque,
+        done: *const fn (ctx: ?*anyopaque, subdomain: []const u8, username: []const u8) void,
+        closed_callback: ?*const fn (ctx: ?*anyopaque) void,
+    ) void {
         const u = core.gpa.create(AddUser) catch return;
         const dialog: *c.AdwDialog = @ptrCast(@alignCast(c.adw_dialog_new()));
         c.adw_dialog_set_title(dialog, "Add User");
@@ -282,8 +293,9 @@ pub const AddUser = struct {
         c.adw_dialog_set_child(dialog, toolbar);
 
         u.* = .{
-            .launcher = l,
-            .library_page = library_page,
+            .done = done,
+            .ctx = ctx,
+            .closed_callback = closed_callback,
             .subdomain = subdomain,
             .dialog = dialog,
             .username = username,
@@ -296,13 +308,16 @@ pub const AddUser = struct {
         gtk.connect(sign_in, "clicked", &onSignIn, u);
         gtk.connect(password, "entry-activated", &onSignIn, u);
         gtk.connect(dialog, "closed", &onClosed, u);
-        c.adw_dialog_present(dialog, gtk.widget(l.window));
+        c.adw_dialog_present(dialog, parent);
     }
 
     fn onClosed(_: *c.AdwDialog, data: ?*anyopaque) callconv(.c) void {
         const u: *AddUser = @ptrCast(@alignCast(data.?));
         u.closed = true;
+        const closed_callback = u.closed_callback;
+        const ctx = u.ctx;
         if (!u.busy) u.free();
+        if (closed_callback) |f| f(ctx);
     }
 
     fn free(u: *AddUser) void {
@@ -351,13 +366,17 @@ pub const AddUser = struct {
         c.gtk_widget_set_sensitive(u.sign_in, 1);
         if (!r.ok) return u.showError(r.message);
         store.addUser(u.subdomain, u.user);
-        const launcher = u.launcher;
-        const page = u.library_page;
+        const done = u.done;
+        const ctx = u.ctx;
         const subdomain = u.subdomain;
         const user = core.gpa.dupe(u8, u.user) catch return;
         defer core.gpa.free(user);
+        // The close callback comes after `done`, which may still use what that releases.
+        const closed_callback = u.closed_callback;
+        u.closed_callback = null;
         _ = c.adw_dialog_close(u.dialog);
-        launcher.userAdded(page, subdomain, user);
+        done(ctx, subdomain, user);
+        if (closed_callback) |f| f(ctx);
     }
 
     fn showError(u: *AddUser, message: []const u8) void {
