@@ -98,6 +98,7 @@ jobs:
         with:
           path: .zig-cache/sysroots
           key: sysroots-${{ hashFiles('gnome/debian-sysroot.sh') }}
+      - run: pwd; ls -la . core gnome
       - run: zig build cross --summary all
       # The terminal app for every release target, small and with the mock library compiled out.
       - name: Cross-compile the terminal app
@@ -183,6 +184,8 @@ jobs:
           java-version: 17
       # Validates the wrapper and caches what it downloads.
       - uses: gradle/actions/setup-gradle@v6
+      # The NDK version is pinned in android/native/build.zig and app/build.gradle.kts.
+      - run: sdkmanager "ndk;29.0.14206865"
       - run: ./gradlew assembleDebug
         working-directory: android
       - uses: actions/upload-artifact@v7
