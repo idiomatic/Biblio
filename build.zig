@@ -7,6 +7,9 @@ pub fn build(b: *std.Build) void {
     const sysroots = b.option([]const u8, "sysroots", "Directory for Debian sysroots") orelse ".zig-cache/sysroots";
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimize mode for cross builds (default small)") orelse .small;
     const opt = b.fmt("-Doptimize={t}", .{optimize});
+    // `zig` from PATH, not `b.graph.zig_exe`: the build's configuration is cached with its
+    // arguments, and CI restores that cache into a run whose Zig lives somewhere else.
+    const zig = "zig";
     const sysroots_path = if (std.fs.path.isAbsolute(sysroots)) b.graph.cwdRelativePath(sysroots) else b.path(sysroots);
 
     // Cross-compile: Zig links for every target from any host, so no VM is needed. Fetching the
@@ -17,7 +20,7 @@ pub fn build(b: *std.Build) void {
         "x86_64-windows-gnu", "aarch64-linux-android",
     };
     for (core_targets) |t| {
-        const run = b.addSystemCommand(&.{ b.graph.zig_exe, "build", b.fmt("-Dtarget={s}", .{t}), opt, "--build-file" });
+        const run = b.addSystemCommand(&.{ zig, "build", b.fmt("-Dtarget={s}", .{t}), opt, "--build-file" });
         run.addFileArg(b.path("core/build.zig"));
         run.addArg("--prefix");
         run.addDirectoryArg2(b.graph.path(.install_prefix, b.fmt("cross/core-{s}", .{t})), .{});
@@ -36,7 +39,7 @@ pub fn build(b: *std.Build) void {
         fetch.addDirectoryArg2(root, .{});
         fetch.expectExitCode(0);
         fetch.has_side_effects = true;
-        const run = b.addSystemCommand(&.{ b.graph.zig_exe, "build", b.fmt("-Dtarget={s}-linux-gnu", .{a.zig}), opt, "--build-file" });
+        const run = b.addSystemCommand(&.{ zig, "build", b.fmt("-Dtarget={s}-linux-gnu", .{a.zig}), opt, "--build-file" });
         run.addFileArg(b.path("gnome/build.zig"));
         run.addDirectoryArg2(root.path(b, "root"), .{ .prefix = "-Dsysroot=" });
         run.addArg("--prefix");
