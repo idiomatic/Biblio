@@ -8,6 +8,7 @@ the core and are not yet released.
 ### Fixed
 - 4K Ultra HD Blu-ray discs no longer read "Unknown" at libraries, such as WCCLS, that file them
   as Blu-ray (since 1.9).
+- On a Mac, dragging a list's scroll bar no longer opens the hidden item details pane.
 - Android: item details and password changes work again, and Biblio uses the system's network
   settings, including your certificate authorities, proxies, and VPNs.
 - Android: refined formats such as 4K Ultra HD Blu-ray are counted exactly, and Borrowing
